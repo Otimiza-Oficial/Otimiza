@@ -4,6 +4,8 @@
   import { onMount } from "svelte";
   import Transparencia from "./Transparencia.svelte";
   import { ABRIR_FEEDBACK } from "./PedidoDeFeedback.svelte";
+  import AtivarLicenca from "./AtivarLicenca.svelte";
+  import { ABRIR_BOAS_VINDAS } from "./BoasVindas.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { noTauri } from "../lib/ponte";
   import {
@@ -55,8 +57,6 @@
   >(null);
   let aviso = $state<AvisoDeVersao | null>(null);
   let versao = $state<VersaoDoApp | null>(null);
-  let chave = $state("");
-  let ativando = $state(false);
   let recado = $state<{ tom: "ok" | "perigo" | "atencao"; texto: string } | null>(null);
 
   let ia = $state(lerIa());
@@ -170,21 +170,6 @@
       preferencias = await ponte.gravarPreferencias({ ...preferencias, [k]: v });
     } catch (e) {
       recado = { tom: "perigo", texto: String(e) };
-    }
-  }
-
-  async function ativar(e: SubmitEvent) {
-    e.preventDefault();
-    ativando = true;
-    recado = null;
-    try {
-      licenca = await ponte.ativarLicenca(chave.trim());
-      recado = licenca.ativa ? { tom: "ok", texto: "Licença ativada. Obrigado!" } : { tom: "perigo", texto: licenca.motivo ?? "A chave não foi aceita." };
-      if (licenca.ativa) chave = "";
-    } catch (x) {
-      recado = { tom: "perigo", texto: String(x) };
-    } finally {
-      ativando = false;
     }
   }
 
@@ -383,11 +368,9 @@
       </ul>
     {:else}
       <p class="apoio">{licenca.motivo ?? "Sem licença: medir, diagnosticar e desfazer continuam livres."}</p>
-      <form class="ativar" onsubmit={ativar}>
-        <input class="campo" bind:value={chave} placeholder="OTZ-XXXX-XXXX-XXXX" aria-label="Chave da licença" />
-        <button class="btn primario" disabled={ativando || chave.trim().length < 8}>{ativando ? "Ativando…" : "Ativar"}</button>
-      </form>
+      <AtivarLicenca {licenca} onativada={(l) => (licenca = l)} />
     {/if}
+    <button class="btn quieto" onclick={() => window.dispatchEvent(new CustomEvent(ABRIR_BOAS_VINDAS, { detail: "completa" }))}>Ver a apresentação de novo</button>
   </section>
 
   <!-- Versão e suporte -->
@@ -455,16 +438,6 @@
   .lista > li > .interruptor,
   .lista > li > .btn {
     flex: none;
-  }
-  .ativar {
-    display: flex;
-    gap: 8px;
-  }
-  .ativar .campo {
-    flex: 1;
-    max-width: 320px;
-    font-family: "Cascadia Mono", Consolas, monospace;
-    letter-spacing: 0.04em;
   }
   a.btn {
     text-decoration: none;

@@ -667,6 +667,7 @@ let sobreposicaoDemo: Sobreposicao = {
 };
 
 let demoTick = 0;
+let licencaDemoAtivada = false;
 /** A partida de demonstração: quando começou, se veio do "Jogar" e quem ouve o começo e o fim. */
 const partidaDemo: {
   desde: number;
@@ -1106,12 +1107,26 @@ export const ponte = {
     preferenciasDemo = { ...p };
     return { ...p };
   },
-  licenca: (): Promise<EstadoDaLicenca> =>
-    noTauri
-      ? commands.licencaEstado()
-      : Promise.resolve({ ativa: true, maquina: "DEMO-1234", origem: "Licença vitalícia", sobrevive_formatacao: true, comprador: "Demonstração", expira: null, motivo: null }),
-  ativarLicenca: (chave: string): Promise<EstadoDaLicenca> =>
-    noTauri ? commands.licencaAtivar(chave) : Promise.reject("No navegador não dá para ativar: abra o Otimiza."),
+  /** No navegador, `?semlicenca` mostra uma máquina sem licença (para ver a ativação). */
+  licenca: (): Promise<EstadoDaLicenca> => {
+    if (noTauri) return commands.licencaEstado();
+    const sem = new URLSearchParams(location.search).has("semlicenca") && !licencaDemoAtivada;
+    return Promise.resolve({
+      ativa: !sem,
+      maquina: sem ? "OTZ-WPYY-0J4F-77AB" : "DEMO-1234",
+      origem: sem ? "Código tirado da placa-mãe: continua o mesmo se você formatar o PC" : "Licença vitalícia",
+      sobrevive_formatacao: true,
+      comprador: sem ? null : "Demonstração",
+      expira: null,
+      motivo: sem ? "Sem licença: medir, diagnosticar e desfazer continuam livres." : null,
+    });
+  },
+  ativarLicenca: async (chave: string): Promise<EstadoDaLicenca> => {
+    if (noTauri) return commands.licencaAtivar(chave);
+    await new Promise((r) => setTimeout(r, 700));
+    licencaDemoAtivada = true;
+    return { ativa: true, maquina: "OTZ-WPYY-0J4F-77AB", origem: "Licença vitalícia", sobrevive_formatacao: true, comprador: "Demonstração", expira: null, motivo: null };
+  },
   versaoMaisNova: (): Promise<AvisoDeVersao> =>
     noTauri
       ? commands.versaoMaisNova()

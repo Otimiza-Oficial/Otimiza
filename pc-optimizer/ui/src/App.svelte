@@ -15,6 +15,7 @@
   import Prova from "./componentes/Prova.svelte";
   import Sistema from "./componentes/Sistema.svelte";
   import PedidoDeFeedback from "./componentes/PedidoDeFeedback.svelte";
+  import BoasVindas, { ABRIR_BOAS_VINDAS, type ModoDasBoasVindas } from "./componentes/BoasVindas.svelte";
   import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
@@ -32,6 +33,7 @@
     noTauri,
     ponte,
     type ContaQueRoda,
+    type EstadoDaLicenca,
     type DiagnosticoDoWifi,
     type Hardware,
     type JogoAberto,
@@ -47,6 +49,8 @@
   type Tema = "claro" | "escuro";
   const CHAVE_DO_TEMA = "otimiza.tema";
   const CHAVE_DO_FUNDO = "otimiza.fundo";
+  /** A apresentação já foi vista nesta máquina (ou pulada): não abre de novo sozinha. */
+  const CHAVE_DAS_BOAS_VINDAS = "otimiza.boas-vindas";
 
   // O trilho da esquerda e as abas de baixo: os mesmos destinos, como na referência.
   const TRILHO: { id: IdDaArea; icone: NomeDoIcone }[] = [
@@ -81,6 +85,9 @@
   let tema = $state<Tema>(lerTema());
   /** Sem fundo: o cômodo some e a área de trabalho aparece entre os cards (a janela é transparente). A pessoa escolhe. */
   let semFundo = $state(lerFundo());
+  /** A apresentação aberta: inteira (primeira vez, ou pedida nos Ajustes) ou só o passo da licença (botão da barra). */
+  let boasVindas = $state<ModoDasBoasVindas | null>(null);
+  let licenca = $state<EstadoDaLicenca | null>(null);
   let aberta = $state<IdDaArea>("inicio");
   /** O "Ver o sistema" do bloco Agora abre o Sistema já na aba Agora; o resto entra pelos Ajustes. */
   let abaDoSistema = $state<"agora" | "ajustes">("ajustes");
@@ -216,6 +223,20 @@
       localStorage.setItem(CHAVE_DO_FUNDO, semFundo ? "sem" : "com");
     } catch {
       // Só não lembra na próxima abertura.
+    }
+  }
+
+  function abrirBoasVindas(modo: ModoDasBoasVindas) {
+    boasVindas = modo;
+    void ponte.licenca().then((l) => (licenca = l)).catch(() => {});
+  }
+
+  function fecharBoasVindas() {
+    boasVindas = null;
+    try {
+      localStorage.setItem(CHAVE_DAS_BOAS_VINDAS, "vista");
+    } catch {
+      // Abre de novo na próxima vez; não atrapalha.
     }
   }
 
@@ -572,6 +593,17 @@
     // Guarda térmica: o Oti avisa quando o PC começa a ser freado por calor no jogo.
     let deixarCalor: (() => void) | undefined;
     let deixarPartida: (() => void)[] = [];
+    // A licença, para o botão "Ativar licença" da barra, e a apresentação na primeira abertura (`?boasvindas` força).
+    void ponte.licenca().then((l) => (licenca = l)).catch(() => {});
+    let vista = false;
+    try {
+      vista = localStorage.getItem(CHAVE_DAS_BOAS_VINDAS) === "vista";
+    } catch {
+      vista = false;
+    }
+    if (!vista || new URLSearchParams(location.search).has("boasvindas")) boasVindas = "completa";
+    const pediuBoasVindas = (e: Event) => abrirBoasVindas(((e as CustomEvent).detail as ModoDasBoasVindas) ?? "completa");
+    window.addEventListener(ABRIR_BOAS_VINDAS, pediuBoasVindas);
     const pediuJogar = (e: Event) => void jogarJogo(String((e as CustomEvent).detail));
     window.addEventListener(JOGAR, pediuJogar);
     void Promise.all([
@@ -609,6 +641,7 @@
       deixarCalor?.();
       deixarPartida.forEach((f) => f());
       window.removeEventListener(JOGAR, pediuJogar);
+      window.removeEventListener(ABRIR_BOAS_VINDAS, pediuBoasVindas);
       clearTimeout(espera);
       clearInterval(maquina);
       window.removeEventListener("resize", ajustar);
@@ -660,6 +693,9 @@
           <Icone nome="lua" tamanho={14} /> Escuro
         </button>
       </div>
+      {#if licenca && !licenca.ativa}
+        <button class="ativar-botao" onclick={() => abrirBoasVindas("licenca")}>Ativar licença</button>
+      {/if}
       <button class="fundo-botao" aria-pressed={semFundo} title={semFundo ? "Voltar o fundo" : "Tirar o fundo e ver a área de trabalho"} onclick={alternarFundo}>
         Sem fundo
       </button>
@@ -992,6 +1028,20 @@
 
   <PedidoDeFeedback />
 
+  {#if boasVindas}
+    <BoasVindas
+      modo={boasVindas}
+      {hardware}
+      {licenca}
+      {tema}
+      {semFundo}
+      onescolherTema={escolherTema}
+      onalternarFundo={alternarFundo}
+      onlicenca={(l) => (licenca = l)}
+      onfim={fecharBoasVindas}
+    />
+  {/if}
+
   {#if jogoNaTela && jogo}
     <p class="pausado">{jogo.nome} aberto · interface pausada para não pesar no jogo</p>
   {/if}
@@ -1289,6 +1339,30 @@
     color: var(--sec);
     font-size: 12px;
     cursor: pointer;
+  }
+  /* Sem licença, o caminho para ativar fica à vista na barra: escondido nos Ajustes, ninguém achava. */
+  .ativar-botao {
+    height: 36px;
+    padding: 0 15px;
+    border: 0;
+    border-radius: 18px;
+    background: var(--texto);
+    color: var(--contra, #fff);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    animation: chamar 2.4s ease-in-out 3;
+  }
+  @keyframes chamar {
+    50% {
+      box-shadow: 0 0 0 6px color-mix(in srgb, var(--texto) 14%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ativar-botao {
+      animation: none;
+    }
   }
   /* Liga e desliga o fundo: apertado, o fundo sumiu. */
   .fundo-botao {

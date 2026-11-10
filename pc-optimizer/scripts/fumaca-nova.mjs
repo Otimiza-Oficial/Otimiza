@@ -111,6 +111,16 @@ await cdp("Page.addScriptToEvaluateOnNewDocument", {
     };
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };`,
 });
+// Primeira abertura: a apresentação aparece sozinha, com o botão de começar.
+await cdp("Page.navigate", { url: `http://127.0.0.1:${porta}/` });
+await espera(3000);
+const primeira = await cdp("Runtime.evaluate", {
+  expression: `!!document.querySelector('[role=dialog][aria-label="Boas-vindas ao Otimiza"]')`,
+  returnByValue: true,
+});
+if (primeira.result?.result?.value !== true) erros.push("a apresentação não abriu na primeira abertura");
+// Daqui em diante, como quem já viu a apresentação.
+await cdp("Runtime.evaluate", { expression: `localStorage.setItem("otimiza.boas-vindas", "vista")` });
 await cdp("Page.navigate", { url: `http://127.0.0.1:${porta}/` });
 await espera(3000);
 
