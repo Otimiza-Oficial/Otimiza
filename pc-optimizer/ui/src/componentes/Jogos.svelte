@@ -7,6 +7,7 @@
   import Cs2Integracao from "./Cs2Integracao.svelte";
   import FivemPainel from "./FivemPainel.svelte";
   import PcsParecidos from "./PcsParecidos.svelte";
+  import LinhaDoTempo from "./LinhaDoTempo.svelte";
   import Icone from "./Icone.svelte";
   import { capaRemota, iniciais } from "../lib/capas";
   import { ponte, type Ganho, type JogoDaLoja, type ResumoDoJogo } from "../lib/ponte";
@@ -154,6 +155,7 @@
             <p class="sem-medida">Ainda não medi este jogo. Jogue uma partida com o Otimiza aberto e os números aparecem aqui.</p>
           {/if}
           <PcsParecidos jogo={atual.jogo.nome} />
+          <LinhaDoTempo jogo={atual.jogo.nome} />
           {#if /fivem/i.test(atual.jogo.nome)}
             <FivemPainel />
           {/if}

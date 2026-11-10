@@ -35,4 +35,15 @@ async function iniciar(destino: HTMLElement) {
   return mount(App, { target: destino });
 }
 
-export default iniciar(alvo);
+const app = iniciar(alvo);
+
+// Quanto a página levou até o primeiro desenho (`abertura_pronta`): a meta do plano é abrir em menos de 1,5 s num i3.
+// O Rust soma o tempo do WebView2 nascendo; a divisão diz onde cortar.
+if ("__TAURI_INTERNALS__" in window)
+  void app.then(() =>
+    requestAnimationFrame(() =>
+      setTimeout(() => void import("@tauri-apps/api/core").then(({ invoke }) => invoke("abertura_pronta", { paginaMs: performance.now() }).catch(() => {})), 0)
+    )
+  );
+
+export default app;
