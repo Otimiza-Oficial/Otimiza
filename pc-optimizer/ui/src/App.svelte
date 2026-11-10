@@ -93,6 +93,8 @@
   let mudancas = $state<number | null>(null);
   let tema = $state<Tema>(lerTema());
   let aberta = $state<IdDaArea>("inicio");
+  /** O "Ver o sistema" do bloco Agora abre o Sistema já na aba Agora; o resto entra pelos Ajustes. */
+  let abaDoSistema = $state<"agora" | "ajustes">("ajustes");
   let busca = $state("");
   let filtroDeJogo = $state("");
   let mostrarAvisos = $state(false);
@@ -364,7 +366,8 @@
   // ---------------------------------------------------------------------------------------------------------------
   // Navegação, abas e blocos
 
-  function abrir(id: IdDaArea) {
+  function abrir(id: IdDaArea, abaInterna: "agora" | "ajustes" = "ajustes") {
+    abaDoSistema = abaInterna;
     // Navegar fecha o balão, a não ser que a navegação tenha vindo da pergunta (ela some sozinha depois).
     if (!digitando) fala = null;
     aberta = id;
@@ -745,7 +748,7 @@
                 {/each}
               </ul>
               {#if jogo}<p class="sec pequeno">Leitura pausada com o jogo aberto.</p>{/if}
-              <button class="link" onclick={() => abrir("sistema")}>Ver o sistema <Icone nome="seta_direita" tamanho={14} /></button>
+              <button class="link" onclick={() => abrir("sistema", "agora")}>Ver quem está pesando <Icone nome="seta_direita" tamanho={14} /></button>
             </section>
 
             <!-- Durante o jogo: o que liga sozinho quando um jogo abre -->
@@ -854,7 +857,7 @@
               {:else if aberta === "prova"}
                 <Prova jogo={jogo?.nome ?? null} />
               {:else if aberta === "sistema"}
-                <Sistema />
+                <Sistema abaInicial={abaDoSistema} />
               {:else if aberta === "energia"}
                 <Energia />
               {:else if aberta === "turbo"}

@@ -3,6 +3,7 @@
   // abre junto com o Windows, a limpeza de temporários e o ponto de restauração. Ajuste que pode custar FPS diz quando;
   // ajuste que não deu para verificar diz isso, em vez de fingir "já está bom".
   import { onMount } from "svelte";
+  import AoVivo from "./AoVivo.svelte";
   import Bios from "./Bios.svelte";
   import SistemaAvancado from "./SistemaAvancado.svelte";
   import {
@@ -13,7 +14,9 @@
     type StartupEntry,
   } from "../lib/ponte";
 
-  type Aba = "ajustes" | "inicializacao" | "limpeza" | "restauracao" | "bios" | "avancado";
+  export type Aba = "agora" | "ajustes" | "inicializacao" | "limpeza" | "restauracao" | "bios" | "avancado";
+
+  let { abaInicial = "ajustes" }: { abaInicial?: Aba } = $props();
 
   const GRUPO: Record<string, string> = {
     Gaming: "Jogos",
@@ -43,7 +46,8 @@
     Desconhecido: "desconhecido",
   };
 
-  let aba = $state<Aba>("ajustes");
+  // svelte-ignore state_referenced_locally
+  let aba = $state<Aba>(abaInicial);
   let catalogo = $state<AjusteDoCatalogo[] | null>(null);
   let inicializacao = $state<StartupEntry[] | null>(null);
   let limpeza = $state<ItemDaLimpeza[] | null>(null);
@@ -151,7 +155,7 @@
 
 <div class="sistema">
   <div class="segmento abas-internas" role="tablist" aria-label="Partes do Sistema">
-    {#each [["ajustes", "Ajustes"], ["inicializacao", "Inicialização"], ["limpeza", "Limpeza"], ["restauracao", "Restauração"], ["bios", "BIOS"], ["avancado", "Avançado"]] as [id, nome] (id)}
+    {#each [["agora", "Agora"], ["ajustes", "Ajustes"], ["inicializacao", "Inicialização"], ["limpeza", "Limpeza"], ["restauracao", "Restauração"], ["bios", "BIOS"], ["avancado", "Avançado"]] as [id, nome] (id)}
       <button role="tab" aria-selected={aba === id} onclick={() => (aba = id as Aba)}>{nome}</button>
     {/each}
   </div>
@@ -163,7 +167,9 @@
     <div class="recado" role="status"><span class="ponto" data-tom={recado.tom}></span><div><span>{recado.texto}</span></div></div>
   {/if}
 
-  {#if aba === "ajustes"}
+  {#if aba === "agora"}
+    <AoVivo />
+  {:else if aba === "ajustes"}
     {#if catalogo === null}
       <p class="vazio">Lendo os ajustes deste PC…</p>
     {:else}
