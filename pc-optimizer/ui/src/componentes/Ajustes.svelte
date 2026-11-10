@@ -33,6 +33,22 @@
   let sobreposicao = $state<Sobreposicao | null>(null);
   let preferencias = $state<Preferencias | null>(null);
   let licenca = $state<EstadoDaLicenca | null>(null);
+  /** O Smooth Motion pelo perfil do driver (`flags.smooth_motion_drs`): experimental, só em placa NVIDIA, desligado
+   *  de fábrica. As outras chaves de `flags` ficam como estão: lê tudo e grava tudo, trocando só esta. */
+  let nvidia = $state(false);
+  let smoothMotion = $state<boolean | null>(null);
+  async function alternarSmoothMotion() {
+    if (!noTauri || smoothMotion === null) return;
+    try {
+      const atual = await invoke<Record<string, unknown>>("flags_ler");
+      const ligado = !atual.smooth_motion_drs;
+      await invoke("flags_gravar", { flags: { ...atual, smooth_motion_drs: ligado } });
+      smoothMotion = ligado;
+    } catch (e) {
+      recado = { tom: "perigo", texto: String(e) };
+    }
+  }
+
   /** Só a situação do pedido de feedback (a folha que resolve mora em `PedidoDeFeedback`). */
   let feedback = $state<
     { situacao: "NaoSeAplica" } | { situacao: "Contando"; restante_segundos: number } | { situacao: "Liberado"; verificado_em: string } | { situacao: "Exigido"; apagado: boolean } | null
@@ -121,6 +137,13 @@
     ponte.preferencias().then((p) => (preferencias = p)).catch(() => {});
     ponte.licenca().then((l) => (licenca = l)).catch(() => {});
     if (noTauri) invoke<NonNullable<typeof feedback>>("feedback_estado").then((f) => (feedback = f)).catch(() => {});
+    ponte
+      .hardwareUltimo()
+      .then((h) => {
+        nvidia = h?.placa.fabricante === "Nvidia";
+        if (nvidia && noTauri) invoke<{ smooth_motion_drs: boolean }>("flags_ler").then((f) => (smoothMotion = f.smooth_motion_drs)).catch(() => {});
+      })
+      .catch(() => {});
     ponte.versao().then((v) => (versao = v)).catch(() => {});
     ponte.versaoMaisNova().then((a) => (aviso = a)).catch(() => {});
   });
@@ -310,6 +333,22 @@
       <button class="interruptor" role="switch" aria-checked={epoca} aria-label="Temas de época" onclick={alternarEpoca}></button>
     </div>
   </section>
+
+  {#if nvidia && smoothMotion !== null}
+    <!-- Experimental -->
+    <section class="secao">
+      <div class="linha">
+        <div class="info">
+          <h2>Smooth Motion pelo Otimiza <span class="selo">experimental</span></h2>
+          <span class="apoio">
+            Liga o Smooth Motion da NVIDIA no perfil do jogo no driver, com um ajuste que a NVIDIA não documenta. Só RTX 40 e
+            50; desliga num clique.
+          </span>
+        </div>
+        <button class="interruptor" role="switch" aria-checked={smoothMotion} aria-label="Smooth Motion pelo Otimiza" onclick={alternarSmoothMotion}></button>
+      </div>
+    </section>
+  {/if}
 
   <!-- Licença -->
   <section class="secao">
