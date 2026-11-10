@@ -178,29 +178,6 @@
     gap: 10px;
     align-content: start;
   }
-  .segmento {
-    display: flex;
-    gap: 4px;
-    padding: 3px;
-    border-radius: 10px;
-    background: var(--superficie-2);
-    width: fit-content;
-  }
-  .segmento button {
-    border: 0;
-    padding: 6px 12px;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--tinta-2);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .segmento button[aria-checked="true"] {
-    background: var(--superficie);
-    color: var(--tinta);
-    box-shadow: var(--sombra-1);
-  }
   .controle {
     display: grid;
     gap: 4px;

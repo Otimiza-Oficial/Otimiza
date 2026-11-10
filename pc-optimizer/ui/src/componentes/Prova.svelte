@@ -206,10 +206,10 @@
   }
   .passos li.agora .bola {
     background: var(--tinta);
-    color: #fff;
+    color: var(--contra, #fff);
   }
   .passos li.feito .bola {
-    background: #34c759;
+    background: var(--ok);
     color: #fff;
   }
   .lados {
@@ -221,9 +221,8 @@
     display: grid;
     justify-items: start;
     gap: 4px;
-    padding: 14px;
-    border-radius: 14px;
-    background: var(--superficie-2);
+    padding: 4px 0 4px 16px;
+    border-left: 1px solid var(--linha-forte);
   }
   .grande {
     font-size: 30px;

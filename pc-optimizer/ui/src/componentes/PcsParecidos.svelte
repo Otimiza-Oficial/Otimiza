@@ -56,9 +56,8 @@
   .parecidos {
     display: grid;
     gap: 6px;
-    padding: 14px 16px;
-    border-radius: var(--raio-2);
-    background: var(--superficie-2);
+    padding: 16px 0 0;
+    border-top: 1px solid var(--linha);
   }
   .titulo {
     font-weight: 600;

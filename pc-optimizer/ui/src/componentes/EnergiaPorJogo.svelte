@@ -70,7 +70,7 @@
     <div class="linha">
       <div>
         <span>Modo dinâmico</span>
-        <p class="apoio pequeno">{perfis.length ? `${perfis.length} jogo(s) com perfil.` : "Nenhum jogo com perfil ainda."}</p>
+        <p class="apoio pequeno">{perfis.length ? `${perfis.length} ${perfis.length === 1 ? "jogo" : "jogos"} com perfil.` : "Nenhum jogo com perfil ainda."}</p>
       </div>
       <button class="interruptor" role="switch" aria-checked={dinamico} aria-label="Modo dinâmico" disabled={ocupado}
         onclick={() => agir(async () => {

@@ -69,7 +69,7 @@
       case "MonitorAbaixo":
         return `O monitor ${i.monitor} está em ${i.hz_atual} Hz e aguenta ${i.hz_maximo}. Ajuste na área Tela.`;
       case "LimitesEscondidos":
-        return `${i.quantos} limite(s) escondido(s) segurando o FPS. Veja na área Energia.`;
+        return `${i.quantos} ${i.quantos === 1 ? "limite escondido segurando" : "limites escondidos segurando"} o FPS. Veja na área Energia.`;
       case "SegundoPlanoPesado":
         return `Pesando por trás: ${i.programas.map(([n, p]) => `${n} (${(p * 100).toFixed(0)}% do processador)`).join(", ")}.`;
       case "MemoriaApertada":

@@ -92,7 +92,7 @@
   {:else}
     <p class="apoio">
       {checagem.desativados
-        ? `${checagem.desativados} serviço(s) que o Windows precisa estão desligados — em geral por um "Windows lite" ou outro otimizador. Sem eles, a Loja, o login de conta e o reconhecimento de dispositivo falham.`
+        ? `${checagem.desativados} ${checagem.desativados === 1 ? "serviço que o Windows precisa está desligado" : "serviços que o Windows precisa estão desligados"} — em geral por um "Windows lite" ou outro otimizador. Sem eles, a Loja, o login de conta e o reconhecimento de dispositivo falham.`
         : "Todos os serviços que o Windows precisa estão como deveriam."}
     </p>
     <ul class="lista">

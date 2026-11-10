@@ -162,7 +162,7 @@
   {#if !p}
     <p class="apoio">{erro ?? "Lendo…"}</p>
   {:else}
-    <p class="destaque">{rec ? rec.nome : p.jogo ? "Nenhum gerador funciona aqui" : "Abra um jogo"}</p>
+    <p class="destaque">{#if rec}<span class="apoio">Gerador escolhido</span> {rec.nome}{:else}{p.jogo ? "Nenhum gerador funciona aqui" : "Abra um jogo"}{/if}</p>
     <p class="apoio">
       {#if !p.jogo}
         Com o jogo aberto, o Otimiza escolhe o melhor gerador de quadros: o do jogo, depois o do driver, depois o dele.
@@ -333,7 +333,7 @@
     font-size: 13px;
   }
   .destaque {
-    font-weight: 600;
+    font-weight: 500;
     margin: 0;
   }
   p {
@@ -354,23 +354,6 @@
   .numero-grande > span:not(.selo) {
     color: var(--tinta-2);
   }
-  .selo {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--superficie-2);
-    color: var(--tinta-2);
-  }
-  .selo.medido,
-  .selo[data-tom="ok"] {
-    background: color-mix(in srgb, var(--ok) 16%, transparent);
-    color: var(--ok);
-  }
-  .selo.estimado,
-  .selo[data-tom="atencao"] {
-    background: color-mix(in srgb, var(--atencao) 16%, transparent);
-    color: var(--atencao);
-  }
   .escolha {
     display: grid;
     gap: 6px;
@@ -378,31 +361,6 @@
   .rotulo {
     font-size: var(--t-apoio);
     color: var(--tinta-2);
-  }
-  .segmento {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 3px;
-    border-radius: 10px;
-    background: var(--superficie-2);
-    width: fit-content;
-  }
-  .segmento button {
-    border: 0;
-    padding: 6px 12px;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--tinta-2);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .segmento button[aria-checked="true"] {
-    background: var(--superficie);
-    color: var(--tinta);
-    box-shadow: var(--sombra-1);
-    font-weight: 500;
   }
   .acoes {
     display: flex;

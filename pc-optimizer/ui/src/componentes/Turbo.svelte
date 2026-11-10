@@ -5,7 +5,6 @@
   import { onDestroy, onMount } from "svelte";
   import DriverDaPlaca from "./DriverDaPlaca.svelte";
   import FrameBoost from "./FrameBoost.svelte";
-  import Icone from "./Icone.svelte";
   import NoJogo from "./NoJogo.svelte";
   import OtimizarAgora from "./OtimizarAgora.svelte";
   import PlacaExtras from "./PlacaExtras.svelte";
@@ -187,7 +186,6 @@
     <p class="vazio">Lendo o Turbo…</p>
   {:else if !painel.jogo}
     <section class="secao sem-jogo">
-      <span class="grande-icone"><Icone nome="raio" tamanho={30} /></span>
       <h2>Abra o jogo e volte aqui</h2>
       <p class="apoio texto">
         O Turbo mede o jogo aberto por 10 segundos, descobre quem está segurando o FPS (placa, processador ou memória) e
@@ -198,10 +196,10 @@
     <!-- Cabeça: o jogo, o estado e o botão principal -->
     <section class="secao cabeca">
       <div class="estado">
-        <span class="lampada" class:ligado={painel.ligado}><Icone nome="raio" tamanho={22} /></span>
         <div>
           <h2>{painel.jogo}</h2>
-          <span class="apoio">
+          <span class="apoio linha-estado">
+            <span class="ponto" data-tom={painel.ligado ? "ok" : ocupado !== "" || painel.provando ? "atencao" : null}></span>
             {#if ocupado === "medindo"}
               Medindo o jogo… {passou} de 10 s. Jogue normalmente.
             {:else if ocupado === "provando" || painel.provando}
@@ -388,16 +386,6 @@
     font-family: var(--fonte-titulo);
     font-size: 20px;
   }
-  .grande-icone,
-  .lampada {
-    display: grid;
-    place-items: center;
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    background: var(--superficie-2);
-    color: var(--tinta-2);
-  }
   .cabeca {
     display: flex;
     align-items: center;
@@ -414,16 +402,10 @@
     font-family: var(--fonte-titulo);
     font-size: 18px;
   }
-  .lampada.ligado {
-    background: #ffcc00;
-    color: #1d1d1f;
-    box-shadow: 0 0 0 6px rgb(255 204 0 / 0.25);
-    animation: pulsar 2.4s ease-in-out infinite;
-  }
-  @keyframes pulsar {
-    50% {
-      box-shadow: 0 0 0 12px rgb(255 204 0 / 0.08);
-    }
+  .linha-estado {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .acoes {
     display: flex;
@@ -438,7 +420,7 @@
   }
   .progresso div {
     height: 100%;
-    background: #ffcc00;
+    background: var(--tinta);
     transition: width 900ms linear;
   }
   .linha-opcao {
@@ -450,30 +432,6 @@
   .linha-opcao > div:first-child {
     display: grid;
     gap: 2px;
-  }
-  .segmento {
-    display: flex;
-    flex: none;
-    padding: 3px;
-    border-radius: 18px;
-    background: var(--superficie-2);
-  }
-  .segmento button {
-    height: 30px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 15px;
-    background: transparent;
-    color: var(--tinta-2);
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .segmento button[aria-checked="true"] {
-    background: var(--tinta);
-    color: #fff;
-  }
-  :global(:root[data-tema="noite"]) .segmento button[aria-checked="true"] {
-    color: #1d1d1f;
   }
   .lista .rot {
     flex: 1;

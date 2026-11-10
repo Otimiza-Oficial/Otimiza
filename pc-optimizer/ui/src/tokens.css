@@ -45,6 +45,8 @@
   --sombra-3: 0 2px 6px rgb(22 40 90 / 0.06), 0 28px 64px rgb(22 40 90 / 0.18);
   --desfoque: blur(24px) saturate(1.3);
 
+  --segmento-ativo: #ffffff;
+
   --raio-1: 8px;
   --raio-2: 12px;
   --raio-3: 18px;
@@ -79,6 +81,7 @@
   --linha: rgb(255 255 255 / 0.07);
   --linha-forte: rgb(255 255 255 / 0.14);
   --sombra-1: 0 1px 2px rgb(0 0 0 / 0.25);
+  --segmento-ativo: rgb(255 255 255 / 0.16);
   --sombra-2: 0 1px 2px rgb(0 0 0 / 0.2), 0 6px 16px rgb(0 0 0 / 0.25);
   --sombra-3: 0 2px 6px rgb(0 0 0 / 0.2), 0 28px 64px rgb(0 0 0 / 0.45);
   color-scheme: dark;
@@ -192,14 +195,57 @@ h2 {
   background: none;
   color: var(--acao);
 }
+/* O link: sempre sublinhado de leve, para não ser confundido com um título em negrito. */
+.btn.quieto {
+  text-decoration: underline;
+  text-decoration-color: var(--linha-forte);
+  text-underline-offset: 3px;
+}
 .btn.quieto:hover:not(:disabled) {
   background: none;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration-color: currentColor;
 }
 .btn:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+/* Seletor segmentado (opções, abas internas): trilho cinza e a opção escolhida em branco, levantada. O mesmo em
+   toda área; a barra de cima e as abas de baixo seguem a mesma ideia. */
+.segmento {
+  display: inline-flex;
+  flex: none;
+  width: fit-content;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--linha);
+}
+.segmento > button {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tinta-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.segmento > button:hover:not(:disabled) {
+  color: var(--tinta);
+}
+.segmento > button[aria-checked="true"],
+.segmento > button[aria-selected="true"] {
+  background: var(--segmento-ativo);
+  color: var(--tinta);
+  box-shadow: var(--sombra-1);
+}
+.segmento > button:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 /* Ponto de estado ao lado do texto. */
@@ -224,6 +270,37 @@ h2 {
 .apoio {
   color: var(--tinta-2);
   font-size: var(--t-apoio);
+}
+
+/* Selos: um formato só no app inteiro. Neutro informa; "medido" é o âmbar do mascote; "estimado" é tracejado, porque
+   ainda não é medida. */
+.selo {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--superficie-2);
+  color: var(--tinta-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.selo.medido {
+  background: var(--ambar-fundo);
+  color: var(--ambar);
+}
+.selo.estimado {
+  border: 1px dashed var(--linha-forte);
+  background: none;
+}
+.selo[data-tom="ok"] {
+  color: var(--ok);
+}
+.selo[data-tom="atencao"] {
+  color: var(--atencao);
 }
 
 .selo-medido {
@@ -353,4 +430,34 @@ h2 {
 input[type="range"] {
   accent-color: var(--acao);
   width: 100%;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--acao);
+}
+
+/* "Ver mais" nativo: seta própria em vez do triângulo do navegador. */
+details > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details > summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 140ms ease;
+}
+details[open] > summary::before {
+  transform: rotate(45deg) translate(-1px, -1px);
 }

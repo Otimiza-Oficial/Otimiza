@@ -125,7 +125,7 @@
     {/if}
 
     <div class="controles">
-      <div class="duracoes" role="radiogroup" aria-label="Duração">
+      <div class="segmento duracoes" role="radiogroup" aria-label="Duração">
         {#each DURACOES as d (d)}
           <button role="radio" aria-checked={segundos === d} disabled={medindo} onclick={() => (segundos = d)}>{d} s</button>
         {/each}
@@ -292,31 +292,6 @@
     flex-wrap: wrap;
   }
   /* Controle segmentado: três durações, uma escolhida. */
-  .duracoes {
-    display: inline-flex;
-    padding: 3px;
-    border-radius: var(--raio-1);
-    background: var(--superficie-2);
-    border: 1px solid var(--linha);
-  }
-  .duracoes button {
-    min-width: 56px;
-    height: 30px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--tinta-2);
-    cursor: pointer;
-  }
-  .duracoes button[aria-checked="true"] {
-    background: var(--superficie);
-    color: var(--tinta);
-    box-shadow: var(--sombra-1);
-    font-weight: 500;
-  }
-  .duracoes button:disabled {
-    cursor: default;
-  }
   .progresso {
     height: 4px;
     border-radius: 2px;
@@ -435,5 +410,8 @@
     margin: 4px 0 0 18px;
     font-size: 13px;
     max-width: 52ch;
+  }
+  .duracoes button {
+    min-width: 52px;
   }
 </style>

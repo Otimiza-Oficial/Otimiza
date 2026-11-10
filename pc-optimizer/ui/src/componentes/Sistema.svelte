@@ -150,7 +150,7 @@
 </script>
 
 <div class="sistema">
-  <div class="abas-internas" role="tablist" aria-label="Partes do Sistema">
+  <div class="segmento abas-internas" role="tablist" aria-label="Partes do Sistema">
     {#each [["ajustes", "Ajustes"], ["inicializacao", "Inicialização"], ["limpeza", "Limpeza"], ["restauracao", "Restauração"], ["bios", "BIOS"], ["avancado", "Avançado"]] as [id, nome] (id)}
       <button role="tab" aria-selected={aba === id} onclick={() => (aba = id as Aba)}>{nome}</button>
     {/each}
@@ -298,31 +298,6 @@
   .vazio {
     padding: 20px 0;
     color: var(--tinta-2);
-  }
-  .abas-internas {
-    display: flex;
-    gap: 4px;
-    padding: 3px;
-    border-radius: 18px;
-    background: var(--superficie-2);
-    justify-self: start;
-  }
-  .abas-internas button {
-    height: 30px;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 15px;
-    background: transparent;
-    color: var(--tinta-2);
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .abas-internas button[aria-selected="true"] {
-    background: var(--tinta);
-    color: #fff;
-  }
-  :global(:root[data-tema="noite"]) .abas-internas button[aria-selected="true"] {
-    color: #1d1d1f;
   }
   .filtros {
     display: flex;

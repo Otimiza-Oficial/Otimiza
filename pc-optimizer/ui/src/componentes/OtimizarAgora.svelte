@@ -76,7 +76,7 @@
       const reiniciar = aplicados.filter((x) => x.requires_restart).length;
       const nome = niveis.find((n) => n.id === escolhido)?.nome ?? escolhido;
       fim = aplicados.length
-        ? `${aplicados.length} ajuste(s) aplicados no nível ${nome}.${reiniciar ? ` ${reiniciar} só valem depois de reiniciar o PC.` : ""} Jogue alguns minutos: o Otimiza mede o antes e o depois. Tudo se desfaz no Histórico.`
+        ? `${aplicados.length} ${aplicados.length === 1 ? "ajuste aplicado" : "ajustes aplicados"} no nível ${nome}.${reiniciar ? ` ${reiniciar} só valem depois de reiniciar o PC.` : ""} Jogue alguns minutos: o Otimiza mede o antes e o depois. Tudo se desfaz no Histórico.`
         : "Nada a mudar: o que é compatível já estava certo.";
     } catch (e) {
       fim = String(e);
@@ -154,8 +154,8 @@
     align-items: center;
   }
   .grande {
-    padding: 12px 22px;
-    font-size: 15px;
+    min-height: 40px;
+    padding: 0 20px;
   }
   .passos {
     list-style: none;

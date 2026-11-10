@@ -8,7 +8,7 @@
   import FivemPainel from "./FivemPainel.svelte";
   import PcsParecidos from "./PcsParecidos.svelte";
   import Icone from "./Icone.svelte";
-  import { capaRemota } from "../lib/capas";
+  import { capaRemota, iniciais } from "../lib/capas";
   import { ponte, type Ganho, type JogoDaLoja, type ResumoDoJogo } from "../lib/ponte";
 
   type Item = { jogo: JogoDaLoja; capa: string | null; medido: ResumoDoJogo | null };
@@ -67,12 +67,6 @@
     if (itens) itens = itens.map((i) => (i.jogo.nome === nome ? { ...i, capa: null } : i));
   }
 
-  function corDoJogo(nome: string) {
-    let h = 0;
-    for (const c of nome) h = (h * 31 + c.charCodeAt(0)) % 360;
-    return `linear-gradient(140deg, hsl(${h} 70% 62%), hsl(${(h + 40) % 360} 65% 45%))`;
-  }
-
   /** `null` quando a loja não informou (0) ou o número não é uma data: a tela omite em vez de inventar. */
   function quando(segundos: number): string | null {
     if (!segundos || segundos < 1_000_000_000) return null;
@@ -117,7 +111,7 @@
     {#if atual}
       <section class="destaque">
         <div class="capa-grande">
-          {#if atual.capa}<img src={atual.capa} alt="" onerror={() => fotoFalhou(atual.jogo.nome)} />{:else}<span class="reserva" style:background={corDoJogo(atual.jogo.nome)}><Icone nome="controle" tamanho={40} /></span>{/if}
+          {#if atual.capa}<img src={atual.capa} alt="" onerror={() => fotoFalhou(atual.jogo.nome)} />{:else}<span class="reserva grande">{iniciais(atual.jogo.nome)}</span>{/if}
         </div>
         <div class="info">
           <h3>{atual.jogo.nome}</h3>
@@ -190,8 +184,8 @@
         {#each visiveis as i (i.jogo.nome)}
           <button class="cartao" class:ativo={escolhido === i.jogo.nome} onclick={() => (escolhido = i.jogo.nome)}>
             <span class="capa">
-              {#if i.capa}<img src={i.capa} alt="" loading="lazy" onerror={() => fotoFalhou(i.jogo.nome)} />{:else}<span class="reserva" style:background={corDoJogo(i.jogo.nome)}><Icone nome="controle" tamanho={28} /></span>{/if}
-              {#if i.medido}<span class="marca-medido" title="Medido pelo Otimiza"><Icone nome="grafico" tamanho={11} /></span>{/if}
+              {#if i.capa}<img src={i.capa} alt="" loading="lazy" onerror={() => fotoFalhou(i.jogo.nome)} />{:else}<span class="reserva">{iniciais(i.jogo.nome)}</span>{/if}
+              {#if i.medido}<span class="selo-medido marca-medido" title="FPS medido pelo Otimiza neste PC">Medido</span>{/if}
             </span>
             <span class="nome">{i.jogo.nome}</span>
             <span class="apoio">{i.jogo.loja}</span>
@@ -222,6 +216,7 @@
   }
   .capa-grande {
     flex: none;
+    align-self: flex-start;
     width: 150px;
     aspect-ratio: 2 / 3;
     border-radius: 14px;
@@ -239,7 +234,14 @@
     place-items: center;
     width: 100%;
     height: 100%;
-    color: rgb(255 255 255 / 0.92);
+    background: var(--superficie-2);
+    color: var(--tinta-2);
+    font-family: var(--fonte-titulo);
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .reserva.grande {
+    font-size: 28px;
   }
   .info {
     flex: 1;
@@ -305,29 +307,6 @@
     color: var(--tinta);
     user-select: text;
   }
-  .segmento {
-    display: flex;
-    padding: 3px;
-    border-radius: 18px;
-    background: var(--superficie-2);
-  }
-  .segmento button {
-    height: 30px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 15px;
-    background: transparent;
-    color: var(--tinta-2);
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .segmento button[aria-checked="true"] {
-    background: var(--tinta);
-    color: var(--superficie-solida, #fff);
-  }
-  :global(:root[data-tema="noite"]) .segmento button[aria-checked="true"] {
-    color: #1d1d1f;
-  }
 
   .grade {
     display: grid;
@@ -350,7 +329,6 @@
   }
   .cartao:hover {
     background: var(--superficie-2);
-    transform: translateY(-3px);
   }
   .cartao.ativo {
     background: var(--superficie-2);
@@ -367,13 +345,6 @@
     position: absolute;
     right: 6px;
     top: 6px;
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #34c759;
-    color: #fff;
   }
   .nome {
     font-size: 13px;

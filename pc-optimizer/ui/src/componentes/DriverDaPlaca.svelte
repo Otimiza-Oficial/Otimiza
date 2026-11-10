@@ -232,21 +232,26 @@
     gap: 10px;
     flex-wrap: wrap;
   }
+  /* Os níveis do driver em lista: nome e resumo à esquerda, o botão à direita. Três cartões com o mesmo botão
+     repetido viravam uma vitrine. */
   .perfis {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 10px;
   }
   .perfil {
     display: grid;
-    gap: 6px;
-    align-content: start;
-    padding: 12px;
-    border-radius: var(--raio-2);
-    background: var(--superficie-2);
+    grid-template-columns: 1fr auto;
+    column-gap: 16px;
+    row-gap: 2px;
+    padding: 10px 0;
+    border-top: 1px solid var(--linha);
   }
-  .perfil.inteiro {
-    outline: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  .perfil:first-child {
+    border-top: 0;
+  }
+  .perfil > .btn {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
   }
   .titulo {
     font-weight: 500;
@@ -274,28 +279,6 @@
     padding-top: 10px;
     border-top: 1px solid var(--linha);
     justify-items: start;
-  }
-  .segmento {
-    display: flex;
-    gap: 4px;
-    padding: 3px;
-    border-radius: 10px;
-    background: var(--superficie-2);
-  }
-  .segmento button {
-    border: 0;
-    padding: 6px 12px;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--tinta-2);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .segmento button[aria-checked="true"] {
-    background: var(--superficie);
-    color: var(--tinta);
-    box-shadow: var(--sombra-1);
   }
   .limite {
     display: flex;

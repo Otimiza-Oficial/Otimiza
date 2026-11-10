@@ -101,7 +101,7 @@
     {#if !liso}
       <p class="apoio">Trava o FPS do jogo num ritmo constante: é o que o olho sente como liso, mais que o número. Abra o jogo e meça.</p>
     {:else}
-      <p>O jogo entrega <b>{n(liso.fps_agora)} fps</b> e trava <b>{n(liso.trancos_por_minuto)}×/min</b> · monitor de {liso.hz} Hz. <span class="selo">medido</span></p>
+      <p>O jogo entrega <b>{n(liso.fps_agora)} fps</b> e trava <b>{n(liso.trancos_por_minuto)}×/min</b> · monitor de {liso.hz} Hz. <span class="selo medido">medido</span></p>
       {#if lisoAntes}
         <p class="apoio">Medição anterior: {n(lisoAntes.trancos)}×/min a {n(lisoAntes.fps)} fps → agora {n(liso.trancos_por_minuto)}×/min a {n(liso.fps_agora)} fps.</p>
       {/if}
@@ -127,7 +127,7 @@
   </section>
 
   <section class="secao">
-    <h2>Memória para o jogo <span class="selo">medido</span></h2>
+    <h2>Memória para o jogo <span class="selo medido">medido</span></h2>
     {#if memoria}
       {@const apertada = memoria.livre_gb < 2.5 && memoria.total_gb <= 16}
       {@const soma = memoria.pesados.reduce((s, p) => s + p.mb, 0)}
@@ -207,14 +207,6 @@
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
-  }
-  .selo {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ok) 16%, transparent);
-    color: var(--ok);
   }
   .aviso {
     color: var(--atencao);

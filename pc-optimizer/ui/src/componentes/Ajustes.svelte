@@ -193,7 +193,7 @@
             <button role="radio" aria-checked={c.modo === m} onclick={() => gravarSobreposicao(m, c.canto, c.com_frame_boost)}>{nome}</button>
           {/each}
         </div>
-        <div class="cantos" role="radiogroup" aria-label="Canto da tela">
+        <div class="segmento cantos" role="radiogroup" aria-label="Canto da tela">
           {#each CANTOS as [k, seta] (k)}
             <button role="radio" aria-checked={c.canto === k} aria-label={k} disabled={c.modo === "Desligado"} onclick={() => gravarSobreposicao(c.modo, k, c.com_frame_boost)}>{seta}</button>
           {/each}
@@ -310,14 +310,13 @@
       <p class="apoio">Lendo…</p>
     {:else if licenca.ativa}
       <ul class="lista">
-        <li><span class="ponto" data-tom="ok"></span><span class="info">{licenca.origem}</span><span class="apoio">{licenca.expira ? `até ${licenca.expira}` : "sem vencimento"}</span></li>
-        {#if licenca.comprador}<li><span class="ponto"></span><span class="info">Em nome de</span><span>{licenca.comprador}</span></li>{/if}
+        <li><span class="info">{licenca.origem}</span><span class="apoio">{licenca.expira ? `até ${licenca.expira}` : "sem vencimento"}</span></li>
+        {#if licenca.comprador}<li><span class="info">Em nome de</span><span>{licenca.comprador}</span></li>{/if}
         <li>
-          <span class="ponto"></span><span class="info">Esta máquina</span><span class="numero">{licenca.maquina}</span>
+          <span class="info">Esta máquina</span><span class="numero">{licenca.maquina}</span>
         </li>
         <li>
-          <span class="ponto" data-tom={licenca.sobrevive_formatacao ? "ok" : "atencao"}></span>
-          <span class="info">{licenca.sobrevive_formatacao ? "Continua valendo se você formatar o PC" : "Formatar o PC pede ativar de novo"}</span>
+          <span class="info" class:atencao={!licenca.sobrevive_formatacao}>{licenca.sobrevive_formatacao ? "Continua valendo se você formatar o PC" : "Formatar o PC pede ativar de novo"}</span>
         </li>
       </ul>
     {:else}
@@ -334,15 +333,14 @@
     <h2>Versão e suporte</h2>
     <ul class="lista">
       <li>
-        <span class="ponto" data-tom={aviso?.comparacao === "HaVersaoNova" ? "atencao" : "ok"}></span>
         <span class="info">
           Otimiza {versao?.exibida ?? ""}
           <span class="apoio">
             {aviso?.comparacao === "HaVersaoNova"
-              ? `· a ${aviso.versao_publicada_exibida ?? aviso.versao_publicada} já saiu`
+              ? `A ${aviso.versao_publicada_exibida ?? aviso.versao_publicada} já saiu`
               : aviso?.comparacao === "NaoSei"
-                ? "· não consegui conferir se há versão nova"
-                : "· é a mais nova"}
+                ? "Não consegui conferir se há versão nova"
+                : "É a mais nova"}
           </span>
         </span>
         {#if aviso?.comparacao === "HaVersaoNova" && aviso.pagina}
@@ -350,8 +348,7 @@
         {/if}
       </li>
       <li>
-        <span class="ponto"></span>
-        <span class="info">Relatório para o suporte<span class="apoio"> · o que o atendimento precisa, sem dados pessoais</span></span>
+        <span class="info">Relatório para o suporte<span class="apoio">O que o atendimento precisa, sem dados pessoais</span></span>
         <button class="btn" onclick={copiarRelatorio}>Copiar</button>
       </li>
     </ul>
@@ -376,47 +373,14 @@
     display: grid;
     gap: 2px;
   }
+  .info.atencao {
+    color: var(--atencao);
+  }
   .controles {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 14px;
-  }
-  .segmento,
-  .cantos {
-    display: flex;
-    padding: 3px;
-    border-radius: 18px;
-    background: var(--superficie-2);
-  }
-  .segmento button,
-  .cantos button {
-    height: 30px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 15px;
-    background: transparent;
-    color: var(--tinta-2);
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .cantos button {
-    width: 34px;
-    padding: 0;
-    font-size: 15px;
-  }
-  .segmento button[aria-checked="true"],
-  .cantos button[aria-checked="true"] {
-    background: var(--tinta);
-    color: #fff;
-  }
-  :global(:root[data-tema="noite"]) .segmento button[aria-checked="true"],
-  :global(:root[data-tema="noite"]) .cantos button[aria-checked="true"] {
-    color: #1d1d1f;
-  }
-  .cantos button:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
   .marcar {
     display: inline-flex;
@@ -450,5 +414,10 @@
   }
   .erro-nuvem {
     color: var(--perigo);
+  }
+  .cantos button {
+    width: 34px;
+    padding: 0;
+    font-size: 15px;
   }
 </style>

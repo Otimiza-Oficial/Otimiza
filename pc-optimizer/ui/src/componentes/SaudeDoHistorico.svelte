@@ -71,7 +71,7 @@
       {#if mudou.length === 0}
         <p class="apoio"><span class="ponto" data-tom="ok"></span> Tudo o que o Otimiza aplicou continua como ele deixou ({vistoria.itens.filter((i) => i.estado === "Intacto").length} conferidos).</p>
       {:else}
-        <p class="aviso">{mudou.length} ajuste(s) foram mudados por fora — por uma atualização do Windows ou outro programa.{vistoria.com_politica_de_grupo ? " Esta máquina tem política de grupo: ela pode desfazer de novo." : ""}</p>
+        <p class="aviso">{mudou.length === 1 ? "1 ajuste foi mudado" : `${mudou.length} ajustes foram mudados`} por fora — por uma atualização do Windows ou outro programa.{vistoria.com_politica_de_grupo ? " Esta máquina tem política de grupo: ela pode desfazer de novo." : ""}</p>
         {#each mudou as i (i.id)}
           <div class="linha">
             <span>{i.nome}</span>

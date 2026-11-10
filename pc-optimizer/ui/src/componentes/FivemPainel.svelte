@@ -103,7 +103,7 @@
         {#if crashes.crashes.length === 0}
           <p class="apoio">Nenhum relatório de crash do FiveM neste PC.</p>
         {:else}
-          <p class="apoio">{crashes.crashes.length} relatório(s): {crashes.antes_do_otimiza} antes do Otimiza e {crashes.depois_do_otimiza} depois.</p>
+          <p class="apoio">{crashes.crashes.length} {crashes.crashes.length === 1 ? "relatório" : "relatórios"}: {crashes.antes_do_otimiza} antes do Otimiza e {crashes.depois_do_otimiza} depois.</p>
           {#each crashes.leituras as l (l.pista)}<p class="aviso">{l.frase}</p>{/each}
           <ul>
             {#each crashes.crashes.slice(0, 5) as c (c.quando)}
@@ -129,9 +129,8 @@
   .fivem {
     display: grid;
     gap: 10px;
-    padding: 14px 16px;
-    border-radius: var(--raio-2);
-    background: var(--superficie-2);
+    padding: 16px 0 0;
+    border-top: 1px solid var(--linha);
   }
   .titulo {
     font-weight: 600;

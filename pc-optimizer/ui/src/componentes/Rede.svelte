@@ -538,18 +538,19 @@
   }
   .periodo .barra {
     width: 100%;
-    max-width: 56px;
-    height: 88px;
+    max-width: 28px;
+    height: 72px;
     display: flex;
     align-items: flex-end;
-    border-radius: 12px;
+    border-radius: 4px;
     background: var(--linha);
     overflow: hidden;
   }
+  /* Horário bom fica neutro; só o que teve problema ganha cor. */
   .periodo .barra span {
     width: 100%;
-    border-radius: 12px;
-    background: var(--ok);
+    border-radius: 4px;
+    background: var(--tinta-3);
     transition: height 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .periodo[data-tom="atencao"] .barra span {

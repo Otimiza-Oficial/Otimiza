@@ -276,17 +276,6 @@
     gap: 10px;
     flex-wrap: wrap;
   }
-  .selo {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--superficie-2);
-    color: var(--tinta-2);
-  }
-  .selo.medido {
-    color: var(--ok);
-  }
   .aviso {
     color: var(--atencao);
     font-size: 13px;

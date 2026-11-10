@@ -1,7 +1,7 @@
 // A capa de cada jogo quando o cache da Steam deste PC não tem: a arte oficial pela internet. Ordem de preferência:
 // 1) o cache local da Steam (`ponte.capa`, sem rede); 2) a CDN da Steam pelo número do jogo; 3) a arte oficial da loja
 // do próprio jogo, para os grandes que não estão na Steam. Sem nada disso (ou se a imagem não carregar), a tela desenha
-// a capa com a cor do nome. As URLs são imagens públicas (carregadas por <img>, sem chamada de API).
+// a capa com as iniciais do jogo (`iniciais`). As URLs são imagens públicas (carregadas por <img>, sem chamada de API).
 
 const steam = (appid: number) => `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/library_600x900_2x.jpg`;
 
@@ -56,4 +56,10 @@ export function capaRemota(nome: string, appid: number | null): string | null {
   if (typeof conhecido === "number") return steam(conhecido);
   if (appid != null) return steam(appid);
   return null;
+}
+
+/** Sem capa: as iniciais do jogo num quadro neutro. Cor inventada pelo nome parece enfeite e não ajuda a achar. */
+export function iniciais(nome: string) {
+  const palavras = nome.replace(/[^\p{L}\p{N} ]/gu, " ").split(/\s+/).filter(Boolean);
+  return (palavras.length > 1 ? palavras[0][0] + palavras[1][0] : (palavras[0] ?? "?").slice(0, 2)).toUpperCase();
 }

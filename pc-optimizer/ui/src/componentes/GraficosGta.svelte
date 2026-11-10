@@ -87,9 +87,8 @@
   .gta {
     display: grid;
     gap: 8px;
-    padding: 14px 16px;
-    border-radius: var(--raio-2);
-    background: var(--superficie-2);
+    padding: 16px 0 0;
+    border-top: 1px solid var(--linha);
   }
   .titulo {
     font-weight: 600;
@@ -114,8 +113,12 @@
     font: inherit;
     cursor: pointer;
   }
+  .perfis button:hover {
+    border-color: var(--linha-forte);
+  }
   .perfis button[aria-pressed="true"] {
     border-color: var(--acao);
+    box-shadow: inset 0 0 0 1px var(--acao);
   }
   ul {
     margin: 0;

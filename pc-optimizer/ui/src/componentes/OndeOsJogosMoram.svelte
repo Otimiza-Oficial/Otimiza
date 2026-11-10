@@ -19,7 +19,7 @@
 
 {#if lista.length}
   <div class="recado-hd">
-    <b>{lista.length === 1 ? "1 jogo está" : `${lista.length} jogos estão`} num HD mecânico</b>
+    <b><span class="ponto" data-tom="atencao"></span>{lista.length === 1 ? "1 jogo está" : `${lista.length} jogos estão`} num HD mecânico</b>
     {#each lista as j (j.jogo)}<p>{j.jogo} · disco {j.unidade ?? "?"}:{j.modelo ? ` (${j.modelo})` : ""}</p>{/each}
     <p class="apoio">HD demora a carregar e dá tranco quando o cenário muda. Se tiver SSD, mova pelo iniciador (na Steam: Propriedades › Arquivos instalados › Mover pasta).</p>
   </div>
@@ -29,10 +29,14 @@
   .recado-hd {
     display: grid;
     gap: 4px;
-    padding: 12px 14px;
-    border-radius: var(--raio-2);
-    background: color-mix(in srgb, var(--atencao) 12%, transparent);
+    padding: 16px 0 0;
+    border-top: 1px solid var(--linha);
     font-size: 13px;
+  }
+  b {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   p {
     margin: 0;
