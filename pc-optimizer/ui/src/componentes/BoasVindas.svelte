@@ -92,11 +92,35 @@
     return l;
   });
 
-  const promessas = [
-    { icone: "grafico" as const, titulo: "Eu meço", texto: "FPS, 1% pior e trancos de verdade, pelo PresentMon, enquanto você joga. Número estimado aparece como estimado." },
-    { icone: "raio" as const, titulo: "Eu ajusto", texto: "Só o que rende nesta máquina, escolhido pelo que está segurando o jogo. Tudo tem desfazer, com o valor de antes guardado." },
-    { icone: "desfazer" as const, titulo: "Eu provo", texto: "Antes e depois medidos no mesmo jogo. O que piora eu desfaço sozinho, e o que não muda nada eu digo." },
+  // "Como eu trabalho" como uma história: o tempo de cada quadro com trancos (antes), a leitura passando, os picos
+  // achatando (o ajuste) e as duas linhas juntas (a prova). É ilustração, e a tela diz isso: número de verdade só sai
+  // da medição desta máquina.
+  const PONTOS = 48;
+  const PICOS: Record<number, number> = { 5: 30, 6: 52, 13: 26, 19: 44, 20: 18, 27: 38, 33: 22, 34: 48, 41: 30 };
+  const comTrancos = Array.from({ length: PONTOS }, (_, i) => PICOS[i] ?? 104 + Math.sin(i * 1.7) * 7 + Math.cos(i * 0.6) * 5);
+  const liso = Array.from({ length: PONTOS }, (_, i) => 100 + Math.sin(i * 0.5) * 2.2);
+  const caminho = (v: number[]) => v.map((y, i) => `${i ? "L" : "M"}${((i * 640) / (PONTOS - 1)).toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const ANTES = caminho(comTrancos);
+  const DEPOIS = caminho(liso);
+  const BATIDAS = [
+    { titulo: "Eu meço", texto: "Leio cada quadro do jogo enquanto você joga, sem nada por cima dele." },
+    { titulo: "Eu ajusto", texto: "Só o que rende nesta máquina. Tudo tem desfazer." },
+    { titulo: "Eu provo", texto: "Antes e depois no mesmo jogo. Piorou, eu volto." },
   ];
+  /** 0 medindo, 1 ajustando, 2 provado. Sem movimento, já começa provado. */
+  let fase = $state(0);
+  $effect(() => {
+    if (passo !== "como") return;
+    fase = parado ? 2 : 0;
+    if (parado) return;
+    const t1 = setTimeout(() => (fase = 1), 2300);
+    const t2 = setTimeout(() => (fase = 2), 3900);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  });
+
 </script>
 
 <svelte:window onkeydown={teclado} />
@@ -144,16 +168,33 @@
             </div>
           {:else if passo === "como"}
             <h2>Como eu trabalho</h2>
-            <div class="promessas">
-              {#each promessas as p, i (p.titulo)}
-                <article class="promessa" in:fly={{ y: 24, duration: dur(480), delay: dur(220 + i * 140), easing: cubicOut }}>
-                  <span class="icone-promessa"><Icone nome={p.icone} tamanho={22} /></span>
-                  <strong>{p.titulo}</strong>
-                  <p>{p.texto}</p>
-                </article>
+            <p class="sub">O que você sente como "travando" é isto: alguns quadros demorando muito mais que os outros.</p>
+            <figure class="historia" data-fase={fase} in:fade={{ duration: dur(400), delay: dur(150) }}>
+              <figcaption>
+                <span>Tempo de cada quadro</span>
+                <span class="etiqueta">{fase === 2 ? "antes e depois" : fase === 1 ? "ajustando" : "medindo"}</span>
+                <span class="ilustracao">ilustração</span>
+              </figcaption>
+              <svg viewBox="0 0 640 140" preserveAspectRatio="none" aria-hidden="true">
+                <line class="guia" x1="0" x2="640" y1="100" y2="100" />
+                <path class="fantasma" d={ANTES} />
+                <path class="linha" d={fase === 0 ? ANTES : DEPOIS} />
+                <rect class="leitura" x="0" y="0" width="70" height="140" />
+              </svg>
+              <div class="legenda">
+                <span class="tag antes">com trancos</span>
+                <span class="tag depois">liso</span>
+              </div>
+            </figure>
+            <ol class="batidas">
+              {#each BATIDAS as b, i (b.titulo)}
+                <li class:acesa={fase >= i} class:atual={fase === i}>
+                  <span class="marca">{i + 1}</span>
+                  <strong>{b.titulo}</strong>
+                  <span>{b.texto}</span>
+                </li>
               {/each}
-            </div>
-            <p class="rodape" in:fade={{ duration: dur(400), delay: dur(700) }}>Nada de "limpar RAM", desligar o antivírus ou chave mágica de registro.</p>
+            </ol>
           {:else if passo === "pc"}
             <h2>Conhecendo o seu PC</h2>
             <p class="sub">Isto foi lido agora, nesta máquina.</p>
@@ -397,49 +438,185 @@
     margin-top: auto;
     padding-top: 6px;
   }
-  .promessas {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-top: 12px;
-  }
-  .promessa {
-    display: grid;
-    align-content: start;
-    gap: 8px;
-    padding: 18px;
+  .historia {
+    margin: 10px 0 0;
+    padding: 16px 18px 12px;
     border-radius: 20px;
     background: rgb(255 255 255 / 0.62);
     border: 1px solid rgb(0 0 0 / 0.06);
   }
-  :global(:root[data-tema="noite"]) .promessa,
-  :global(:root[data-tema="noite"]) .pecas li,
-  :global(:root[data-tema="noite"]) .tema-op {
-    background: rgb(255 255 255 / 0.06);
+  :global(:root[data-tema="noite"]) .historia {
+    background: rgb(255 255 255 / 0.05);
     border-color: rgb(255 255 255 / 0.1);
   }
-  .icone-promessa {
+  .historia figcaption {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12.5px;
+  }
+  .historia figcaption > span:first-child {
+    opacity: 0.6;
+  }
+  .etiqueta {
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.07);
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  :global(:root[data-tema="noite"]) .etiqueta {
+    background: rgb(255 255 255 / 0.12);
+  }
+  .ilustracao {
+    margin-left: auto;
+    padding: 1px 8px;
+    border: 1px dashed currentColor;
+    border-radius: 999px;
+    font-size: 11px;
+    opacity: 0.5;
+  }
+  .historia svg {
+    display: block;
+    width: 100%;
+    height: 150px;
+    margin-top: 6px;
+    overflow: visible;
+  }
+  .guia {
+    stroke: currentColor;
+    stroke-opacity: 0.12;
+    stroke-dasharray: 4 6;
+  }
+  .linha,
+  .fantasma {
+    fill: none;
+    stroke-width: 3;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+  /* Âmbar com os picos enquanto mede; verde e liso depois do ajuste. A forma muda pelo próprio caminho (`d`). */
+  .linha {
+    stroke: var(--laranja, #c2730f);
+    stroke-dasharray: 2400;
+    stroke-dashoffset: 2400;
+    animation: desenhar 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    transition:
+      d 1.1s cubic-bezier(0.5, 0, 0.2, 1),
+      stroke 0.8s ease;
+  }
+  [data-fase="1"] .linha,
+  [data-fase="2"] .linha {
+    stroke: var(--verde, #34c759);
+  }
+  .fantasma {
+    stroke: var(--laranja, #c2730f);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+  }
+  [data-fase="2"] .fantasma {
+    opacity: 0.3;
+  }
+  .leitura {
+    fill: currentColor;
+    opacity: 0.07;
+    animation: varrer 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+  @keyframes desenhar {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes varrer {
+    from {
+      transform: translateX(-70px);
+    }
+    90% {
+      opacity: 0.07;
+    }
+    to {
+      transform: translateX(640px);
+      opacity: 0;
+    }
+  }
+  .legenda {
+    display: flex;
+    gap: 14px;
+    margin-top: 6px;
+    font-size: 11.5px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0.35;
+    transition: opacity 0.5s ease;
+  }
+  .tag::before {
+    content: "";
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+  }
+  .tag.antes::before {
+    background: var(--laranja, #c2730f);
+  }
+  .tag.depois::before {
+    background: var(--verde, #34c759);
+  }
+  [data-fase="0"] .tag.antes,
+  [data-fase="1"] .tag.depois,
+  [data-fase="2"] .tag {
+    opacity: 0.85;
+  }
+  .batidas {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
     display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    background: currentColor;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
   }
-  .icone-promessa :global(svg) {
-    color: var(--contra, #fff);
+  .batidas li {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    padding-top: 12px;
+    border-top: 2px solid rgb(127 127 127 / 0.2);
+    opacity: 0.4;
+    transition:
+      opacity 0.5s ease,
+      border-color 0.5s ease;
   }
-  :global(:root[data-tema="noite"]) .icone-promessa :global(svg) {
-    color: #1d1d1f;
+  .batidas li.acesa {
+    opacity: 1;
   }
-  .promessa strong {
-    font-size: 16px;
+  .batidas li.atual {
+    border-top-color: currentColor;
   }
-  .promessa p {
-    margin: 0;
-    font-size: 13px;
+  .marca {
+    font-size: 11.5px;
+    font-weight: 600;
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+  }
+  .batidas strong {
+    font-size: 15px;
+  }
+  .batidas li > span:last-child {
+    font-size: 12.5px;
     line-height: 1.45;
     opacity: 0.72;
+  }
+  .parado .linha,
+  .parado .leitura {
+    animation: none;
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+  .parado .leitura {
+    opacity: 0;
   }
   .pecas {
     list-style: none;
@@ -609,7 +786,7 @@
     animation: none;
   }
   @media (max-width: 760px) {
-    .promessas,
+    .batidas,
     .temas {
       grid-template-columns: 1fr;
     }
