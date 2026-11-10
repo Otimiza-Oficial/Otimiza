@@ -2092,6 +2092,11 @@
         "fundo fundo"
         "avisos tela";
     }
+    /* Com a grade rolando, a altura vem do conteúdo: sem isto a capa (em pé) cresce com a largura da janela. */
+    .tres {
+      flex: none;
+      height: 190px;
+    }
   }
 
   /* ---------- Área aberta dentro do painel ---------- */
@@ -2239,16 +2244,9 @@
     font-size: 12px;
   }
 
+  /* Janela estreita: a saudação sai da barra. A grade estreita fica na regra de cima ("a grade vira uma coluna
+     dupla que rola"); a que morava aqui usava os blocos de um desenho antigo e escondia três cards. */
   @media (max-width: 1100px) {
-    .grade {
-      grid-template-columns: 1fr 1fr 1.4fr;
-      grid-template-rows: auto auto auto auto;
-      grid-template-areas:
-        "jogos jogos banda"
-        "avisos aneis jogo"
-        "acoes acoes tela"
-        "wifi dpc tela";
-    }
     .ola {
       display: none;
     }

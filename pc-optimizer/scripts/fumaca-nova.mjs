@@ -188,6 +188,25 @@ const r = await cdp("Runtime.evaluate", {
 });
 await espera(1000);
 
+// Janela estreita (notebook, tela de 1024 ou escala de 125%): todo card da tela inicial cabe na largura e tem tamanho
+// de card. Uma regra de layout antiga já escondeu três deles numa janela abaixo de 1100 px.
+await cdp("Emulation.setDeviceMetricsOverride", { width: 1000, height: 720, deviceScaleFactor: 1, mobile: false });
+await espera(800);
+const estreita = await cdp("Runtime.evaluate", {
+  expression: `(() => {
+    const largura = document.querySelector('.conteudo')?.getBoundingClientRect();
+    return [...document.querySelectorAll('.grade > .bloco')].flatMap((b) => {
+      const r = b.getBoundingClientRect();
+      const nome = [...b.classList].find((c) => c.startsWith('b-')) ?? 'bloco';
+      if (!largura || r.right > largura.right + 1 || r.left < largura.left - 1) return ['janela de 1000 px: o card ' + nome + ' sai da largura'];
+      if (r.width < 200 || r.height < 120) return ['janela de 1000 px: o card ' + nome + ' ficou com ' + Math.round(r.width) + '×' + Math.round(r.height)];
+      return [];
+    });
+  })()`,
+  returnByValue: true,
+});
+erros.push(...(estreita.result?.result?.value ?? ["a conferência da janela estreita não retornou"]));
+
 if (r.result?.exceptionDetails) erros.push(r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text);
 const resultado = r.result?.result?.value;
 erros.push(...(resultado?.falhas ?? ["o roteiro da interface nova não retornou"]));
