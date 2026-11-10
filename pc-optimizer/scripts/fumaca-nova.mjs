@@ -2,7 +2,7 @@
 // PRODUÇÃO (`dist-nova/`) num Chrome sem janela, com a ponte do Tauri trocada por uma que recusa tudo (o pior caso:
 // nenhum comando do Windows responde), clica em cada aba, em cada área do "+" e em cada aba interna do Sistema, e
 // falha se aparecer exceção não tratada ou se uma área abrir vazia. Erro que a tela mostra ao cliente não conta: é o
-// esperado aqui. Mesma ideia do `clicar-todas-as-areas.mjs`, que continua valendo para a interface clássica.
+// esperado aqui.
 //
 // Uso: `npm run nova:build` e depois `node scripts/fumaca-nova.mjs` (ou `npm run fumaca:nova`, que faz os dois).
 // Precisa do Google Chrome ou do Microsoft Edge instalado.
@@ -140,10 +140,10 @@ const r = await cdp("Runtime.evaluate", {
       visitadas.push(nome);
     }
 
-    // As áreas do "+" (menos a ponte para a interface clássica).
+    // As áreas do "+".
     document.querySelector('.aba-mais').click();
     await pausa(300);
-    const outras = [...document.querySelectorAll('.mais button:not(.avancadas)')].map((b) => b.textContent.trim());
+    const outras = [...document.querySelectorAll('.mais button')].map((b) => b.textContent.trim());
     if (outras.length < 8) falhas.push('o "+" mostrou só ' + outras.length + ' áreas');
     document.querySelector('.aba-mais').click();
     await pausa(200);

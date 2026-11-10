@@ -102,7 +102,8 @@
   }
 
   function nome(d: DriverMedido) {
-    return d.arquivo && d.nome_amigavel !== `Driver ${d.arquivo}` ? `${d.nome_amigavel} · ${d.arquivo}` : d.nome_amigavel;
+    // Categoria "Outro" é driver sem nome conhecido: o nome já é o arquivo ("Driver x.sys"), não repete.
+    return d.arquivo && d.categoria !== "Outro" ? `${d.nome_amigavel} · ${d.arquivo}` : d.nome_amigavel;
   }
 </script>
 

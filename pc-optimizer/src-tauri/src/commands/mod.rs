@@ -793,7 +793,7 @@ mod tests {
         saida
     }
 
-    /// Compartilhada pela guarda real (`main.ts` do disco) e pelo teste com fontes sintéticas.
+    /// Compartilhada pela guarda real (os arquivos de `ui/src`) e pelo teste com fontes sintéticas.
     fn achados_de_prosa_comparada(fonte: &str) -> Vec<String> {
         let sem_comentarios = remover_comentarios(fonte);
         let mut achados = Vec::new();
@@ -818,15 +818,44 @@ mod tests {
     fn a_tela_nao_decide_cor_comparando_texto_do_backend() {
         // O defeito voltou três vezes (`Corrigiu` escondendo, `CorrigiuEmParte` verde por prefixo, desfecho por
         // igualdade): procura a FORMA, literal com cara de prosa comparado por operador de decisão.
-        // `CARGO_MANIFEST_DIR` aponta sempre para `src-tauri`; o `main.ts` está em `../src/`.
-        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        // Toda a interface (`../ui/src`, `.ts` e `.svelte`), lida da pasta: um componente novo não escapa. `tipos.ts`
+        // fica de fora: é gerado do Rust e não decide nada.
+        let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
-            .join("src")
-            .join("main.ts");
-        let fonte = std::fs::read_to_string(&caminho)
-            .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
+            .join("ui")
+            .join("src");
+        let mut pendentes = vec![raiz.clone()];
+        let mut arquivos = Vec::new();
+        while let Some(pasta) = pendentes.pop() {
+            for entrada in std::fs::read_dir(&pasta)
+                .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", pasta, e))
+                .flatten()
+            {
+                let caminho = entrada.path();
+                if caminho.is_dir() {
+                    pendentes.push(caminho);
+                } else if matches!(caminho.extension().and_then(|e| e.to_str()), Some("ts" | "svelte"))
+                    && caminho.file_name().and_then(|n| n.to_str()) != Some("tipos.ts")
+                {
+                    arquivos.push(caminho);
+                }
+            }
+        }
+        arquivos.sort();
+        assert!(
+            arquivos.len() > 20,
+            "só {} arquivos em {:?}; a guarda estaria olhando a pasta errada",
+            arquivos.len(),
+            raiz
+        );
 
-        let achados = achados_de_prosa_comparada(&fonte);
+        let mut achados = Vec::new();
+        for caminho in &arquivos {
+            let fonte = std::fs::read_to_string(caminho)
+                .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
+            let nome = caminho.strip_prefix(&raiz).unwrap_or(caminho).display().to_string();
+            achados.extend(achados_de_prosa_comparada(&fonte).into_iter().map(|a| format!("{}: {}", nome, a)));
+        }
 
         assert!(
             achados.is_empty(),
@@ -894,95 +923,6 @@ mod tests {
         assert_eq!(limpo.lines().count(), fonte.lines().count());
     }
 
-    /// Extrai PEÇAS do `main.ts`, transpila com o TypeScript do projeto e RODA no Node: a guarda por leitura já foi
-    /// burlada com variável intermediária. Cada peça vai até o primeiro `}` na coluna 0; a marca inclui `async` quando
-    /// existe. Dublês de `element`, `setStatus`, `text` e `invoke`.
-    fn roda_a_tela(pecas: &[&str], retorno: &str, chamadas: &str) -> serde_json::Value {
-        let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-        let main_ts = raiz.join("src").join("main.ts");
-        let typescript = raiz.join("node_modules").join("typescript");
-        assert!(
-            typescript.is_dir(),
-            "esta prova roda a tela de verdade e precisa do TypeScript do projeto: \
-             rode `npm ci` em pc-optimizer ({:?} não existe)",
-            typescript
-        );
-
-        // O `(` evita achar `renderFolderMap` antes de `renderFolder`.
-        let modelo = r#"
-const fs = require("fs");
-const ts = require(process.argv[3]);
-
-const fonte = fs.readFileSync(process.argv[2], "utf8");
-
-function extrai(marca) {
-  const depois = fonte.split(marca)[1];
-  if (depois === undefined) throw new Error(marca + " nao existe no main.ts");
-  const corpo = [];
-  for (const linha of depois.split(/\r?\n/)) {
-    corpo.push(linha);
-    if (linha.startsWith("}")) return marca + corpo.join("\n") + "\n";
-  }
-  throw new Error(marca + " nao fecha em coluna 0");
-}
-
-const trecho = __PECAS__.map(extrai).join("\n");
-const js = ts.transpileModule(trecho, { compilerOptions: { target: "ES2020" } }).outputText;
-
-const escapeHtml = (v) =>
-  String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-// Dublês do DOM e do backend. `registro` é tudo que a tela tentou fazer.
-const registro = { status: [], html: null, texto: {}, botao: { disabled: false } };
-let resposta = null;
-let erro = null;
-const element = (id) => {
-  if (id === "analyze-rbar") return registro.botao;
-  return { set innerHTML(v) { registro.html = v; } };
-};
-const setStatus = (id, mensagem, tom) => registro.status.push({ id, mensagem, tom });
-const text = (id, valor) => { registro.texto[id] = valor; };
-const invoke = async () => { if (erro !== null) throw erro; return resposta; };
-
-const render = new Function(
-  "escapeHtml", "element", "setStatus", "text", "invoke",
-  js + "\nreturn (__RETORNO__);"
-)(escapeHtml, element, setStatus, text, invoke);
-
-//__CHAMADAS__
-"#;
-
-        let lista = serde_json::to_string(pecas).expect("as peças viram um array JS");
-        let laboratorio = modelo
-            .replace("__PECAS__", &lista)
-            .replace("__RETORNO__", retorno)
-            .replace("//__CHAMADAS__", chamadas);
-
-        let apelido: String = retorno
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .collect();
-        let script = std::env::temp_dir().join(format!("otimiza_tela_{}.cjs", apelido));
-        std::fs::write(&script, laboratorio).expect("escreve o laboratório no temporário");
-
-        let saida = std::process::Command::new("node")
-            .arg(&script)
-            .arg(&main_ts)
-            .arg(&typescript)
-            .output()
-            .expect("esta prova roda a tela de verdade e precisa do Node no PATH");
-        let _ = std::fs::remove_file(&script);
-
-        assert!(
-            saida.status.success(),
-            "não deu para rodar `{}`: {}",
-            retorno,
-            String::from_utf8_lossy(&saida.stderr)
-        );
-
-        serde_json::from_slice(&saida.stdout).expect("o laboratório imprime JSON")
-    }
-
     #[test]
     fn o_comando_do_rbar_esta_registrado() {
         // Comando fora do `generate_handler!` só falha na máquina do cliente.
@@ -995,169 +935,6 @@ const render = new Function(
         assert!(
             lib.contains("analyze_rbar"),
             "analyze_rbar fora do generate_handler!"
-        );
-    }
-
-    /// `NaoSei` não sai com o selo verde.
-    #[test]
-    fn a_tela_do_rbar_separa_os_quatro_estados() {
-        let telas = roda_a_tela(
-            &["const NA_TELA_DO_RBAR", "function renderRbar("],
-            "renderRbar",
-            r#"
-const base = { modelo: "NVIDIA GeForce RTX 3060", nota: "nota do backend" };
-
-console.log(
-  JSON.stringify({
-    ligado: render(Object.assign({}, base, { estado: "Ligado" })),
-    desligadoESuportado: render(Object.assign({}, base, { estado: "DesligadoESuportado" })),
-    desligadoSemSuporte: render(Object.assign({}, base, { estado: "DesligadoSemSuporte" })),
-    naoSei: render(Object.assign({}, base, { estado: "NaoSei" })),
-  })
-);
-"#,
-        );
-
-        let ligado = telas["ligado"].as_str().expect("html do ligado");
-        let suportado = telas["desligadoESuportado"]
-            .as_str()
-            .expect("html do suportado");
-        let sem_suporte = telas["desligadoSemSuporte"]
-            .as_str()
-            .expect("html do sem suporte");
-        let nao_sei = telas["naoSei"].as_str().expect("html do não sei");
-
-        let todos = [ligado, suportado, sem_suporte, nao_sei];
-        for (i, a) in todos.iter().enumerate() {
-            for b in todos.iter().skip(i + 1) {
-                assert_ne!(a, b, "dois estados do rBAR saem idênticos na tela");
-            }
-        }
-
-        assert!(
-            ligado.contains(r#"data-severity="Ok""#),
-            "rBAR ligado é assunto resolvido:\n{}",
-            ligado
-        );
-        assert!(
-            !suportado.contains(r#"data-severity="Ok""#),
-            "rBAR desligado numa placa que aceita saiu como assunto resolvido:\n{}",
-            suportado
-        );
-
-        assert!(
-            !nao_sei.contains(r#"data-severity="Ok""#),
-            "a placa que não deu para verificar saiu com o selo verde:\n{}",
-            nao_sei
-        );
-        assert!(
-            nao_sei.contains("não consegui verificar"),
-            "a tela não diz que não conseguiu verificar:\n{}",
-            nao_sei
-        );
-
-        assert!(
-            sem_suporte.contains("não tem"),
-            "a placa sem o recurso precisa dizer isso:\n{}",
-            sem_suporte
-        );
-    }
-
-    /// `analyzeRbar` decidia o tom por uma SEGUNDA tabela: `NaoSei` como "ok" pintaria de verde o "ainda não cobrimos
-    /// placas AMD" com a suíte passando. Roda o `analyzeRbar` real e olha o `setStatus`.
-    #[test]
-    fn a_faixa_de_status_do_rbar_nao_pinta_de_verde_o_que_ninguem_mediu() {
-        let faixas = roda_a_tela(
-            &[
-                "const NA_TELA_DO_RBAR",
-                "function tomDoRbar(",
-                "function renderRbar(",
-                "async function analyzeRbar(",
-            ],
-            "analyzeRbar",
-            r#"
-const base = { modelo: "AMD Radeon RX 6600", nota: "nota do backend" };
-
-async function tom(estado) {
-  registro.status.length = 0;
-  resposta = Object.assign({}, base, { estado: estado });
-  await render();
-  // A faixa recebe duas mensagens: "Lendo a placa de vídeo…" no começo e o
-  // veredito no fim. O que o cliente fica olhando é a última.
-  const ultima = registro.status[registro.status.length - 1];
-  return { tom: ultima.tom, mensagem: ultima.mensagem, card: registro.html };
-}
-
-(async () => {
-  console.log(
-    JSON.stringify({
-      ligado: await tom("Ligado"),
-      desligadoESuportado: await tom("DesligadoESuportado"),
-      desligadoSemSuporte: await tom("DesligadoSemSuporte"),
-      naoSei: await tom("NaoSei"),
-    })
-  );
-})();
-"#,
-        );
-
-        let tom_de = |chave: &str| -> String {
-            faixas[chave]["tom"]
-                .as_str()
-                .unwrap_or_else(|| panic!("a faixa de `{}` não recebeu tom", chave))
-                .to_string()
-        };
-
-        assert_ne!(
-            tom_de("naoSei"),
-            "ok",
-            "a faixa de status pintou de verde uma placa que ninguém conseguiu \
-             verificar — o cliente lê \"não consegui verificar\" em cor de \
-             assunto resolvido"
-        );
-
-        assert_ne!(
-            tom_de("desligadoESuportado"),
-            "ok",
-            "a faixa deu por resolvido um rBAR desligado numa placa que aceita"
-        );
-
-        // Senão o teste passaria com a faixa sempre amarela.
-        assert_eq!(
-            tom_de("ligado"),
-            "ok",
-            "rBAR ligado é assunto resolvido e a faixa precisa dizer isso"
-        );
-        assert_eq!(
-            tom_de("desligadoSemSuporte"),
-            "ok",
-            "esta placa não tem o recurso: não há nada pendente para o cliente"
-        );
-
-        // Faixa e card da MESMA tabela, conferidos par a par.
-        for chave in [
-            "ligado",
-            "desligadoESuportado",
-            "desligadoSemSuporte",
-            "naoSei",
-        ] {
-            let card_verde = faixas[chave]["card"]
-                .as_str()
-                .unwrap_or_else(|| panic!("`{}` não renderizou card", chave))
-                .contains(r#"data-severity="Ok""#);
-            assert_eq!(
-                card_verde,
-                tom_de(chave) == "ok",
-                "em `{}` o card e a faixa de status discordam de cor — quem olha \
-                 só a cor está olhando a faixa",
-                chave
-            );
-        }
-
-        assert_eq!(
-            faixas["naoSei"]["mensagem"].as_str(),
-            Some("nota do backend"),
-            "a faixa parou de mostrar a nota que o backend escreveu"
         );
     }
 }

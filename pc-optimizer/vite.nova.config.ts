@@ -2,8 +2,8 @@ import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { fileURLToPath } from "node:url";
 
-// A interface da Nova Geração (Otimiza 1.0). Mora em `ui/` e convive com a atual (`index.html` + `src/`) até a
-// migração terminar (Onda 2 do `docs/planos/PLANO-1.0-NOVA-ERA.md`). Mesma porta: o Tauri só conhece uma.
+// A interface do Otimiza 1.0. Mora em `ui/`; a antiga (`src/main.ts` e `src/v33/`) foi apagada na Onda 2 do
+// `docs/planos/PLANO-1.0-NOVA-ERA.md`.
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;

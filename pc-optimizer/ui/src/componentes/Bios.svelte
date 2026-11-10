@@ -26,6 +26,7 @@
 
   const CHAVE_DA_FOTO = "otimiza.bios.foto";
   const NAO_LIDO = "não deu para ler";
+  const NAO_REGISTRADO = "não registrado";
 
   let ficha = $state<Ficha | null>(null);
   let firmware = $state<Firmware | null>(null);
@@ -101,7 +102,7 @@
         ? `${memoria.pentes_gb.reduce((a, b) => a + b, 0)} GB · ${memoria.mhz ? `${memoria.mhz} MHz` : "velocidade não lida"} · ${memoria.canais === 1 ? "canal único" : `${memoria.canais} canais`}`
         : NAO_LIDO,
     ]);
-    r.push(["Tempo da placa no boot", c?.tempo_da_bios_s != null ? `${c.tempo_da_bios_s.toFixed(1).replace(".", ",")} s` : "não registrado"]);
+    r.push(["Tempo da placa no boot", c?.tempo_da_bios_s != null ? `${c.tempo_da_bios_s.toFixed(1).replace(".", ",")} s` : NAO_REGISTRADO]);
     return r;
   });
   const valores = $derived(Object.fromEntries(linhas));
@@ -122,7 +123,7 @@
   /** O que mudou desde a foto, só entre itens lidos dos dois lados ("não deu para ler" igual não é "nada mudou"). */
   const comparacao = $derived.by(() => {
     if (!foto) return null;
-    const ok = (v: string | undefined) => v !== undefined && v !== NAO_LIDO && v !== "não registrado";
+    const ok = (v: string | undefined) => v !== undefined && v !== NAO_LIDO && v !== NAO_REGISTRADO;
     const comparaveis = Object.entries(valores).filter(([k, v]) => ok(foto!.valores[k]) && ok(v));
     return {
       quando: new Date(foto.quando).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),

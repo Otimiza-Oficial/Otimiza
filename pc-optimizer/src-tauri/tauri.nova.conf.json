@@ -1,8 +1,0 @@
-{
-  "build": {
-    "beforeDevCommand": "npm run nova:web",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run nova:build",
-    "frontendDist": "../dist-nova"
-  }
-}

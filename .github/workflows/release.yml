@@ -157,14 +157,14 @@ jobs:
         working-directory: pc-optimizer
         run: npm ci
 
-      - name: Conferir tipos do frontend
-        working-directory: pc-optimizer
-        run: npx tsc --noEmit
-
-      # A interface nova (`ui/`) confere contra `ui/src/lib/tipos.ts`, gerado do Rust: campo trocado no Rust quebra aqui.
+      # A interface (`ui/`) confere contra `ui/src/lib/tipos.ts`, gerado do Rust: campo trocado no Rust quebra aqui.
       - name: Conferir tipos da interface nova
         working-directory: pc-optimizer
         run: npx svelte-check --workspace ui --tsconfig ./tsconfig.json --fail-on-warnings
+
+      - name: Testes da interface
+        working-directory: pc-optimizer
+        run: npm run testes:ui
 
       # Os testes rodam antes de empacotar: versão que não passa não vira
       # instalador. E rodam SEPARADOS POR ÁREA de propósito — o log detalhado só

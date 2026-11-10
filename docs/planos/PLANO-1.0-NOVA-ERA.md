@@ -688,6 +688,9 @@ Cada onda termina com algo **funcionando e medido** no canal beta.
 - Turbo, Jogos, Energia, Sistema, Prova, Ajustes, sobreposição na UI nova.
 - `main.ts` e `v33/` apagados.
 - **Pronto quando:** tudo da 3.6 existe na UI nova e o `fumaca` clica em todas as áreas.
+- **Estado (10/11/2026):** `main.ts`, `v33/` e o link "Ferramentas avançadas" apagados; o instalador sai só com a UI
+  nova. `npm run fumaca:nova` passa nas 20 telas. Falta o teste com jogo aberto num PC de verdade. Ficaram de fora,
+  por decisão: zerar o modo jogo, plano de renderização, catálogo de jogos e as medições automáticas antigas.
 
 ### Onda 3 — Desempenho novo (em paralelo no Rust)
 - **Rede:** diagnóstico → controle de banda → Wi-Fi sem varredura → DSCP/DNS.

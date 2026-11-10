@@ -3,7 +3,7 @@
 
 use super::*;
 
-/// O convite embutido vem da tela (é o único em `main.ts`): duplicá-lo aqui faria dois valores discordarem.
+/// O convite embutido vem da tela (é o único em `PedidoDeFeedback.svelte`): duplicá-lo aqui faria dois valores discordarem.
 /// `LIVRES`: quem não ativou é quem mais precisa do suporte.
 #[tauri::command]
 pub async fn convite_do_discord(embutido: String) -> Result<String, String> {
