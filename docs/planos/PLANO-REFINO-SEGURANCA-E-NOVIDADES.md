@@ -1,7 +1,8 @@
 # Plano — Refino, segurança e novidades
 
-> Quatro frentes: deixar a interface no nível de produto grande, fechar as portas por onde o Otimiza vaza, trazer as
-> APIs e tecnologias que ainda não usamos, e deixar mais fortes os sistemas que já existem. Escrito em 10/11/2026, depois da Onda 2, do "Jogar", do cartão da partida e
+> Cinco frentes: deixar a interface no nível de produto grande, fechar as portas por onde o Otimiza vaza, trazer as
+> APIs e tecnologias que ainda não usamos, deixar mais fortes os sistemas que já existem e garantir que nenhuma
+> otimização trave o PC. Escrito em 10/11/2026, depois da Onda 2, do "Jogar", do cartão da partida e
 > da apresentação nova. Complementa o `PLANO-1.0-NOVA-ERA.md` e o `PLANO-PARTIDA-DE-RESPEITO.md`.
 
 ---
@@ -33,7 +34,7 @@ que a original, e não deixar a porta aberta de graça, como está hoje.
 1. **Repositório privado.** Passar `Otimiza-Oficial/Otimiza` para privado, ou dividir:
    - público: site, documentação, o que é vitrine;
    - privado: `pc-optimizer/` inteiro (Rust, interface, bot).
-   O que já foi clonado não volta, mas cada versão nova deixa de sair de graça. **Decisão do dono** (seção 7).
+   O que já foi clonado não volta, mas cada versão nova deixa de sair de graça. **Decisão do dono** (seção 8).
 2. **Limpar o histórico de segredo.** O próprio código registra duas chaves privadas que vazaram (`.env.example` e uma
    captura de tela). Já foram trocadas, mas o histórico público ainda tem as antigas. Ao fechar o repositório, revisar
    com `gitleaks` e reescrever o histórico se ainda houver segredo.
@@ -240,9 +241,55 @@ Fora, como hoje: "ping booster" que promete encurtar a distância até o servido
 | **Mira e Cores** | Prévia nova, perfil por jogo nas cores | Mira por jogo, e cores ligando sozinhas no "Jogar" |
 | **Oti** | Fala pelo que mediu, IA opcional | Lembrar a última partida de cada jogo e comparar quando a pessoa perguntar |
 
+## 5. Estabilidade: o Otimiza nunca trava o PC
+
+Regra de produto, no mesmo nível de "nunca menos FPS": **otimização que trava, congela, dá tranco ou derruba o PC é
+otimização ruim, e o Otimiza não faz.** Quem paga para o jogo ficar liso não pode ganhar uma travada de presente.
+
+### 5.1 O que já protege hoje
+
+- **Portão "nunca menos FPS"** (`modules/portao.rs`): com 3 partidas de cada lado, desfaz sozinho o ajuste que tirou FPS
+  médio ou 1% pior.
+- **Nada congela** (`modules/windows/suspend.rs`): o modo jogo congelava programas até a 1.9 e foi o que mais machucou
+  cliente; uma trava no build reprova se voltar.
+- **Governador sem congelar** (`governador.rs`): programa de fundo perde prioridade, nunca é fechado nem parado.
+- **O que não fazemos** (`naofazemos.rs`): placebo e ajuste prejudicial recusados, com o motivo.
+- **Leitura de quedas**: driver de vídeo que parou (evento 4101) e erros de hardware (`eventoshw.rs`), crashes do
+  FiveM cruzados com o que o Otimiza mudou (`crashes.rs`).
+- **Modo seguro do próprio Otimiza** depois de quedas seguidas dele (`utils/diagnostico.rs`).
+
+### 5.2 O que falta
+
+| # | Proteção | Por quê |
+|---|---|---|
+| E1 | **O portão também olha tranco**: trancos por minuto, 0,1% pior e picos de tempo de quadro entram no critério, e piora forte desfaz já na primeira partida | Hoje um ajuste que mantém o FPS médio e enche de tranco passaria |
+| E2 | **Vigia de travamento do sistema** depois de cada ajuste: desligamento inesperado (Kernel-Power 41), tela azul (BugCheck 1001), driver de vídeo reiniciado (4101), programa sem responder (1002) e WHEA, cruzados com a hora da mudança | O cliente não liga "o PC travou ontem" ao ajuste de anteontem; o Otimiza liga, desfaz e avisa |
+| E3 | **Ajuste que pede reiniciar é provado no boot**: aplicado, o Otimiza grava "a conferir"; se o Windows voltar com desligamento inesperado ou tela azul, desfaz sozinho na abertura seguinte | Hoje um ajuste de boot ruim depende da pessoa achar o Desfazer |
+| E4 | **Cada ajuste com risco declarado** no catálogo: o que pode dar errado, em que máquina (notebook, placa antiga, Windows modificado) e qual leitura prova que deu certo | Notebook com estacionamento de núcleo desligado esquenta; placa de rede com economia desligada pode cair; isso precisa estar escrito e testado |
+| E5 | **Aquecimento conferido** quando o ajuste aumenta consumo (energia, boost, núcleos sempre acordados): a guarda térmica olha os 30 minutos seguintes | Ganhar 3% e perder 20% quando esquenta é travada disfarçada |
+| E6 | **Windows modificado** ("lite", "anti-lag") detectado já hoje: ali, ajustes que dependem de serviço removido não entram | Muitos travamentos vêm do sistema já mexido por outro programa |
+| E7 | **Recusar o que sabidamente trava**: resolução do temporizador forçada, HPET e `useplatformclock` pelo `bcdedit`, modo MSI forçado em todo aparelho, estados de ociosidade do processador desligados, prioridade tempo real, serviços essenciais desligados | Estão entre as dicas mais copiadas e entre as que mais causam tranco e tela azul; entram na lista do que não fazemos com o motivo |
+| E8 | **Ajuste novo entra em etapas**: uma versão como experimental, com o número de desfeitos pelo portão (opt-in); se muitos desfazem, um interruptor no servidor desliga o ajuste para todos | Um ajuste ruim não chega em todo cliente de uma vez |
+
+### 5.3 O próprio Otimiza não pode pesar
+
+| # | Regra | Como conferir |
+|---|---|---|
+| E9 | Com o jogo aberto, o Otimiza usa **menos de 0,5% de um núcleo** e não segura a placa de vídeo | Teste na esteira com o Modo Partida inteiro ligado (meta do plano mestre) |
+| E10 | **Nenhuma rotina de interrupção (DPC) do Otimiza** acima de 100 µs durante o jogo | O Caçador de DPC do próprio Otimiza rodando contra ele mesmo |
+| E11 | Medição pesada (PresentMon, mapa de 40 s, sensores) **só quando pedida ou na janela agendada**, nunca sem parar | Contagem de sessões ETW abertas com o jogo aberto |
+| E12 | A interface **congela com o jogo aberto** (já existe) e o fechamento **nunca trava** | O log de cada passo do fechamento, que entrou hoje, e um teste que fecha com calibração e prova rodando |
+
+### 5.4 Pronto quando
+
+- Um ajuste que piora os trancos (teste com um teto de FPS errado de propósito) é desfeito sozinho na primeira partida.
+- Um ajuste de boot com desligamento forçado depois é desfeito na abertura seguinte, com o aviso.
+- O Otimiza passa os 30 minutos de jogo abaixo de 0,5% de um núcleo e sem DPC dele acima de 100 µs.
+- A lista do que não fazemos tem os itens de E7, cada um com o motivo.
+
 ---
 
-## 5. Ajustes e consertos pequenos que ficaram
+## 6. Ajustes e consertos pequenos que ficaram
 
 1. Investigar as sessões que terminam sem fechamento normal (log de cada passo entrou hoje).
 2. O "Jogar" para a Epic sem executável e para o Roblox sem jogo escolhido.
@@ -253,23 +300,24 @@ Fora, como hoje: "ping booster" que promete encurtar a distância até o servido
 
 ---
 
-## 6. Ordem sugerida
+## 7. Ordem sugerida
 
 | Fase | O que entra | Por quê primeiro |
 |---|---|---|
-| **1** | Repositório privado, build só pela esteira, CSP, `gitleaks` (1.1, 1.4, 1.6) | Fecha o vazamento de graça; nenhuma linha de produto muda |
-| **2** | Assinatura e atualizador assinado (1.3) | Some o aviso azul e prepara o atestado com hash |
-| **3** | Atestado etapas A e B, e as receitas assinadas pelo servidor (1.2, 3.4) | O pirata passa a ficar para trás |
-| **4** | Dívida de tipos, dados reais, tokens únicos e componentes (2.1) | Base para o refino não quebrar |
-| **5** | 4 abas, estados vazios, esqueleto, movimento, gráficos reais (2.2, 2.3) | O salto visual |
-| **6** | APIs: notificações, ADLX/IGCL, PresentMon 2, Game Bar (3.1–3.3) | Mais ajuste e medição para AMD e Intel |
-| **7** | Frame Boost: fluxo óptico da FidelityFX, HUD protegido, FPS alvo e segunda placa (4.1) | O maior salto de "apelão" que dá para fazer por fora do jogo |
-| **8** | Rede: teste de fila sob carga, placa de rede com prova, quem usa a banda (4.2) | A causa de ping ruim que mais existe e menos se mede |
-| **9** | Atestado etapas C e D (1.2) | Só depois de a etapa A mostrar que os clientes renovam |
+| **1** | Estabilidade: o portão olha tranco, vigia de travamento do sistema, ajuste de boot provado, lista do que trava (5.2) | Nenhuma otimização pode travar o PC; isso vem antes de qualquer ajuste novo |
+| **2** | Repositório privado, build só pela esteira, CSP, `gitleaks` (1.1, 1.4, 1.6) | Fecha o vazamento de graça; nenhuma linha de produto muda |
+| **3** | Assinatura e atualizador assinado (1.3) | Some o aviso azul e prepara o atestado com hash |
+| **4** | Atestado etapas A e B, e as receitas assinadas pelo servidor (1.2, 3.4) | O pirata passa a ficar para trás |
+| **5** | Dívida de tipos, dados reais, tokens únicos e componentes (2.1) | Base para o refino não quebrar |
+| **6** | 4 abas, estados vazios, esqueleto, movimento, gráficos reais (2.2, 2.3) | O salto visual |
+| **7** | APIs: notificações, ADLX/IGCL, PresentMon 2, Game Bar (3.1–3.3) | Mais ajuste e medição para AMD e Intel |
+| **8** | Frame Boost: fluxo óptico da FidelityFX, HUD protegido, FPS alvo e segunda placa (4.1) | O maior salto de "apelão" que dá para fazer por fora do jogo |
+| **9** | Rede: teste de fila sob carga, placa de rede com prova, quem usa a banda (4.2) | A causa de ping ruim que mais existe e menos se mede |
+| **10** | Atestado etapas C e D (1.2) | Só depois de a etapa A mostrar que os clientes renovam |
 
 ---
 
-## 7. Decisões que são do dono
+## 8. Decisões que são do dono
 
 1. **Repositório privado** (tudo) ou **dividido** (site público, programa privado)?
 2. **Assinatura**: contratar o Azure Trusted Signing (mensal) ou um certificado tradicional?
