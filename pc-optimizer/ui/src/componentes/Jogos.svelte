@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A área Jogos: os jogos instalados (Steam, Epic e instaladores) com a capa da Steam deste PC, e, para os que o
   // Otimiza já mediu, a última partida e o ganho. O ganho só aparece como número quando é MEDIDO (os intervalos de
   // antes e depois não se encostam); senão a tela diz que não houve diferença ou quantas partidas faltam.
@@ -107,7 +108,7 @@
       <div><strong>Não consegui ler seus jogos.</strong><span class="apoio">{erro}</span></div>
     </div>
   {:else if itens === null}
-    <p class="vazio">Lendo seus jogos…</p>
+    <Esqueleto linhas={4} rotulo="Lendo seus jogos" />
   {:else if itens.length === 0}
     <p class="vazio">Não achei jogos instalados pela Steam, pela Epic ou por instalador.</p>
   {:else}

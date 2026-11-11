@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // Sistema avançado (trazido da interface antiga, `src/main.ts`): os serviços essenciais que "Windows lite" e outros
   // otimizadores desligam (e o religar), os serviços de outros programas, as tarefas agendadas que não são da
   // Microsoft e os programas que vieram de fábrica. Cada mudança entra no histórico. Nada é marcado sem motivo escrito,
@@ -88,7 +89,7 @@
 <section class="secao">
   <h2>Serviços essenciais do Windows</h2>
   {#if !checagem}
-    <p class="apoio">Lendo…</p>
+    <Esqueleto linhas={2} />
   {:else}
     <p class="apoio">
       {checagem.desativados
@@ -110,7 +111,7 @@
   <h2>Serviços de outros programas</h2>
   <p class="apoio">O que outros programas deixam rodando sempre. Passar para manual: ele só abre quando o programa precisar. Proteção, áudio e vídeo não são mexíveis.</p>
   {#if servicos === null}
-    <p class="apoio">Lendo…</p>
+    <Esqueleto linhas={2} />
   {:else if servicos.length === 0}
     <p class="apoio">Nenhum serviço de outro programa.</p>
   {:else}
@@ -139,7 +140,7 @@
   </div>
   <p class="apoio">Atualizadores e "ajudantes" que abrem sozinhos no meio do jogo. Desligar não apaga: dá para religar aqui.</p>
   {#if tarefas === null}
-    <p class="apoio">Lendo…</p>
+    <Esqueleto linhas={2} />
   {:else if visiveis.length === 0}
     <p class="apoio">Nenhuma tarefa de outro programa.</p>
   {:else}

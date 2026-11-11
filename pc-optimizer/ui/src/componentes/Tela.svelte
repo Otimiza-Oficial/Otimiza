@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A área Tela: o Hz que cada monitor aguenta e o que está usando. A troca é em dois tempos, como o Windows faz:
   // aplica sem gravar, pergunta "Manter?" e, sem resposta no prazo, o Rust volta sozinho. A tela só conta o prazo;
   // quem decide a volta é o Rust, então o fim da contagem só relê o diagnóstico.
@@ -136,7 +137,7 @@
       </div>
     </div>
   {:else if telas === null}
-    <p class="vazio">Lendo os monitores…</p>
+    <Esqueleto rotulo="Lendo os monitores" />
   {:else if telas.length === 0}
     <p class="vazio">Nenhum monitor ativo foi encontrado.</p>
   {:else}

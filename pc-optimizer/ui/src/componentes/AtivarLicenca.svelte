@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // Ativar a licença, em três passos que dizem o caminho inteiro: o código desta máquina vai para o bot, o bot devolve a
   // chave, a chave é colada aqui (`bot/README.md`). O campo entende a chave como ela chega do Discord e avisa quando
   // colaram o código da máquina no lugar dela. Serve à apresentação (`BoasVindas`) e aos Ajustes.
@@ -121,7 +122,7 @@
     </li>
   </ol></div>
 {:else}
-  <p class="apoio">Lendo a licença…</p>
+  <Esqueleto linhas={2} rotulo="Lendo a licença" />
 {/if}
 
 <style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // Testar um grupo de cada vez (trazido da interface 3.6, `carregarProtocolo`): vinte ajustes juntos dão um número e
   // nenhuma informação; seis grupos em sequência dão seis respostas, que valem para sempre nesta máquina. Só mostra
   // o estado de cada grupo (`protocolo_de_grupos`); aplicar continua no Otimizar e desfazer no Histórico. "Não mudou
@@ -99,7 +100,7 @@
   {#if recusa}
     <p class="apoio">{recusa}</p>
   {:else if grupos === null}
-    <p class="apoio">Lendo…</p>
+    <Esqueleto linhas={2} />
   {:else}
     <ul class="grupos">
       {#each grupos as g (g.grupo)}

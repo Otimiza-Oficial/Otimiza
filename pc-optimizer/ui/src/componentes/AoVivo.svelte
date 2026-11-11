@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // Sistema › Agora (trazido da interface 3.6, `src/main.ts`: `renderProcesses`, `analyzeBottleneck` e `carregarPlaca`):
   // quem está pesando agora, o que segura a máquina medido por 10 s, e a placa com o driver. A lista se atualiza a cada
   // 3 s só com a aba à vista, e para com jogo aberto (a interface congela: `jogo-aberto` no <html>). Tipos escritos à
@@ -159,7 +160,7 @@
   {#if erroDosProcessos && !processos}
     <p class="apoio">Não consegui ler os programas: {erroDosProcessos}</p>
   {:else if processos === null}
-    <p class="apoio">Lendo…</p>
+    <Esqueleto linhas={2} />
   {:else if processos.length === 0}
     <p class="apoio">Nada consumindo de forma relevante.</p>
   {:else}
@@ -216,7 +217,7 @@
 <section class="secao">
   <h2>Placa de vídeo</h2>
   {#if placa === undefined}
-    <p class="apoio">Lendo…</p>
+    <Esqueleto linhas={2} />
   {:else if placa === null}
     <p class="apoio">Não consegui ler a placa de vídeo.</p>
   {:else}

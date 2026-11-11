@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A área Histórico: tudo o que o Otimiza mudou neste PC, com o valor de antes como foi GRAVADO, e o desfazer um por
   // um ou tudo de uma vez. Lista vazia com histórico ilegível não é "nada mudou": a leitura aparece antes da lista.
   // Onde o Rust manda `null` (item fora do catálogo), a tela não afirma nem nega admin ou reinício.
@@ -177,7 +178,7 @@
   {/if}
 
   {#if historico === null && !erroDeLeitura}
-    <p class="vazio">Lendo o histórico…</p>
+    <Esqueleto linhas={4} rotulo="Lendo o histórico" />
   {:else if historico && mudancas.length === 0 && historico.leitura.estado === "Ok"}
     <p class="vazio">O Otimiza não tem nenhuma mudança ativa neste PC.</p>
   {:else if mudancas.length > 0}

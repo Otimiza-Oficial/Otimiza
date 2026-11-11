@@ -347,7 +347,7 @@ deixa isso:
 
 - 5.2 Nenhum serviço do Windows fica parado.
 - E1 O portão olha tranco; piora forte desfaz na primeira partida.
-- E2 Vigia de estabilidade: PC que cai depois de um ajuste tem o ajuste desfeito.
+- E2 e E3 Vigia de estabilidade: PC que cai depois de um ajuste (inclusive o de boot) tem o ajuste desfeito na abertura seguinte.
 - E5 Guarda térmica nos 30 minutos depois de um ajuste que esquenta.
 - E6 Ajuste na chave de um serviço que a imagem "lite" removeu não é gravado ("não se aplica"), e o Windows modificado já é identificado.
 - E7 (parte) O tick fixo do `bcdedit` aposentado.
@@ -358,8 +358,9 @@ deixa isso:
 - R1 Ping com a internet ocupada (bufferbloat), na área Rede.
 - 6.2 "Jogar": Epic pelo inicializador dela, Roblox pela página inicial.
 - 6.3 MSI em português (`wix.language = pt-BR`).
+- 2.2.4 Esqueleto de carregamento no lugar do "Lendo…" solto (17 lugares, parado com jogo aberto).
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - Partida de respeito, fase 3: "Deixar liso" no cartão da partida com tranco; aviso de memória apertada no "Jogar".
 
-**Falta**: E3, E4, E10–E12; 2.1–2.3 (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R8; atestado A–D; itens 6.1,
+**Falta**: E4, E10–E12; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R8; atestado A–D; itens 6.1,
 6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

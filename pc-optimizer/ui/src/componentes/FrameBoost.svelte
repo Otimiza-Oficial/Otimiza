@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // O Frame Boost na interface nova (trazido do painel da 3.3, `src/v33/app.ts`, `painelFrameBoost`). Com o jogo
   // aberto, o Rust escolhe o melhor gerador: o do jogo, o do driver (AFMF, Smooth Motion) ou o do Otimiza. Aqui só se
   // mostra: estimado antes de ligar (pelo último FPS nativo medido) e MEDIDO na tela depois; a prova de custo (quanto do
@@ -161,7 +162,7 @@
   </div>
 
   {#if !p}
-    <p class="apoio">{erro ?? "Lendo…"}</p>
+    {#if erro}<p class="apoio">{erro}</p>{:else}<Esqueleto />{/if}
   {:else}
     <p class="destaque">{#if rec}<span class="apoio">Gerador escolhido</span> {rec.nome}{:else}{p.jogo ? "Nenhum gerador funciona aqui" : "Abra um jogo"}{/if}</p>
     <p class="apoio">

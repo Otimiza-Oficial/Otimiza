@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A área Ajustes: o FPS por cima do jogo (sobreposição), o que o Otimiza faz sozinho, a licença, a versão e o
   // relatório de suporte. O tema (claro/escuro) mora na barra de cima, onde a referência põe.
   import { onMount } from "svelte";
@@ -339,7 +340,7 @@
   <section class="secao">
     <h2>Licença</h2>
     {#if !licenca}
-      <p class="apoio">Lendo…</p>
+      <Esqueleto linhas={2} />
     {:else if licenca.ativa}
       <ul class="lista">
         <li><span class="info">{licenca.origem}</span><span class="apoio">{licenca.expira ? `até ${licenca.expira}` : "sem vencimento"}</span></li>

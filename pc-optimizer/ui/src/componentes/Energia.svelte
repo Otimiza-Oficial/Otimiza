@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A área Energia: o plano OTIMIZA (ver antes o que muda, aplicar, conferir se continua no lugar, reparar e desfazer),
   // a energia de jogo (o processador sem dormir só com o jogo aberto), os limites escondidos que seguram o FPS e o
   // "por que não funcionou?". O plano do cliente nunca é tocado: o OTIMIZA é um plano à parte e desfazer reativa o
@@ -382,7 +383,7 @@
   <section class="secao">
     <h2>Limites escondidos</h2>
     {#if tetos === null}
-      <p class="apoio">Procurando…</p>
+      <Esqueleto linhas={2} rotulo="Procurando" />
     {:else if tetos.tetos.length === 0}
       <p class="apoio">Nenhum limite de FPS escondido no driver, no RivaTuner ou na configuração dos jogos que eu sei ler.</p>
     {:else}

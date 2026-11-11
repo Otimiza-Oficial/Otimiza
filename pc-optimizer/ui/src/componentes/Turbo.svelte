@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A área Turbo: mede o jogo aberto por 10 s, monta a receita pelo gargalo (escala, Frame Boost, energia), liga e
   // lembra. A prova A-B (uns 5 minutos) é o que diz se ganhou de verdade; o antes × depois de uma sessão NÃO é prova e
   // a tela diz isso. Receita reprovada na prova não volta a ligar neste jogo.
@@ -184,7 +185,7 @@
   {/if}
 
   {#if painel === null}
-    <p class="vazio">Lendo o Turbo…</p>
+    <Esqueleto rotulo="Lendo o Turbo" />
   {:else if !painel.jogo}
     <section class="secao sem-jogo">
       <h2>Abra o jogo e volte aqui</h2>
@@ -372,10 +373,6 @@
     display: grid;
     gap: 4px;
     padding-top: 8px;
-  }
-  .vazio {
-    padding: 24px 0;
-    color: var(--tinta-2);
   }
   .texto {
     max-width: 64ch;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A área Sistema: todos os ajustes do catálogo por grupo (cada um com o efeito honesto, aplicar e desfazer), o que
   // abre junto com o Windows, a limpeza de temporários e o ponto de restauração. Ajuste que pode custar FPS diz quando;
   // ajuste que não deu para verificar diz isso, em vez de fingir "já está bom".
@@ -171,7 +172,7 @@
     <AoVivo />
   {:else if aba === "ajustes"}
     {#if catalogo === null}
-      <p class="vazio">Lendo os ajustes deste PC…</p>
+      <Esqueleto linhas={4} rotulo="Lendo os ajustes deste PC" />
     {:else}
       <div class="filtros">
         <span class="apoio"><b class="numero">{aplicados}</b> {aplicados === 1 ? "aplicado" : "aplicados"} de {catalogo.length}</span>
@@ -217,7 +218,7 @@
     {/if}
   {:else if aba === "inicializacao"}
     {#if inicializacao === null}
-      <p class="vazio">Lendo o que abre com o Windows…</p>
+      <Esqueleto rotulo="Lendo o que abre com o Windows" />
     {:else if inicializacao.length === 0}
       <p class="vazio">Nada abre junto com o Windows além do próprio sistema.</p>
     {:else}
@@ -271,7 +272,7 @@
     <SistemaAvancado />
   {:else}
     {#if restauracao === null}
-      <p class="vazio">Lendo a proteção do sistema…</p>
+      <Esqueleto linhas={2} rotulo="Lendo a proteção do sistema" />
     {:else}
       <section class="secao">
         <div class="linha">

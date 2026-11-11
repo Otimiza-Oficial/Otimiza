@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // O processador no jogo (trazido da interface antiga, `src/main.ts`): núcleos de desempenho e de eficiência (classe
   // dada pelo Windows, não por tabela), prender o jogo aberto nos de desempenho, o teste que mede os dois jeitos
   // alternando e fica com o que rendeu, e o modo jogo. Processador uniforme: NÃO HÁ O QUE FAZER, escrito — um botão ali
@@ -79,7 +80,7 @@
   {#if erro}
     <p class="apoio">{erro}</p>
   {:else if !nucleos}
-    <p class="apoio">Lendo os núcleos…</p>
+    <Esqueleto rotulo="Lendo os núcleos" />
   {:else}
     <p class="apoio">{nucleos.conselho.explicacao}</p>
     {#if nucleos.conselho.cabe}

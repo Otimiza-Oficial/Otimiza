@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Esqueleto from "./Esqueleto.svelte";
   // A BIOS (trazida da interface antiga, `src/bios.ts`). O Otimiza NÃO grava na BIOS: em placa de consumo um erro ali
   // deixa a placa sem ligar. Mostra o que o Windows deixa ler (ficha), os defeitos conhecidos (microcódigo Intel,
   // boot lento), o que olhar na BIOS em ordem de risco, e um "antes e depois": a foto guardada neste PC antes de
@@ -187,7 +188,7 @@
 </script>
 
 {#if !lido}
-  <p class="apoio">Lendo o firmware…</p>
+  <Esqueleto rotulo="Lendo o firmware" />
 {:else}
   <section class="secao">
     <h2>Ficha do firmware <span class="selo">só leitura</span></h2>
