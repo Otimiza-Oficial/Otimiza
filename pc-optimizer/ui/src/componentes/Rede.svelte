@@ -248,6 +248,14 @@
                     : ""}
                 </dd>
               {/if}
+              {#if leitura.estado === "lida" && leitura.vizinhanca?.melhor_canal}
+                <dt>Canal melhor</dt>
+                <dd>
+                  {leitura.vizinhanca.melhor_canal.canal}: {leitura.vizinhanca.melhor_canal.disputando}
+                  {leitura.vizinhanca.melhor_canal.disputando === 1 ? "rede" : "redes"} lá, contra {leitura.vizinhanca.melhor_canal.no_seu}
+                  no seu. Muda no roteador.
+                </dd>
+              {/if}
             </dl>
           {:else if leitura.estado === "sem_permissao_de_localizacao"}
             <p class="destaque">Wi-Fi</p>

@@ -75,6 +75,43 @@ pub struct Vizinhanca {
     pub sobrepostas: u32,
     /// Tudo que a placa ouviu, em qualquer banda, fora o seu ponto de acesso.
     pub total_ouvidas: u32,
+    /// O canal com bem menos disputa na mesma banda (Plano de refino, R6). `None`: o seu já é dos melhores.
+    pub melhor_canal: Option<CanalMelhor>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct CanalMelhor {
+    pub canal: u32,
+    /// Redes de outros que disputariam o ar lá, e no seu canal de hoje (pela mesma conta).
+    pub disputando: u32,
+    pub no_seu: u32,
+}
+
+/// Em 2,4 GHz só os três que não se sobrepõem. Em 5 GHz só os sem DFS: no 52 a 144 o roteador precisa sair do canal
+/// quando ouve um radar, e a ligação cai por um minuto no meio da partida.
+const CANAIS_2_4: &[u32] = &[1, 6, 11];
+const CANAIS_5: &[u32] = &[36, 40, 44, 48, 149, 153, 157, 161];
+/// Só vale mudar o roteador de canal se o outro tiver pelo menos tantas redes a menos.
+const FOLGA_PARA_MUDAR: u32 = 2;
+
+/// **Pura.** O canal a recomendar. As redes com o seu nome (outros rádios e nós de malha seus) não contam: elas mudam
+/// junto. Empate fica com o canal mais baixo.
+pub fn canal_recomendado(meu_ssid: &str, meu: (Banda, u32), redes: &[Vizinho]) -> Option<CanalMelhor> {
+    let candidatos = match meu.0 {
+        Banda::G2_4 => CANAIS_2_4,
+        Banda::G5 => CANAIS_5,
+        Banda::G6 => return None,
+    };
+    let alheias: Vec<(Banda, u32)> = redes
+        .iter()
+        .filter(|r| meu_ssid.is_empty() || r.ssid != meu_ssid)
+        .filter_map(|r| banda_e_canal(r.khz))
+        .collect();
+    let disputa = |canal: u32| alheias.iter().filter(|d| disputam(**d, (meu.0, canal))).count() as u32;
+    let no_seu = disputa(meu.1);
+    let (canal, disputando) = candidatos.iter().map(|&c| (c, disputa(c))).min_by_key(|&(c, n)| (n, c))?;
+    (canal != meu.1 && disputando + FOLGA_PARA_MUDAR <= no_seu).then_some(CanalMelhor { canal, disputando, no_seu })
 }
 
 impl Vizinhanca {
@@ -382,12 +419,21 @@ fn achados_da_conexao(c: &ConexaoWifi, viz: Option<&Vizinhanca>) -> Vec<Achado> 
     }
 
     let lista = problemas.join(" e ");
-    let conselho = if em_2_4 {
-        "use 5 GHz ou cabo"
-    } else if fraco {
-        "aproxime o PC do roteador ou use cabo"
-    } else {
-        "troque o canal do roteador ou use cabo"
+    let canal = viz.and_then(|v| v.melhor_canal).filter(|_| lotado).map(|m| {
+        format!(
+            "mude o roteador para o canal {} ({} {} lá, contra {} no seu)",
+            m.canal,
+            m.disputando,
+            if m.disputando == 1 { "rede" } else { "redes" },
+            m.no_seu
+        )
+    });
+    let conselho = match (&canal, em_2_4, fraco) {
+        (Some(c), true, _) => format!("use 5 GHz, cabo, ou {}", c),
+        (Some(c), false, _) => format!("{}, ou use cabo", c),
+        (None, true, _) => "use 5 GHz ou cabo".to_string(),
+        (None, false, true) => "aproxime o PC do roteador ou use cabo".to_string(),
+        (None, false, false) => "troque o canal do roteador ou use cabo".to_string(),
     };
     let frase = if em_2_4 {
         format!("2,4 GHz com {}: {}.", lista, conselho)
@@ -739,7 +785,11 @@ mod nativo {
         let minha = lista.iter().find(|r| r.bssid == atual.bssid);
         let conexao = montar(&atual, minha);
         let vizinhanca = match (conexao.banda, conexao.canal) {
-            (Some(b), Some(ch)) => Some(contar_vizinhos(atual.bssid, (b, ch), &lista)),
+            (Some(b), Some(ch)) => {
+                let mut v = contar_vizinhos(atual.bssid, (b, ch), &lista);
+                v.melhor_canal = canal_recomendado(&conexao.ssid, (b, ch), &lista);
+                Some(v)
+            }
             _ => None,
         };
         LeituraWifi::Lida {
@@ -878,6 +928,31 @@ mod testes {
     }
 
     #[test]
+    fn o_canal_recomendado_tem_bem_menos_disputa_e_ignora_a_sua_rede() {
+        let viz = |b: u8, mhz: u32, ssid: &str| Vizinho { bssid: [b; 6], ssid: ssid.into(), khz: mhz * 1000, rssi_dbm: -60 };
+        // Seu canal 6 com 4 vizinhos; no 1, dois (o do 5 encosta nele); no 11, três. Sua malha no 11 não conta.
+        let redes = vec![
+            viz(2, 2437, "a"),
+            viz(3, 2437, "b"),
+            viz(4, 2442, "c"),
+            viz(5, 2432, "d"),
+            viz(6, 2412, "e"),
+            viz(7, 2462, "f"),
+            viz(8, 2462, "g"),
+            viz(9, 2462, "casa"),
+        ];
+        let m = canal_recomendado("casa", (Banda::G2_4, 6), &redes).unwrap();
+        assert_eq!((m.canal, m.disputando, m.no_seu), (1, 2, 4));
+        // Diferença pequena não manda mexer no roteador.
+        assert_eq!(canal_recomendado("casa", (Banda::G2_4, 1), &redes[..1]), None);
+        // DFS fica de fora: o 52 vazio não é recomendado.
+        let cinco = vec![viz(2, 5180, "a"), viz(3, 5180, "b"), viz(4, 5180, "c"), viz(5, 5200, "d"), viz(6, 5220, "e")];
+        let m5 = canal_recomendado("casa", (Banda::G5, 36), &cinco).unwrap();
+        assert!(CANAIS_5.contains(&m5.canal) && m5.canal != 52, "{m5:?}");
+        assert_eq!(canal_recomendado("casa", (Banda::G6, 5), &cinco), None);
+    }
+
+    #[test]
     fn vizinho_com_frequencia_desconhecida_conta_como_ouvido_e_nao_como_disputa() {
         let redes = vec![rede(2, 0)];
         let v = contar_vizinhos([1; 6], (Banda::G2_4, 6), &redes);
@@ -942,6 +1017,7 @@ mod testes {
                 mesmo_canal: 6,
                 sobrepostas: 3,
                 total_ouvidas: 14,
+                melhor_canal: None,
             }),
         });
         let a = achados(&l);
@@ -974,6 +1050,7 @@ mod testes {
                 mesmo_canal: 5,
                 sobrepostas: 0,
                 total_ouvidas: 9,
+                melhor_canal: None,
             }),
         });
         assert_eq!(
@@ -999,6 +1076,7 @@ mod testes {
                 mesmo_canal: 1,
                 sobrepostas: 0,
                 total_ouvidas: 3,
+                melhor_canal: None,
             }),
         });
         let a = achados(&limpo_2_4);
@@ -1072,6 +1150,7 @@ mod testes {
                     mesmo_canal: 9,
                     sobrepostas: 0,
                     total_ouvidas: 9,
+                    melhor_canal: None,
                 }),
             }),
             Ligacao::Cabo {

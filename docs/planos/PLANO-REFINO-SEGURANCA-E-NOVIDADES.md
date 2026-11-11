@@ -356,6 +356,7 @@ deixa isso:
 - 1.4 CSP ligada na janela; compilação local se identifica na barra e nos Ajustes.
 - 1.6 Esteira de segredos (`gitleaks`), `cargo audit` e `npm audit`; rustls/quinn corrigidos (0 vulnerabilidades).
 - R1 Ping com a internet ocupada (bufferbloat), na área Rede.
+- R6 Wi-Fi: o canal com bem menos disputa (1/6/11 no 2,4 GHz, sem DFS no 5 GHz), na ficha e no conselho.
 - R7 A rede na partida: ping nas janelas da medição automática; o cartão e o Oti dizem se foi a rede ou o PC.
 - 6.2 "Jogar": Epic pelo inicializador dela, Roblox pela página inicial.
 - 6.3 MSI em português (`wix.language = pt-BR`).
@@ -363,5 +364,5 @@ deixa isso:
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - Partida de respeito, fase 3: "Deixar liso" no cartão da partida com tranco; aviso de memória apertada no "Jogar".
 
-**Falta**: E4, E10–E12; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R6, R8; atestado A–D; itens 6.1,
+**Falta**: E4, E10–E12; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R5, R8; atestado A–D; itens 6.1,
 6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

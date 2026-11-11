@@ -428,6 +428,13 @@ export type Caminho =
 /**  O Roblox não tem jogo para abrir sozinho: abre a página inicial, a pessoa escolhe o jogo e o Otimiza reconhece. */
 "Site";
 
+export type CanalMelhor = {
+	canal: number,
+	/**  Redes de outros que disputariam o ar lá, e no seu canal de hoje (pela mesma conta). */
+	disputando: number,
+	no_seu: number,
+};
+
 export type CantoDaSobreposicao = "SuperiorEsquerdo" | "SuperiorDireito" | "InferiorEsquerdo" | "InferiorDireito";
 
 export type CategoriaDoAjuste = "System" | "Gaming" | "Network" | "Startup" | "Privacy";
@@ -1104,7 +1111,7 @@ export type LeituraWifi = LeituraWifi_Serialize | LeituraWifi_Deserialize;
 /**  O que deu para ler do Wi-Fi. Cada "não deu" tem nome: a tela explica em vez de mostrar zero. */
 export type LeituraWifi_Deserialize = { estado: "lida"; conexao: ConexaoWifi_Deserialize; 
 /**  `None` quando o seu ponto de acesso não apareceu na lista (sem frequência, sem canal para comparar). */
-vizinhanca?: Vizinhanca | null } | 
+vizinhanca?: Vizinhanca_Deserialize | null } | 
 /**  Windows 11 24H2: listar redes exige a permissão de localização para apps da área de trabalho. */
 { estado: "sem_permissao_de_localizacao" } | 
 /**  Conectado, mas a lista de redes veio vazia (placa no meio de uma varredura, driver que não informa). */
@@ -1115,7 +1122,7 @@ vizinhanca?: Vizinhanca | null } |
 /**  O que deu para ler do Wi-Fi. Cada "não deu" tem nome: a tela explica em vez de mostrar zero. */
 export type LeituraWifi_Serialize = { estado: "lida"; conexao: ConexaoWifi_Serialize; 
 /**  `None` quando o seu ponto de acesso não apareceu na lista (sem frequência, sem canal para comparar). */
-vizinhanca: Vizinhanca | null } | 
+vizinhanca: Vizinhanca_Serialize | null } | 
 /**  Windows 11 24H2: listar redes exige a permissão de localização para apps da área de trabalho. */
 { estado: "sem_permissao_de_localizacao" } | 
 /**  Conectado, mas a lista de redes veio vazia (placa no meio de uma varredura, driver que não informa). */
@@ -2894,13 +2901,28 @@ export type VistoriaDoPlano = { estado: "NaoExiste" } | { estado: "Integro" } |
 /**  O nome do ajuste é o que o cliente consegue conferir. */
 ajustes: string[] } | { estado: "NaoConsegui" };
 
-export type Vizinhanca = {
+export type Vizinhanca = Vizinhanca_Serialize | Vizinhanca_Deserialize;
+
+export type Vizinhanca_Deserialize = {
 	/**  Outras redes exatamente no seu canal. */
 	mesmo_canal: number,
 	/**  Outras redes em canal sobreposto ao seu (só existe em 2,4 GHz). */
 	sobrepostas: number,
 	/**  Tudo que a placa ouviu, em qualquer banda, fora o seu ponto de acesso. */
 	total_ouvidas: number,
+	/**  O canal com bem menos disputa na mesma banda (Plano de refino, R6). `None`: o seu já é dos melhores. */
+	melhor_canal?: CanalMelhor | null,
+};
+
+export type Vizinhanca_Serialize = {
+	/**  Outras redes exatamente no seu canal. */
+	mesmo_canal: number,
+	/**  Outras redes em canal sobreposto ao seu (só existe em 2,4 GHz). */
+	sobrepostas: number,
+	/**  Tudo que a placa ouviu, em qualquer banda, fora o seu ponto de acesso. */
+	total_ouvidas: number,
+	/**  O canal com bem menos disputa na mesma banda (Plano de refino, R6). `None`: o seu já é dos melhores. */
+	melhor_canal: CanalMelhor | null,
 };
 
 export type Vrr = "Anunciado" | "Provavel" | "NaoAnunciado" | "Desconhecido";
