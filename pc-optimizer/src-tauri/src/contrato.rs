@@ -51,6 +51,7 @@ mod tests {
                 crate::commands::tela_voltar_troca,
                 crate::commands::rede_rota,
                 crate::commands::rede_rota_do_jogo,
+                crate::commands::rede_fila,
                 crate::commands::rede_historico,
                 crate::commands::rede_wifi,
                 crate::commands::rede_varredura_wifi,

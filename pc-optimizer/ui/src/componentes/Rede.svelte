@@ -6,6 +6,7 @@
   import {
     ponte,
     type DiagnosticoDoWifi,
+    type FilaMedida,
     type HistoricoDaRede,
     type PainelDaBanda,
     type PainelDaVarredura,
@@ -44,6 +45,10 @@
   let rota = $state<Rota | null>(null);
   let medindo = $state<"destino" | "jogo" | null>(null);
   let erroRota = $state<string | null>(null);
+
+  let fila = $state<FilaMedida | null>(null);
+  let medindoFila = $state(false);
+  let erroFila = $state<string | null>(null);
 
   let historico = $state<HistoricoDaRede | null>(null);
   let copiado = $state(false);
@@ -156,6 +161,21 @@
       carregarHistorico();
     }
   }
+
+  async function medirFila() {
+    medindoFila = true;
+    erroFila = null;
+    try {
+      fila = await ponte.fila();
+    } catch (e) {
+      erroFila = String(e);
+    } finally {
+      medindoFila = false;
+    }
+  }
+
+  const TOM_DA_FILA = { Boa: "ok", Atencao: "atencao", Ruim: "perigo" } as const;
+  const mbps = (v: number | null) => (v == null ? "—" : `${Math.round(v)} Mb/s`);
 
   async function alternarVarredura() {
     if (!varredura) return;
@@ -321,6 +341,38 @@
         </tbody>
       </table>
       {#if rota.atribuicao}<p class="apoio atribuicao">{rota.atribuicao}</p>{/if}
+    {/if}
+  </section>
+
+  <!-- Ping com a internet ocupada -->
+  <section class="secao" aria-labelledby="rede-fila">
+    <h2 id="rede-fila">Com a internet ocupada</h2>
+    <p class="apoio">
+      O ping pula quando alguém baixa ou envia algo? O teste mede o ping parado, baixando e enviando um arquivo grande
+      (uns 20 s; pode gastar até uns 300 MB de dados). Feche downloads e chamadas de vídeo antes.
+    </p>
+    <div>
+      <button class="btn primario" type="button" disabled={medindoFila} onclick={medirFila}>
+        {medindoFila ? "Medindo… (uns 20 s)" : fila ? "Medir de novo" : "Medir com a linha cheia"}
+      </button>
+    </div>
+    {#if erroFila}
+      <p class="erro">{erroFila}</p>
+    {:else if fila && !medindoFila}
+      <div class="fases" role="list">
+        {#each [["Parado", fila.parado], ["Baixando", fila.baixando], ["Enviando", fila.enviando]] as const as [nome, f] (nome)}
+          <div class="fase" role="listitem" data-tom={f.classe ? TOM_DA_FILA[f.classe] : "neutro"}>
+            <span class="apoio">{nome}</span>
+            <strong class="numero">{f.ping_ms != null ? `${Math.round(f.ping_ms)} ms` : "—"}</strong>
+            <span class="apoio pequeno">
+              {#if f.a_mais_ms != null}+{Math.round(f.a_mais_ms)} ms · {mbps(f.mbps)}{:else if nome === "Parado"}sem carga{:else}não encheu a linha{/if}{(f.perda_pct ?? 0) >= 1
+                ? ` · ${Math.round(f.perda_pct ?? 0)}% perda`
+                : ""}
+            </span>
+          </div>
+        {/each}
+      </div>
+      <p class="destaque">{fila.frase}</p>
     {/if}
   </section>
 
@@ -524,6 +576,31 @@
   }
   .saltos tr.problema td {
     background: var(--ambar-fundo);
+  }
+  .fases {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .fase {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--linha);
+    border-radius: 12px;
+    border-left-width: 3px;
+  }
+  .fase[data-tom="ok"] {
+    border-left-color: var(--ok);
+  }
+  .fase[data-tom="atencao"] {
+    border-left-color: var(--atencao);
+  }
+  .fase[data-tom="perigo"] {
+    border-left-color: var(--perigo);
+  }
+  .fase strong {
+    font-size: 18px;
   }
   .periodos {
     display: grid;

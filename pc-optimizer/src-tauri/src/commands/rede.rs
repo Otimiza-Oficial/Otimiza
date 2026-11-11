@@ -39,6 +39,21 @@ pub async fn rede_rota(destino: String) -> Result<crate::plataforma::rota::Rota,
     }
 }
 
+/// Ping com a internet ocupada (bufferbloat): parado, baixando e enviando, uns 21 s. `LIVRES`.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn rede_fila() -> Result<crate::plataforma::fila::FilaMedida, String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::plataforma::fila::medir().await
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`.
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]

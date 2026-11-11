@@ -74,6 +74,8 @@ export const commands = {
 	redeRota: (destino: string) => __TAURI_INVOKE<Rota_Serialize>("rede_rota", { destino }),
 	/**  Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`. */
 	redeRotaDoJogo: () => __TAURI_INVOKE<Rota_Serialize>("rede_rota_do_jogo"),
+	/**  Ping com a internet ocupada (bufferbloat): parado, baixando e enviando, uns 21 s. `LIVRES`. */
+	redeFila: () => __TAURI_INVOKE<FilaMedida_Serialize>("rede_fila"),
 	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
 	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
@@ -441,6 +443,14 @@ export type Classe = "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | 
 "StreamingDeAssets" | 
 /**  LATÊNCIA ALTA NÃO ENTRA: ping é distância. Variação e perda têm conserto. */
 "Rede";
+
+export type ClasseDaFila = 
+/**  A fila quase não cresce: jogar com alguém baixando não pesa. */
+"Boa" | 
+/**  Cresce o bastante para sentir em jogo competitivo. */
+"Atencao" | 
+/**  O ping dispara com a linha cheia: é a causa do "ping pula". */
+"Ruim";
 
 export type ClasseDaInicializacao = "Essencial" | "Util" | "Opcional" | "Desconhecido";
 
@@ -844,6 +854,50 @@ export type FaixaDasPartidas = {
 
 /**  A família decide o que o driver oferece (Smooth Motion só em RTX 40/50, AFMF só em RX 6000 em diante). */
 export type Familia = "Rtx50" | "Rtx40" | "Rtx30" | "Rtx20" | "GtxOuAnterior" | "Rx9000" | "Rx7000" | "Rx6000" | "RxAnterior" | "Arc" | "IntelIntegrada" | "Desconhecida";
+
+export type FaseDaFila = FaseDaFila_Serialize | FaseDaFila_Deserialize;
+
+export type FaseDaFila_Deserialize = {
+	/**  Mediana do ping nesta fase, ou `None` se nenhum eco voltou. */
+	ping_ms?: number | null,
+	/**  Pacotes sem resposta, em %. */
+	perda_pct: number | null,
+	/**  Velocidade que a fase conseguiu (Mb/s). `None` na fase parada ou quando a carga não andou. */
+	mbps?: number | null,
+	/**  Quanto subiu em relação ao parado, e a classe disso. `None` na fase parada ou sem número. */
+	a_mais_ms?: number | null,
+	classe?: ClasseDaFila | null,
+};
+
+export type FaseDaFila_Serialize = {
+	/**  Mediana do ping nesta fase, ou `None` se nenhum eco voltou. */
+	ping_ms: number | null,
+	/**  Pacotes sem resposta, em %. */
+	perda_pct: number | null,
+	/**  Velocidade que a fase conseguiu (Mb/s). `None` na fase parada ou quando a carga não andou. */
+	mbps: number | null,
+	/**  Quanto subiu em relação ao parado, e a classe disso. `None` na fase parada ou sem número. */
+	a_mais_ms: number | null,
+	classe: ClasseDaFila | null,
+};
+
+export type FilaMedida = FilaMedida_Serialize | FilaMedida_Deserialize;
+
+export type FilaMedida_Deserialize = {
+	parado: FaseDaFila_Deserialize,
+	baixando: FaseDaFila_Deserialize,
+	enviando: FaseDaFila_Deserialize,
+	/**  A frase do resultado, com o que fazer. */
+	frase: string,
+};
+
+export type FilaMedida_Serialize = {
+	parado: FaseDaFila_Serialize,
+	baixando: FaseDaFila_Serialize,
+	enviando: FaseDaFila_Serialize,
+	/**  A frase do resultado, com o que fazer. */
+	frase: string,
+};
 
 export type FimDaTroca = 
 /**  Gravada no registro do Windows e no histórico. */

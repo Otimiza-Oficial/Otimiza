@@ -464,7 +464,7 @@ pub fn montar_via(
 }
 
 #[cfg(windows)]
-pub use nativo::{diagnosticar, diagnosticar_servidor_do_jogo};
+pub use nativo::{diagnosticar, diagnosticar_servidor_do_jogo, sondar};
 
 #[cfg(windows)]
 mod nativo {

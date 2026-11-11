@@ -52,6 +52,7 @@ import {
   type ResumoDoJogo_Serialize,
   type Rota_Serialize,
   type HistoricoDaRede_Serialize,
+  type FilaMedida_Serialize,
   type TaxaDoMouse_Serialize,
   type PainelDoCs2,
   type PcsParecidos,
@@ -80,6 +81,7 @@ export type { TrechoDaRota } from "./tipos";
 export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
+export type FilaMedida = FilaMedida_Serialize;
 export type TaxaDoMouse = TaxaDoMouse_Serialize;
 export type { PainelDoCs2, PcsParecidos } from "./tipos";
 export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
@@ -938,6 +940,18 @@ export const ponte = {
   /** Na demonstração: uma semana em que a noite perde pacotes na operadora (o caso que o relatório existe para provar). */
   historicoDaRede: (): Promise<HistoricoDaRede> =>
     noTauri ? commands.redeHistorico() : Promise.resolve(redeHistoricoDemo()),
+  /** Ping com a internet ocupada: uns 21 s no Rust. A demonstração mostra uma linha com fila no modem. */
+  fila: async (): Promise<FilaMedida> => {
+    if (noTauri) return commands.redeFila();
+    await new Promise((r) => setTimeout(r, 2500));
+    return {
+      parado: { ping_ms: 18, perda_pct: 0, mbps: null, a_mais_ms: null, classe: null },
+      baixando: { ping_ms: 64, perda_pct: 0, mbps: 212, a_mais_ms: 46, classe: "Atencao" },
+      enviando: { ping_ms: 231, perda_pct: 3, mbps: 38, a_mais_ms: 213, classe: "Ruim" },
+      frase:
+        "É fila no modem (bufferbloat): com a linha cheia o ping sobe 213 ms enviando. Nenhum ajuste do PC resolve isso; o que resolve é ligar o SQM (\"QoS inteligente\") no roteador, ou limitar a velocidade a uns 90% do plano. No PC, segure o envio de fundo durante o jogo.",
+    };
+  },
   rotaDoJogo: (): Promise<Rota> =>
     noTauri
       ? commands.redeRotaDoJogo()

@@ -237,6 +237,7 @@ pub fn run() {
             commands::tela_voltar_troca,
             commands::rede_rota,
             commands::rede_rota_do_jogo,
+            commands::rede_fila,
             commands::rede_historico,
             commands::rede_wifi,
             commands::rede_varredura_wifi,

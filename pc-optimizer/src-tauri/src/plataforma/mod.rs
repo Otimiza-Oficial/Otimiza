@@ -24,6 +24,7 @@ pub mod historico;
 // módulo. Tirar o `allow` quando os comandos entrarem.
 #[allow(dead_code)]
 pub mod hz;
+pub mod fila;
 pub mod jogo_liso;
 pub mod jogos;
 pub mod lab;

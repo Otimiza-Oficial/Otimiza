@@ -359,6 +359,7 @@ mod tests {
         "tela_voltar_troca",
         "rede_rota",
         "rede_rota_do_jogo",
+        "rede_fila",
         "rede_historico",
         "energia_calibrar_cancelar",
         "energia_salvar_calibrado_para_o_jogo",
