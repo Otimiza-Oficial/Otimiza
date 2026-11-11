@@ -10,6 +10,9 @@ if ("__TAURI_INTERNALS__" in window) {
   const anotar = (texto: string) => void invoke("anotar_erro_da_tela", { texto }).catch(() => {});
   window.addEventListener("error", (e) => anotar(`${e.message} (${e.filename}:${e.lineno}:${e.colno})`));
   window.addEventListener("unhandledrejection", (e) => anotar(`promessa: ${e.reason instanceof Error ? (e.reason.stack ?? e.reason.message) : String(e.reason)}`));
+  // A política de segurança da janela (`tauri.conf.json`, `csp`): o que ela barrar vai para o log, para uma capa ou
+  // um recurso legítimo bloqueado no PC de alguém não sumir calado.
+  document.addEventListener("securitypolicyviolation", (e) => anotar(`CSP barrou ${e.blockedURI || "(inline)"} em ${e.violatedDirective}`));
 }
 
 const alvo = document.getElementById("app");
