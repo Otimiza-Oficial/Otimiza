@@ -270,7 +270,64 @@ pub const RETIRADOS: &[&str] = &[
 ];
 
 pub fn retirado(id: &str) -> bool {
-    RETIRADOS.contains(&id)
+    RETIRADOS.contains(&id) || desligado_remotamente(id)
+}
+
+// O INTERRUPTOR REMOTO (Plano de refino, E8). Um ajuste que começa a dar problema em parte dos PCs sai de todo cliente
+// sem versão nova: a equipe põe o id em `ajustes_desligados` no `convite.json` publicado, o Otimiza baixa na abertura e
+// guarda em `ajustes-desligados.json`. Desligado vale como aposentado: sai do lote, dos níveis e da lista, e quem já
+// aplicou continua desfazendo. Só ids que existem no catálogo entram.
+static DESLIGADOS_REMOTOS: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+
+pub fn desligado_remotamente(id: &str) -> bool {
+    DESLIGADOS_REMOTOS
+        .read()
+        .map(|l| l.iter().any(|x| x == id))
+        .unwrap_or(false)
+}
+
+/// **Pura.** Só os ids do catálogo, sem repetição, no máximo 50.
+pub fn filtrar_desligados(ids: &[String]) -> Vec<String> {
+    let mut saida: Vec<String> = Vec::new();
+    for id in ids {
+        let id = id.trim();
+        if find(id).is_some() && !saida.iter().any(|x| x == id) {
+            saida.push(id.to_string());
+        }
+        if saida.len() == 50 {
+            break;
+        }
+    }
+    saida
+}
+
+fn arquivo_dos_desligados() -> Option<std::path::PathBuf> {
+    std::env::var("APPDATA")
+        .ok()
+        .map(|a| std::path::PathBuf::from(a).join("pc-optimizer").join("ajustes-desligados.json"))
+}
+
+/// Troca a lista (memória e disco). Vazia religa tudo.
+pub fn definir_desligados(ids: &[String]) {
+    let lista = filtrar_desligados(ids);
+    if let (Some(a), Ok(json)) = (arquivo_dos_desligados(), serde_json::to_string(&lista)) {
+        let _ = std::fs::create_dir_all(a.parent().unwrap_or(&a));
+        let _ = std::fs::write(a, json);
+    }
+    if let Ok(mut l) = DESLIGADOS_REMOTOS.write() {
+        *l = lista;
+    }
+}
+
+/// Na abertura, antes de a rede responder: a última lista conhecida.
+pub fn carregar_desligados_do_disco() {
+    let lista: Vec<String> = arquivo_dos_desligados()
+        .and_then(|a| std::fs::read_to_string(a).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    if let Ok(mut l) = DESLIGADOS_REMOTOS.write() {
+        *l = filtrar_desligados(&lista);
+    }
 }
 
 /// As quatro exclusões juntas: não volta, troca segurança, `FORA_DO_LOTE` e, desde a 2.1.0 (FPS de um cliente
@@ -2467,6 +2524,17 @@ mod tests {
             "estes itens param serviço do Windows e não estão em RETIRADOS: {:?}",
             vivos_que_param
         );
+    }
+
+    #[test]
+    fn a_lista_remota_so_aceita_id_do_catalogo() {
+        let l = filtrar_desligados(&[
+            "plano_otimiza".to_string(),
+            " plano_otimiza ".to_string(),
+            "nao_existe".to_string(),
+            "foreground_priority".to_string(),
+        ]);
+        assert_eq!(l, vec!["plano_otimiza".to_string(), "foreground_priority".to_string()]);
     }
 
     /// Plano de refino, E7: nenhum ajuste vivo mexe no relógio do Windows pelo `bcdedit`.

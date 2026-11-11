@@ -719,6 +719,13 @@ pub fn run() {
                 }
             });
 
+            // Interruptor remoto (Plano de refino, E8): a última lista de ajustes desligados vale já, e a nova chega da rede.
+            #[cfg(windows)]
+            {
+                modules::windows::catalog::carregar_desligados_do_disco();
+                tauri::async_runtime::spawn(modules::convite::atualizar_ajustes_desligados());
+            }
+
             // Vigia de estabilidade (Plano de refino, E2 e E3): o PC estável que desligou sozinho, deu tela azul ou
             // perdeu o driver de vídeo depois de um ajuste do Otimiza tem esse ajuste desfeito, e a tela avisa.
             #[cfg(windows)]

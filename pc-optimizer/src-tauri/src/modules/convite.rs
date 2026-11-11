@@ -25,6 +25,9 @@ pub struct Publicado {
     /// Link direto ao canal de feedbacks (`https://discord.com/channels/<servidor>/<canal>`).
     #[serde(default)]
     canal_feedback: Option<String>,
+    /// Ajustes que a equipe desligou para todos (Plano de refino, E8). Ausente: nenhum.
+    #[serde(default)]
+    ajustes_desligados: Vec<String>,
 }
 
 impl Publicado {
@@ -37,6 +40,10 @@ impl Publicado {
             .as_deref()
             .filter(|a| parece_api(a))
             .map(|a| a.trim_end_matches('/').to_string())
+    }
+
+    pub fn ajustes_desligados(&self) -> &[String] {
+        &self.ajustes_desligados
     }
 
     pub fn canal_feedback(&self) -> Option<String> {
@@ -100,6 +107,14 @@ pub async fn consultar() -> Option<String> {
 }
 
 /// O arquivo inteiro, para quem precisa de outro campo além do convite.
+/// Na abertura: baixa o arquivo publicado e troca a lista de ajustes desligados. Sem rede, fica a última conhecida.
+#[cfg(target_os = "windows")]
+pub async fn atualizar_ajustes_desligados() {
+    if let Some(p) = consultar_publicado().await {
+        crate::modules::windows::catalog::definir_desligados(p.ajustes_desligados());
+    }
+}
+
 pub async fn consultar_publicado() -> Option<Publicado> {
     Publicado::ler(&baixar().await?)
 }

@@ -474,6 +474,14 @@ impl WindowsOptimizer {
     ) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id).ok_or_else(|| format!("Unknown optimization: {}", id))?;
 
+        if catalog::desligado_remotamente(id) && !log.is_applied(id) {
+            return Err(format!(
+                "`{}` está desligado pela equipe do Otimiza por enquanto: em parte dos PCs ele não se comportou bem. \
+                 Se estiver aplicado, ainda dá para desfazer.",
+                spec.name
+            ));
+        }
+
         if catalog::retirado(id) && !log.is_applied(id) {
             return Err(format!(
                 "`{}` foi retirado do Otimiza: não mudou FPS nem fluidez em jogo. \
