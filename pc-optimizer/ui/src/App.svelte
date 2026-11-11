@@ -49,6 +49,8 @@
   type Tema = "claro" | "escuro";
   const CHAVE_DO_TEMA = "otimiza.tema";
   const CHAVE_DO_FUNDO = "otimiza.fundo";
+  /** Abaixo disto livre ao tocar em Jogar, o Oti avisa: FiveM e jogos atuais pedem uns 3 GB a mais na partida. */
+  const MEMORIA_LIVRE_MINIMA_GB = 3;
   /** A apresentação já foi vista nesta máquina (ou pulada): não abre de novo sozinha. */
   const CHAVE_DAS_BOAS_VINDAS = "otimiza.boas-vindas";
 
@@ -296,14 +298,21 @@
   async function jogarJogo(nome: string) {
     try {
       const l = await ponte.jogar(nome);
+      // Memória apertada antes de abrir é o tranco de carregar cenário no meio da partida (Partida de respeito, B5).
+      const total = metricas?.ram.total_gb ?? null;
+      const usada = metricas?.ram.used_gb ?? null;
+      const livre = total != null && usada != null ? total - usada : null;
+      const apertada = livre != null && livre < MEMORIA_LIVRE_MINIMA_GB;
       dizer(
         {
           texto: `Abrindo o ${l.jogo}${l.caminho === "Steam" ? " pela Steam" : ""}…`,
-          detalhe: "Quando ele aparecer, eu ligo a receita dele.",
-          humor: "jogando",
-          acoes: [],
+          detalhe: apertada
+            ? `Só ${livre!.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} GB de memória livre: o jogo pode travar ao carregar cenário. Feche o navegador e o que não for usar antes de entrar.`
+            : "Quando ele aparecer, eu ligo a receita dele.",
+          humor: apertada ? "preocupado" : "jogando",
+          acoes: apertada ? [{ rotulo: "Ver quem está pesando", tipo: "falar", fala: () => { abrir("sistema", "agora"); return { texto: "Esses são os que mais ocupam agora.", humor: "atento", acoes: [] }; } }] : [],
         },
-        5000,
+        apertada ? 0 : 5000,
       );
       if (!noTauri) jogo = await ponte.jogoAberto();
     } catch (e) {
