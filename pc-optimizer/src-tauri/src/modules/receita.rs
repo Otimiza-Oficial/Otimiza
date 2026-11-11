@@ -510,6 +510,9 @@ mod tests {
             fps_depois: None,
             low_antes: None,
             low_depois: None,
+            trancos_antes: None,
+            trancos_depois: None,
+            piora_forte: false,
             erro: None,
         };
         let estado = portao::Estado {
