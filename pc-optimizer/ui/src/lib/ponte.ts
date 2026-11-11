@@ -380,11 +380,11 @@ const wifiDemo: DiagnosticoDoWifi = {
         recepcao_mbps: 72,
         envio_mbps: 72,
       },
-      vizinhanca: { mesmo_canal: 4, sobrepostas: 3, total_ouvidas: 14 },
+      vizinhanca: { mesmo_canal: 4, sobrepostas: 3, total_ouvidas: 14, melhor_canal: { canal: 1, disputando: 2, no_seu: 7 } },
     },
   },
   achados: [
-    { gravidade: "Atencao", frase: "Conectado em 2,4 GHz com 7 redes disputando o canal. Se o roteador tiver 5 GHz, use." },
+    { gravidade: "Atencao", frase: "2,4 GHz com 7 redes no seu canal: use 5 GHz, cabo, ou mude o roteador para o canal 1 (2 redes lá, contra 7 no seu)." },
     { gravidade: "Info", frase: "Para jogar, o cabo ainda é o que menos varia." },
   ],
 };
