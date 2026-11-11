@@ -1,7 +1,7 @@
 // O cartão da partida (`src/lib/partida.ts`): o relatório certo, a partida curta dita como curta e a faixa como faixa.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { comparar, duracao, eDestaPartida, montarCartao, textoParaCompartilhar, type RelatorioUsado } from "../src/lib/partida.ts";
+import { comparar, duracao, eDestaPartida, montarCartao, ofereceLiso, textoParaCompartilhar, type RelatorioUsado } from "../src/lib/partida.ts";
 
 const agora = 1_800_000_000;
 const relatorio = (r: Partial<RelatorioUsado> = {}): RelatorioUsado => ({
@@ -63,4 +63,14 @@ test("duração e texto do Discord só com número medido", () => {
   const texto = c.medido ? textoParaCompartilhar(c) : "";
   assert.match(texto, /^FiveM · 1h de partida: 85 FPS médio · 1% pior 54\./);
   assert.doesNotMatch(texto, /trancos/);
+});
+
+test("\"Deixar liso\" só para partida com tranco, medida e com placa NVIDIA", () => {
+  const comTranco = montarCartao(fim, relatorio({ trancos: 8, janelas_com_trancos: 1 }), agora); // 24 por minuto
+  const lisa = montarCartao(fim, relatorio({ trancos: 1, janelas_com_trancos: 4 }), agora); // 0,75 por minuto
+  assert.equal(ofereceLiso(comTranco, true), true);
+  assert.equal(ofereceLiso(comTranco, false), false);
+  assert.equal(ofereceLiso(lisa, true), false);
+  assert.equal(ofereceLiso(montarCartao({ ...fim, segundos: 60 }, null, agora), true), false);
+  assert.equal(ofereceLiso(null, true), false);
 });

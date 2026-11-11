@@ -430,6 +430,7 @@ mod tests {
         "config_motor_aplicar",
         "frame_boost_travar_base",
         "jogo_liso_aplicar",
+        "jogo_liso_depois_da_partida",
         "memoria_fechar",
         "limpeza_executar",
         "energia_de_jogo_definir",

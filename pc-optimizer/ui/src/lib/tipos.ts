@@ -25,6 +25,8 @@ export const commands = {
 	jogar: (nome: string) => __TAURI_INVOKE<Lancamento>("jogar", { nome }),
 	/**  A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura. */
 	relatorioDaUltimaPartida: () => __TAURI_INVOKE<RelatorioDaPartida_Serialize | null>("relatorio_da_ultima_partida"),
+	/**  "Deixar liso" no cartão da partida: o teto pela partida que acabou, sem o jogo aberto. `EXIGEM_LICENCA`. */
+	jogoLisoDepoisDaPartida: (executavel: string, caminho: string | null, fps: number | null, trancosPorMinuto: number | null) => __TAURI_INVOKE<LisoGravado_Serialize>("jogo_liso_depois_da_partida", { executavel, caminho, fps, trancosPorMinuto }),
 	/**  A capa do jogo pela Steam deste PC (`data:` URL). `None`: sem Steam ou sem arte; a tela desenha uma. `LIVRES`. */
 	capaDoJogo: (appid: number) => __TAURI_INVOKE<string | null>("capa_do_jogo", { appid }),
 	startMonitoring: () => __TAURI_INVOKE<string>("start_monitoring"),
@@ -1096,6 +1098,21 @@ export type LinhaDoLab_Serialize = {
 	confianca: ConfiancaDoLab,
 	/**  Para frametime, menos é melhor. */
 	menor_e_melhor: boolean,
+};
+
+/**  O teto gravado depois da partida (cartão da partida, "Deixar liso"): o que vai para a tela. */
+export type LisoGravado = LisoGravado_Serialize | LisoGravado_Deserialize;
+
+/**  O teto gravado depois da partida (cartão da partida, "Deixar liso"): o que vai para a tela. */
+export type LisoGravado_Deserialize = {
+	teto?: number | null,
+	motivo: string,
+};
+
+/**  O teto gravado depois da partida (cartão da partida, "Deixar liso"): o que vai para a tela. */
+export type LisoGravado_Serialize = {
+	teto: number | null,
+	motivo: string,
 };
 
 export type MaquinaDeEnergia = {
@@ -2655,9 +2672,25 @@ export type Telemetry_Serialize = {
 };
 
 /**  O que o vigia conta quando o jogo fecha (`partida:terminou`): a tela monta o cartão da partida com o relatório. */
-export type Terminada = {
+export type Terminada = Terminada_Serialize | Terminada_Deserialize;
+
+/**  O que o vigia conta quando o jogo fecha (`partida:terminou`): a tela monta o cartão da partida com o relatório. */
+export type Terminada_Deserialize = {
 	jogo: string,
 	executavel: string,
+	/**  O caminho do executável, lido quando o jogo abriu (o perfil do driver pode ser pelo caminho, como no FiveM). */
+	caminho?: string | null,
+	/**  Do jogo aberto ao fechado, como o vigia viu (a cada 4 s). */
+	segundos: number,
+	pelo_jogar: boolean,
+};
+
+/**  O que o vigia conta quando o jogo fecha (`partida:terminou`): a tela monta o cartão da partida com o relatório. */
+export type Terminada_Serialize = {
+	jogo: string,
+	executavel: string,
+	/**  O caminho do executável, lido quando o jogo abriu (o perfil do driver pode ser pelo caminho, como no FiveM). */
+	caminho: string | null,
 	/**  Do jogo aberto ao fechado, como o vigia viu (a cada 4 s). */
 	segundos: number,
 	pelo_jogar: boolean,

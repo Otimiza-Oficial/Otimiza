@@ -23,7 +23,7 @@ export type RelatorioUsado = {
 };
 
 /** `partida:terminou` (`plataforma::partida::Terminada`). */
-export type Terminada = { jogo: string; executavel: string; segundos: number; pelo_jogar: boolean };
+export type Terminada = { jogo: string; executavel: string; caminho?: string | null; segundos: number; pelo_jogar: boolean };
 
 /** Cada janela da medição automática dura isto (`medicoes::SEGUNDOS_DE_MEDICAO`): base dos trancos por minuto. */
 export const SEGUNDOS_DA_JANELA = 20;
@@ -90,6 +90,14 @@ export function montarCartao(t: Terminada, r: RelatorioUsado | null, agora_s: nu
     trancosPorMinuto: r.trancos != null && minutosLidos > 0 ? r.trancos / minutosLidos : null,
     comparacao: comparar(r.fps_medio, r.anteriores),
   };
+}
+
+/** A partida com tranco a partir daqui ganha o "Deixar liso" (o Jogo liso considera liso abaixo de 2 por minuto; 5 é
+ *  tranco que se sente). Só com placa NVIDIA: o teto vai pelo perfil do driver dela. */
+export const TRANCOS_PARA_OFERECER_LISO = 5;
+
+export function ofereceLiso(c: Cartao | null, placaNvidia: boolean): boolean {
+  return !!c && c.medido && placaNvidia && c.fps != null && (c.trancosPorMinuto ?? 0) >= TRANCOS_PARA_OFERECER_LISO;
 }
 
 const int = (v: number) => Math.round(v).toLocaleString("pt-BR");

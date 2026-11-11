@@ -315,6 +315,29 @@ pub fn jogo_liso_medir() -> Result<crate::plataforma::jogo_liso::Plano, String> 
     Err(UNSUPPORTED_PLATFORM.to_string())
 }
 
+/// "Deixar liso" no cartão da partida: o teto pela partida que acabou, sem o jogo aberto. `EXIGEM_LICENCA`.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn jogo_liso_depois_da_partida(
+    executavel: String,
+    caminho: Option<String>,
+    fps: f64,
+    trancos_por_minuto: f64,
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::jogo_liso::LisoGravado, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::plataforma::jogo_liso::gravar_depois_da_partida(&executavel, caminho.as_deref(), fps, trancos_por_minuto, &mut log)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (executavel, caminho, fps, trancos_por_minuto, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Aplica o teto de FPS estável no perfil do jogo (guardando o anterior). Vale ao reabrir o jogo. `EXIGEM_LICENCA`.
 #[tauri::command(async)]
 pub async fn jogo_liso_aplicar(

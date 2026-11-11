@@ -153,6 +153,8 @@ pub struct Preparada {
 pub struct Terminada {
     pub jogo: String,
     pub executavel: String,
+    /// O caminho do executável, lido quando o jogo abriu (o perfil do driver pode ser pelo caminho, como no FiveM).
+    pub caminho: Option<String>,
     /// Do jogo aberto ao fechado, como o vigia viu (a cada 4 s).
     pub segundos: u64,
     pub pelo_jogar: bool,

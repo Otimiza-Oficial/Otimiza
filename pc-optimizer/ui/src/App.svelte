@@ -27,7 +27,7 @@
   import { avisos as lerAvisos } from "./lib/clima";
   import { capaRemota, iniciais } from "./lib/capas";
   import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, type Acao, type Fala } from "./lib/conversa";
-  import { fraseDaComparacao, JOGAR, montarCartao, textoParaCompartilhar, type Cartao } from "./lib/partida";
+  import { fraseDaComparacao, JOGAR, montarCartao, ofereceLiso, textoParaCompartilhar, type Cartao, type Terminada } from "./lib/partida";
   import {
     contaQueRoda,
     noTauri,
@@ -104,6 +104,10 @@
   let cartao = $state<Cartao | null>(null);
   let cartaoEm = 0;
   let cartaoCopiado = $state(false);
+  /** O fim da partida do cartão (o executável e o caminho vão para o "Deixar liso"). */
+  let terminada = $state<Terminada | null>(null);
+  let lisoGravado = $state<string | null>(null);
+  let gravandoLiso = $state(false);
   let digitado = $state("");
   let digitando = $state(false);
   let reacao = $state<Humor | null>(null);
@@ -304,6 +308,22 @@
       if (!noTauri) jogo = await ponte.jogoAberto();
     } catch (e) {
       dizer({ texto: `Não consegui abrir o ${nome}.`, detalhe: String(e), humor: "preocupado", acoes: [] });
+    }
+  }
+
+  /** "Deixar liso": o teto calculado pela partida que acabou, para a próxima abertura do jogo. */
+  async function deixarLiso() {
+    if (!cartao?.medido || !terminada || cartao.fps == null || cartao.trancosPorMinuto == null) return;
+    gravandoLiso = true;
+    try {
+      const r = await ponte.jogoLisoDepoisDaPartida(terminada.executavel, terminada.caminho ?? null, cartao.fps, cartao.trancosPorMinuto);
+      lisoGravado = r.teto ? `Teto de ${r.teto} FPS gravado: vale na próxima vez que o jogo abrir.` : r.motivo;
+      dizer({ texto: r.teto ? `Pronto: ${cartao.jogo} travado em ${r.teto} FPS.` : "Não precisou de teto.", detalhe: r.motivo, humor: "feliz", acoes: [] }, 9000);
+    } catch (e) {
+      lisoGravado = null;
+      dizer({ texto: "Não consegui gravar o teto.", detalhe: String(e), humor: "preocupado", acoes: [] });
+    } finally {
+      gravandoLiso = false;
     }
   }
 
@@ -621,6 +641,8 @@
       ponte.aoTerminarPartida(async (t) => {
         const r = await ponte.relatorioDaPartida().catch(() => null);
         cartao = montarCartao(t, r, Date.now() / 1000);
+        terminada = t;
+        lisoGravado = null;
         cartaoEm = Date.now();
         dizer(partidaTerminou(cartao));
       }),
@@ -819,11 +841,15 @@
                     {/if}
                   </dl>
                   <p class="sec pequeno">
-                    {#if cartao.comparacao}{fraseDaComparacao(cartao.comparacao)}{:else}Com mais partidas medidas, aparece a faixa das anteriores.{/if}
+                    {#if lisoGravado}{lisoGravado}{:else if cartao.comparacao}{fraseDaComparacao(cartao.comparacao)}{:else}Com mais partidas medidas, aparece a faixa das anteriores.{/if}
                   </p>
+                  {@const liso = !lisoGravado && ofereceLiso(cartao, hardware?.placa.fabricante === "Nvidia")}
                   <div class="acoes-cartao">
+                    {#if liso}
+                      <button class="botao-liso" disabled={gravandoLiso} onclick={deixarLiso}>{gravandoLiso ? "Gravando…" : "Deixar liso"}</button>
+                    {/if}
                     <button class="link" onclick={() => abrir("prova")}>Ver a partida <Icone nome="seta_direita" tamanho={14} /></button>
-                    <button class="link" onclick={copiarCartao}>{cartaoCopiado ? "Copiado" : "Copiar para o Discord"}</button>
+                    {#if !liso}<button class="link" onclick={copiarCartao}>{cartaoCopiado ? "Copiado" : "Copiar para o Discord"}</button>{/if}
                   </div>
                 {:else}
                   <p class="sec pequeno">
@@ -1911,6 +1937,24 @@
   .jogar:hover {
     transform: scale(1.05);
   }
+  /* A ação da partida com tranco: escura e pequena, cabe no card sem empurrar o rodapé. */
+  .botao-liso {
+    align-self: flex-start;
+    flex: none;
+    height: 30px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 15px;
+    background: var(--texto);
+    color: var(--contra, #fff);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .botao-liso:disabled {
+    opacity: 0.6;
+  }
   .cartao-jogo {
     margin: 0;
     font-size: 15px;
@@ -1918,6 +1962,7 @@
   }
   .acoes-cartao {
     display: flex;
+    align-items: center;
     gap: 14px;
     flex-wrap: wrap;
     margin-top: auto;

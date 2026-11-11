@@ -45,6 +45,7 @@ import {
   type Preparada_Serialize,
   type Terminada as TerminadaGerada,
   type RelatoDeEstabilidade,
+  type LisoGravado,
   type VistoriaDoPlano,
   type DiagnosticoDeEnergia,
   type ResultadoDaProva_Serialize,
@@ -66,6 +67,7 @@ export type RelatorioDaPartida = RelatorioDaPartida_Serialize;
 export type Preparada = Preparada_Serialize;
 export type Terminada = TerminadaGerada;
 export type AvisoDeEstabilidade = RelatoDeEstabilidade;
+export type { LisoGravado };
 export type ResumoDoJogo = ResumoDoJogo_Serialize;
 export type JogoDaLoja = JogoDaLoja_Serialize;
 export type Historico = HistoricoNaTela_Serialize;
@@ -692,7 +694,7 @@ export const ponte = {
     if (noTauri) return;
     // Na demonstração, fechar o jogo de teste conta como o fim de uma partida (o cartão aparece).
     if (jogoDemo && !nome) {
-      const fim: Terminada = { jogo: jogoDemo, executavel: "", segundos: Math.max(240, Math.round((Date.now() - partidaDemo.desde) / 1000)), pelo_jogar: partidaDemo.pelo_jogar };
+      const fim: Terminada = { jogo: jogoDemo, executavel: "FiveM_GTAProcess.exe", caminho: null, segundos: Math.max(240, Math.round((Date.now() - partidaDemo.desde) / 1000)), pelo_jogar: partidaDemo.pelo_jogar };
       setTimeout(() => partidaDemo.aoTerminar.forEach((f) => f(fim)), 300);
     }
     if (nome && !jogoDemo) partidaDemo.desde = Date.now();
@@ -714,6 +716,12 @@ export const ponte = {
     );
     return { jogo: nome, caminho: "Executavel" };
   },
+  /** "Deixar liso": o teto pela partida que acabou, gravado no perfil do jogo no driver para a próxima abertura. */
+  jogoLisoDepoisDaPartida: async (executavel: string, caminho: string | null, fps: number, trancosPorMinuto: number): Promise<LisoGravado> => {
+    if (noTauri) return commands.jogoLisoDepoisDaPartida(executavel, caminho, fps, trancosPorMinuto);
+    await new Promise((r) => setTimeout(r, 600));
+    return { teto: 60, motivo: `O jogo entrega ${Math.round(fps)} fps mas trava ${Math.round(trancosPorMinuto)} vezes por minuto: travar em 60 deixa o ritmo constante. Vale na próxima vez que o jogo abrir.` };
+  },
   /** A última partida inteira, das janelas que a medição automática gravou. */
   relatorioDaPartida: async (): Promise<RelatorioDaPartida | null> => {
     if (noTauri) return commands.relatorioDaUltimaPartida();
@@ -727,7 +735,7 @@ export const ponte = {
       fps_medio: 88,
       pior_low_1pct: 57,
       gargalo: "Cpu",
-      trancos: 6,
+      trancos: 9,
       janelas_com_trancos: 4,
       trancos_com_disco: 1,
       freios: 0,

@@ -31,6 +31,7 @@ mod tests {
                 crate::commands::jogos_instalados,
                 crate::commands::jogar,
                 crate::commands::relatorio_da_ultima_partida,
+                crate::commands::jogo_liso_depois_da_partida,
                 crate::commands::capa_do_jogo,
                 crate::commands::start_monitoring,
                 crate::commands::get_performance_metrics,

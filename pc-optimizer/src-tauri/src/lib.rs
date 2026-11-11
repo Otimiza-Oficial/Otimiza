@@ -325,6 +325,7 @@ pub fn run() {
             commands::frame_boost_ligar,
             commands::jogo_liso_medir,
             commands::jogo_liso_aplicar,
+            commands::jogo_liso_depois_da_partida,
             commands::memoria_para_o_jogo,
             commands::memoria_fechar,
             commands::energia_de_jogo,
@@ -429,7 +430,7 @@ pub fn run() {
 
                     let mut pid: Option<u32> = None;
                     // O jogo aberto agora, desde quando, e se veio do "Jogar": para o cartão da partida ao fechar.
-                    let mut em_jogo: Option<(String, String, std::time::Instant, bool)> = None;
+                    let mut em_jogo: Option<(String, String, Option<String>, std::time::Instant, bool)> = None;
                     // Sem a trava do modo seguro: aqui só se LÊ qual jogo está aberto, nada age sozinho.
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
@@ -492,12 +493,13 @@ pub fn run() {
                         let _ = handle.emit("jogo:sessao", &mudou);
                         // A partida (Plano "Partida de respeito"): ao fechar, a tela monta o cartão; ao abrir pelo
                         // "Jogar", a receita lembrada liga sozinha.
-                        if let Some((jogo, executavel, desde, pelo_jogar)) = em_jogo.take() {
+                        if let Some((jogo, executavel, caminho, desde, pelo_jogar)) = em_jogo.take() {
                             let _ = handle.emit(
                                 "partida:terminou",
                                 plataforma::partida::Terminada {
                                     jogo,
                                     executavel,
+                                    caminho,
                                     segundos: desde.elapsed().as_secs(),
                                     pelo_jogar,
                                 },
@@ -505,7 +507,8 @@ pub fn run() {
                         }
                         if let Some(j) = mudou.as_ref() {
                             let pelo_jogar = plataforma::partida::tomar_se_for(&j.nome, &j.executavel);
-                            em_jogo = Some((j.nome.clone(), j.executavel.clone(), std::time::Instant::now(), pelo_jogar));
+                            let caminho = modules::windows::frames::caminho_do_processo(&j.executavel);
+                            em_jogo = Some((j.nome.clone(), j.executavel.clone(), caminho, std::time::Instant::now(), pelo_jogar));
                             if pelo_jogar {
                                 let h = handle.clone();
                                 let (nome, exe) = (j.nome.clone(), j.executavel.clone());
