@@ -201,34 +201,24 @@ pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("foreground_priority", Condicao::SoSePedir),
     ("mmcss_games", Condicao::SoSePedir),
     ("disable_power_throttling", Condicao::SoSePedir),
-    ("disable_sysmain", Condicao::SoSePedir),
     ("disable_memory_compression", Condicao::SoSePedir),
-    ("disable_xbox_services", Condicao::SoSePedir),
     ("notifications_off", Condicao::SoSePedir),
     ("maps_auto_update_off", Condicao::SoSePedir),
     ("remote_assistance_off", Condicao::SoSePedir),
-    ("disable_telemetry", Condicao::SoSePedir),
     ("telemetry_policy", Condicao::SoSePedir),
     ("start_menu_web_search_off", Condicao::SoSePedir),
     ("disable_transparency", Condicao::SoSePedir),
     ("disable_startup_delay", Condicao::SoSePedir),
     ("disable_hibernation", Condicao::SoSePedir),
     ("background_apps_off", Condicao::SoSePedir),
-    ("disable_search_indexing", Condicao::SoSePedir),
     ("disable_widgets", Condicao::SoSePedir),
     ("store_auto_download_off", Condicao::SoSePedir),
-    ("error_reporting_off", Condicao::SoSePedir),
     ("edge_background_off", Condicao::SoSePedir),
     // O resto dos dois pacotes, novo no catálogo.
     ("fila_de_entrada_curta", Condicao::SoSePedir),
     ("windows_responde_rapido", Condicao::SoSePedir),
     ("prefetch_desligado", Condicao::SoSePedir),
     ("privacidade_do_pacote", Condicao::SoSePedir),
-    ("servicos_bluetooth_fora", Condicao::SoSePedir),
-    ("servicos_impressora_fora", Condicao::SoSePedir),
-    ("servicos_hyperv_fora", Condicao::SoSePedir),
-    ("servicos_pouco_usados", Condicao::SoSePedir),
-    ("servicos_de_empresa_fora", Condicao::SoSePedir),
     ("placa_no_clock_maximo", Condicao::SoSePedir),
     ("tick_do_pacote", Condicao::SoSePedir),
     ("tcp_do_pacote", Condicao::SoSePedir),
@@ -260,6 +250,20 @@ pub const RETIRADOS: &[&str] = &[
     "disable_reserved_storage",
     "delivery_optimization_off",
     "stop_sponsored_apps",
+    // Em 10/11/2026, regra do dono: o Otimiza não deixa serviço do Windows parado. Serviço parado é o que as ISOs
+    // modificadas e os "otimizadores" deixam (compatibilidade, diagnóstico, SysMain, telemetria), e é de onde vem
+    // muito travamento e recurso quebrado que ninguém liga à causa. Ficam só para o desfazer de quem já aplicou;
+    // `o_otimiza_nao_para_servico_do_windows` reprova o build se um item vivo voltar a parar serviço.
+    "disable_telemetry",
+    "disable_xbox_services",
+    "disable_sysmain",
+    "servicos_bluetooth_fora",
+    "servicos_impressora_fora",
+    "servicos_hyperv_fora",
+    "servicos_pouco_usados",
+    "servicos_de_empresa_fora",
+    "disable_search_indexing",
+    "error_reporting_off",
 ];
 
 pub fn retirado(id: &str) -> bool {
@@ -2435,6 +2439,32 @@ mod tests_1_6 {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    /// Regra do dono (10/11/2026): o Otimiza não deixa serviço do Windows parado. Item que para serviço só existe
+    /// aposentado, para o desfazer de quem aplicou antes.
+    #[test]
+    fn o_otimiza_nao_para_servico_do_windows() {
+        let vivos_que_param: Vec<String> = CATALOG
+            .iter()
+            .filter(|spec| !retirado(spec.id))
+            .filter_map(|spec| {
+                let servicos: Vec<&str> = spec
+                    .actions
+                    .iter()
+                    .filter_map(|a| match a {
+                        Action::DisableService { name } => Some(*name),
+                        _ => None,
+                    })
+                    .collect();
+                (!servicos.is_empty()).then(|| format!("{} ({})", spec.id, servicos.join(", ")))
+            })
+            .collect();
+        assert!(
+            vivos_que_param.is_empty(),
+            "estes itens param serviço do Windows e não estão em RETIRADOS: {:?}",
+            vivos_que_param
+        );
+    }
 
     #[test]
     fn catalog_ids_are_unique() {

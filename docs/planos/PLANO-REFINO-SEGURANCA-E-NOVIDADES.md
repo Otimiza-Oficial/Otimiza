@@ -258,7 +258,22 @@ otimização ruim, e o Otimiza não faz.** Quem paga para o jogo ficar liso não
   FiveM cruzados com o que o Otimiza mudou (`crashes.rs`).
 - **Modo seguro do próprio Otimiza** depois de quedas seguidas dele (`utils/diagnostico.rs`).
 
-### 5.2 O que falta
+### 5.2 Serviços do Windows: nenhum fica parado (feito em 10/11/2026)
+
+A lista de serviços "Stopped" (compatibilidade, diagnóstico, SysMain, telemetria) é a marca das ISOs modificadas e dos
+otimizadores famosos, e de onde vem travamento e recurso quebrado que ninguém liga à causa. O Otimiza não é mais quem
+deixa isso:
+
+- Os 10 itens que paravam serviço (58 serviços: telemetria, Xbox, SysMain, Bluetooth, impressora, Hyper-V, "pouco
+  usados" com PcaSvc e DPS, empresa, indexação e relatório de erros) saíram de todos os níveis e da lista de itens.
+  Três deles estavam no "Otimizar agora" padrão.
+- Ficam só para o desfazer de quem já aplicou: quem aplicou antes vê o item e religa o serviço com um toque.
+- `o_otimiza_nao_para_servico_do_windows` reprova o build se um item vivo voltar a parar serviço.
+- A recusa está na lista do que não fazemos (`parar_servicos_do_windows`), com o motivo.
+- No PC com Windows modificado, o Otimiza continua mostrando os serviços que a ISO tirou (`essenciais.rs`) e só religa
+  se a pessoa pedir.
+
+### 5.3 O que falta
 
 | # | Proteção | Por quê |
 |---|---|---|
@@ -271,7 +286,7 @@ otimização ruim, e o Otimiza não faz.** Quem paga para o jogo ficar liso não
 | E7 | **Recusar o que sabidamente trava**: resolução do temporizador forçada, HPET e `useplatformclock` pelo `bcdedit`, modo MSI forçado em todo aparelho, estados de ociosidade do processador desligados, prioridade tempo real, serviços essenciais desligados | Estão entre as dicas mais copiadas e entre as que mais causam tranco e tela azul; entram na lista do que não fazemos com o motivo |
 | E8 | **Ajuste novo entra em etapas**: uma versão como experimental, com o número de desfeitos pelo portão (opt-in); se muitos desfazem, um interruptor no servidor desliga o ajuste para todos | Um ajuste ruim não chega em todo cliente de uma vez |
 
-### 5.3 O próprio Otimiza não pode pesar
+### 5.4 O próprio Otimiza não pode pesar
 
 | # | Regra | Como conferir |
 |---|---|---|
@@ -280,7 +295,7 @@ otimização ruim, e o Otimiza não faz.** Quem paga para o jogo ficar liso não
 | E11 | Medição pesada (PresentMon, mapa de 40 s, sensores) **só quando pedida ou na janela agendada**, nunca sem parar | Contagem de sessões ETW abertas com o jogo aberto |
 | E12 | A interface **congela com o jogo aberto** (já existe) e o fechamento **nunca trava** | O log de cada passo do fechamento, que entrou hoje, e um teste que fecha com calibração e prova rodando |
 
-### 5.4 Pronto quando
+### 5.5 Pronto quando
 
 - Um ajuste que piora os trancos (teste com um teto de FPS errado de propósito) é desfeito sozinho na primeira partida.
 - Um ajuste de boot com desligamento forçado depois é desfeito na abertura seguinte, com o aviso.

@@ -41,14 +41,20 @@ pub static LISTA: &[NaoFazemos] = &[
                  que é o que o jogador sente como travada de rede.",
     },
     NaoFazemos {
+        id: "parar_servicos_do_windows",
+        nome: "Parar ou desativar serviços do Windows (SysMain, telemetria, compatibilidade, diagnóstico, indexação)",
+        natureza: Natureza::Prejudicial,
+        porque: "É o que as ISOs modificadas e os otimizadores famosos deixam como marca: uma lista de serviços                  parados. O ganho em jogo não aparece em nenhuma medição repetida, e o custo aparece depois, longe                  da causa: programa antigo que para de abrir (compatibilidade), problema que o Windows não consegue                  mais resolver sozinho (diagnóstico), pesquisa e Store quebradas, atualização que falha. O Otimiza                  mexe em prioridade, energia e no que roda durante o jogo, e devolve tudo quando o jogo fecha; os                  serviços do Windows ficam como a Microsoft deixou.",
+    },
+    NaoFazemos {
         id: "telemetria_por_fps",
         nome: "Desligar a telemetria do Windows para ganhar desempenho",
         natureza: Natureza::Placebo,
         porque: "O serviço de telemetria usa uma fração de processador que nenhum contador \
                  de quadros consegue separar do ruído, e quase sempre fora da partida. É uma \
                  escolha de privacidade, legítima, mas não de desempenho — e o Otimiza é uma \
-                 ferramenta de desempenho. Os ajustes de telemetria continuam no catálogo como \
-                 escolha de privacidade, só se a pessoa pedir, e sem prometer quadro.",
+                 ferramenta de desempenho. A coleta no mínimo continua como escolha de privacidade, \
+                 pela política do Windows e sem parar o serviço, e sem prometer quadro.",
     },
     NaoFazemos {
         id: "dns_para_ping",
