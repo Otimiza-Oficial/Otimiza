@@ -358,6 +358,9 @@ deixa isso:
 - R1 Ping com a internet ocupada (bufferbloat), na área Rede.
 - R6 Wi-Fi: o canal com bem menos disputa (1/6/11 no 2,4 GHz, sem DFS no 5 GHz), na ficha e no conselho.
 - R7 A rede na partida: ping nas janelas da medição automática; o cartão e o Oti dizem se foi a rede ou o PC.
+- FB1 e FB2 já existiam: o fluxo óptico no método do AMD FidelityFX foi testado contra o fluxo denso próprio (o denso
+  ficou de padrão, melhor nos quadros gravados do FiveM), e a máscara de interface protege o HUD desde a 3.3.
+- FB7 (HDR) já existia: o gerador trabalha em FP16 na área de trabalho HDR.
 - FB8 O Frame Boost ligado na mão que a guarda aprovou fica lembrado por jogo e volta sozinho no "Jogar" (jogo sem receita do Turbo).
 - FB6 Nitidez da escala escolhível (Suave, Padrão, Forte), muda na hora sem religar.
 - FB3 FPS alvo no Auto do Frame Boost: a tela chega no alvo (60 a 240, abaixo do monitor) e a base trava numa fração dele.
@@ -367,5 +370,9 @@ deixa isso:
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - Partida de respeito, fase 3: "Deixar liso" no cartão da partida com tranco; aviso de memória apertada no "Jogar".
 
-**Falta**: E4, E10–E12; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); FB1, FB2, FB4, FB5, FB7; R2–R5, R8; atestado A–D; itens 6.1,
+**Não feitos, com o motivo**: R4 (trocar DNS não muda o ping; está no "o que não fazemos"); FB5 (sem os marcadores
+do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
+cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
+
+**Falta**: E4, E10–E12; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D; itens 6.1,
 6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
