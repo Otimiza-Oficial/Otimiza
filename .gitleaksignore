@@ -1,0 +1,5 @@
+# Alarmes falsos do gitleaks, um por linha (impressão digital do achado). Revisados em 11/11/2026:
+# nomes de métricas do benchmark (key: "cpu_single_thread_mops"...), não chaves.
+1f318d68f214165c23fc3365b906513cf74f708a:pc-optimizer/src-tauri/src/modules/benchmark.rs:generic-api-key:170
+1f318d68f214165c23fc3365b906513cf74f708a:pc-optimizer/src-tauri/src/modules/benchmark.rs:generic-api-key:689
+1f318d68f214165c23fc3365b906513cf74f708a:pc-optimizer/src-tauri/src/modules/benchmark.rs:generic-api-key:706
