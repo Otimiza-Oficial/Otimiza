@@ -1,7 +1,7 @@
 # Plano — Refino, segurança e novidades
 
-> Três frentes: deixar a interface no nível de produto grande, fechar as portas por onde o Otimiza vaza, e trazer as
-> APIs e tecnologias que ainda não usamos. Escrito em 10/11/2026, depois da Onda 2, do "Jogar", do cartão da partida e
+> Quatro frentes: deixar a interface no nível de produto grande, fechar as portas por onde o Otimiza vaza, trazer as
+> APIs e tecnologias que ainda não usamos, e deixar mais fortes os sistemas que já existem. Escrito em 10/11/2026, depois da Onda 2, do "Jogar", do cartão da partida e
 > da apresentação nova. Complementa o `PLANO-1.0-NOVA-ERA.md` e o `PLANO-PARTIDA-DE-RESPEITO.md`.
 
 ---
@@ -33,7 +33,7 @@ que a original, e não deixar a porta aberta de graça, como está hoje.
 1. **Repositório privado.** Passar `Otimiza-Oficial/Otimiza` para privado, ou dividir:
    - público: site, documentação, o que é vitrine;
    - privado: `pc-optimizer/` inteiro (Rust, interface, bot).
-   O que já foi clonado não volta, mas cada versão nova deixa de sair de graça. **Decisão do dono** (seção 6).
+   O que já foi clonado não volta, mas cada versão nova deixa de sair de graça. **Decisão do dono** (seção 7).
 2. **Limpar o histórico de segredo.** O próprio código registra duas chaves privadas que vazaram (`.env.example` e uma
    captura de tela). Já foram trocadas, mas o histórico público ainda tem as antigas. Ao fechar o repositório, revisar
    com `gitleaks` e reescrever o histórico se ainda houver segredo.
@@ -182,9 +182,67 @@ Só entra o que é oficial, documentado e não toca no processo do jogo.
   números certos. A regra continua: só número medido, nunca age sozinho.
 - **Modelo local em NPU** (Windows ML / DirectML): só depois, e só se rodar sem pesar no jogo.
 
+## 4. Sistemas atuais: mais fortes
+
+O que já existe, e o próximo passo de cada um. "Apelão" aqui quer dizer mais ganho sentido e menos artefato, sempre
+medido: nenhum item entra sem prova antes e depois numa máquina real.
+
+### 4.1 Frame Boost
+
+Hoje: gerador por fora do jogo (captura da área de trabalho, movimento estimado na placa em blocos, mediana e
+interpolação; `modules/windows/geracao/`), escala FSR 1, Auto que enche o monitor, base travada numa fração do monitor
+(`base_do_jogo.rs`), guarda que desliga se o jogo perde FPS (`guarda.rs`), modo leve e aviso de placa integrada.
+
+| # | Melhoria | O que muda para quem joga |
+|---|---|---|
+| FB1 | **Fluxo óptico da AMD FidelityFX** (Optical Flow e Frame Interpolation do FidelityFX SDK, licença MIT, compute shaders que rodam em qualquer placa DX12) no lugar do casamento de blocos próprio | Menos borda tremendo, menos "fantasma" em volta de personagem e carro em movimento |
+| FB2 | **HUD protegido**: as regiões que não mudam entre quadros reais (mapa, mira, FPS, chat) não são interpoladas, saem do quadro real | Acaba o HUD tremido, o artefato que mais denuncia gerador por fora |
+| FB3 | **FPS alvo**: a pessoa escolhe 144 e o multiplicador vira fracionário (2,4×), em vez de 2× ou 3× fixos | A tela chega exatamente no monitor sem forçar a base |
+| FB4 | **Segunda placa**: em PC com vídeo integrado e placa dedicada (todo Intel com UHD, Ryzen com gráfico), o gerador roda na integrada | O jogo fica com a placa inteira; o custo da geração some do FPS real |
+| FB5 | **Latência medida, não estimada**: o PresentMon dá o tempo até a tela; o painel mostra quanto o gerador acrescentou de verdade | O jogador competitivo decide com número |
+| FB6 | **Nitidez escolhível na escala**: FSR 1 com RCAS ajustável e NVIDIA Image Scaling (NIS, licença MIT) como opção, mais escala inteira para jogo em pixel | Imagem ampliada mais nítida, do jeito que cada um gosta |
+| FB7 | **HDR e VRR**: gerar em 10 bits com o jogo em HDR, e respeitar o G-Sync/FreeSync com os quadros gerados | Hoje o HDR é um aviso; passa a funcionar |
+| FB8 | **Perfil por jogo aprendido**: o multiplicador, a escala e a base que a guarda aprovou em cada jogo voltam sozinhos no "Jogar" | Um toque, e já no melhor que esta máquina provou |
+
+Fora: injetar no jogo para pegar os vetores de movimento dele (é o que FSR 3 e DLSS fazem por dentro). Isso exige o
+jogo integrar, e por fora quebraria a regra do anticheat.
+
+### 4.2 Rede
+
+Hoje: rota salto a salto com a operadora de cada trecho (`rota.rs`, `operadora.rs`), histórico que diz quando piora
+(`rota_historico.rs`), perda e variação até o servidor do jogo (`rede.rs`), Wi-Fi lido pela API nativa (`wifi.rs`),
+Wi-Fi sem varredura no jogo (`wifi_varredura.rs`) e envio de segundo plano limitado (`banda.rs`).
+
+| # | Melhoria | O que muda para quem joga |
+|---|---|---|
+| R1 | **Teste de fila sob carga** (bufferbloat): ping medido parado, durante um download e durante um envio | Mostra a causa nº 1 de "ping sobe quando alguém usa a internet", com o número e a solução (SQM no roteador, limite de envio) |
+| R2 | **Placa de rede com prova**: Interrupt Moderation, Energy Efficient Ethernet, controle de fluxo e economia de energia da placa, cada um testado antes e depois na variação do ping | Só fica o que melhorou nesta placa; hoje ninguém prova isso |
+| R3 | **Quem está usando a banda agora**, por programa (contadores e ETW de rede) | "O OneDrive está enviando 8 Mb/s" no lugar de "sua internet está ruim" |
+| R4 | **DNS medido**: os públicos (Cloudflare, Google, Quad9, o da operadora) comparados nesta conexão | Troca só se o medido for mais rápido, e desfaz |
+| R5 | **Marcação de tráfego do jogo** (QoS por política do Windows, DSCP), como experimento | Em roteador que respeita a marcação, o jogo passa na frente; a tela diz que depende do roteador |
+| R6 | **Wi-Fi: canal e banda recomendados** pelas redes vizinhas e pelo sinal, e a agressividade de roaming da placa | "Mude o roteador para o canal 36" com o número de vizinhos de cada canal |
+| R7 | **A rede na partida**: perda e variação gravadas durante o jogo entram no cartão da partida | O cartão responde "foi a rede ou o PC?" |
+| R8 | **FiveM: ping de cada servidor** da lista do jogador antes de entrar | Escolher o servidor pelo número, não pelo nome |
+
+Fora, como hoje: "ping booster" que promete encurtar a distância até o servidor.
+
+### 4.3 Os outros
+
+| Sistema | Hoje | Próximo passo |
+|---|---|---|
+| **Turbo** | Mede 10 s, monta a receita pelo gargalo, prova sozinho na primeira vez | Montar a receita na própria partida aberta pelo "Jogar", sem a pessoa abrir o Turbo |
+| **Jogo liso** | Teto do driver no FPS que o jogo segura | Ligar sozinho quando os trancos por minuto passam do limite, e o teto acompanhar a cena |
+| **Energia** | Plano OTIMIZA, energia de jogo, calibração | Calibração curta automática na primeira semana, e limites de potência visíveis em notebook |
+| **Latência** | DPC por driver, taxa do mouse, teste de reflexo | Do driver culpado à correção: versão certa, opção da placa ou "desligue este aparelho USB" |
+| **Tela** | Hz, VRR lido do monitor | Aplicar o par VRR + teto 3 fps abaixo do Hz com um toque, e conferir o cabo pelo que o monitor aceita |
+| **Processador** | Auto CPU Set, X3D | Programas de fundo para os núcleos de eficiência durante o jogo (CPU Sets), com prova |
+| **Memória** | Mostra quem ocupa e fecha o que a pessoa escolhe | Avisar antes do jogo abrir, no "Jogar", e conferir o tamanho do arquivo de paginação |
+| **Mira e Cores** | Prévia nova, perfil por jogo nas cores | Mira por jogo, e cores ligando sozinhas no "Jogar" |
+| **Oti** | Fala pelo que mediu, IA opcional | Lembrar a última partida de cada jogo e comparar quando a pessoa perguntar |
+
 ---
 
-## 4. Ajustes e consertos pequenos que ficaram
+## 5. Ajustes e consertos pequenos que ficaram
 
 1. Investigar as sessões que terminam sem fechamento normal (log de cada passo entrou hoje).
 2. O "Jogar" para a Epic sem executável e para o Roblox sem jogo escolhido.
@@ -195,7 +253,7 @@ Só entra o que é oficial, documentado e não toca no processo do jogo.
 
 ---
 
-## 5. Ordem sugerida
+## 6. Ordem sugerida
 
 | Fase | O que entra | Por quê primeiro |
 |---|---|---|
@@ -205,11 +263,13 @@ Só entra o que é oficial, documentado e não toca no processo do jogo.
 | **4** | Dívida de tipos, dados reais, tokens únicos e componentes (2.1) | Base para o refino não quebrar |
 | **5** | 4 abas, estados vazios, esqueleto, movimento, gráficos reais (2.2, 2.3) | O salto visual |
 | **6** | APIs: notificações, ADLX/IGCL, PresentMon 2, Game Bar (3.1–3.3) | Mais ajuste e medição para AMD e Intel |
-| **7** | Atestado etapas C e D (1.2) | Só depois de a etapa A mostrar que os clientes renovam |
+| **7** | Frame Boost: fluxo óptico da FidelityFX, HUD protegido, FPS alvo e segunda placa (4.1) | O maior salto de "apelão" que dá para fazer por fora do jogo |
+| **8** | Rede: teste de fila sob carga, placa de rede com prova, quem usa a banda (4.2) | A causa de ping ruim que mais existe e menos se mede |
+| **9** | Atestado etapas C e D (1.2) | Só depois de a etapa A mostrar que os clientes renovam |
 
 ---
 
-## 6. Decisões que são do dono
+## 7. Decisões que são do dono
 
 1. **Repositório privado** (tudo) ou **dividido** (site público, programa privado)?
 2. **Assinatura**: contratar o Azure Trusted Signing (mensal) ou um certificado tradicional?
