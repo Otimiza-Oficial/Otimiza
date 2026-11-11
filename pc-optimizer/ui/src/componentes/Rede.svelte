@@ -81,6 +81,18 @@
     }
   }
 
+  let prioridade = $state<boolean | null>(null);
+  let erroPrioridade = $state<string | null>(null);
+  async function alternarPrioridade() {
+    if (prioridade === null) return;
+    erroPrioridade = null;
+    try {
+      prioridade = await ponte.definirPrioridadeNaRede(!prioridade);
+    } catch (e) {
+      erroPrioridade = String(e);
+    }
+  }
+
   let quemUsa = $state<QuemUsaARede | null>(null);
   let medindoQuemUsa = $state(false);
   let erroQuemUsa = $state<string | null>(null);
@@ -154,6 +166,7 @@
     ponte.varredura().then((v) => (varredura = v)).catch((e) => (erroVarredura = String(e)));
     ponte.banda().then((b) => (banda = b)).catch((e) => (erroBanda = String(e)));
     carregarHistorico();
+    ponte.prioridadeNaRede().then((v) => (prioridade = v)).catch(() => (prioridade = false));
   });
 
   /** Cada resultado do Rust tem nome; aqui vira a frase da tela, sem prometer o que o Windows não confirmou. */
@@ -652,6 +665,24 @@
           aria-labelledby="rede-varredura"
           disabled={!varredura || mudandoVarredura}
           onclick={alternarVarredura}
+        ></button>
+      </li>
+      <li>
+        <div class="opcao">
+          <span id="rede-prioridade">Jogo com prioridade na rede (experimento)</span>
+          <span class="apoio">
+            Marca os pacotes do jogo aberto como prioridade (DSCP 46). Só ajuda se o seu roteador tiver QoS ligado e
+            respeitar a marca; a maioria dos roteadores de operadora ignora. Some quando o jogo fecha.
+          </span>
+          {#if erroPrioridade}<span class="erro">{erroPrioridade}</span>{/if}
+        </div>
+        <button
+          class="interruptor"
+          role="switch"
+          aria-checked={prioridade ?? false}
+          aria-labelledby="rede-prioridade"
+          disabled={prioridade === null}
+          onclick={alternarPrioridade}
         ></button>
       </li>
     </ul>

@@ -693,6 +693,8 @@ const partidaDemo: {
 } = { desde: 0, pelo_jogar: false, aoPreparar: [], aoTerminar: [] };
 let cs2Demo: PainelDoCs2 = { instalado: true, ligado: false, estado: null };
 
+let prioridadeDemo = false;
+
 export const ponte = {
   versao: () => (noTauri ? commands.versaoDoApp() : Promise.resolve(demo.versao)),
   hardwareUltimo: () => (noTauri ? commands.hardwareUltimo() : Promise.resolve(demo.hardware)),
@@ -974,6 +976,13 @@ export const ponte = {
       frase:
         "É fila no modem (bufferbloat): com a linha cheia o ping sobe 213 ms enviando. Nenhum ajuste do PC resolve isso; o que resolve é ligar o SQM (\"QoS inteligente\") no roteador, ou limitar a velocidade a uns 90% do plano. No PC, segure o envio de fundo durante o jogo.",
     };
+  },
+  /** R5: o interruptor da marca de prioridade do jogo. */
+  prioridadeNaRede: (): Promise<boolean> => (noTauri ? commands.redePrioridadeEstado() : Promise.resolve(prioridadeDemo)),
+  definirPrioridadeNaRede: async (ligar: boolean): Promise<boolean> => {
+    if (noTauri) return ligar ? commands.redePrioridadeLigar() : commands.redePrioridadeDesligar();
+    prioridadeDemo = ligar;
+    return ligar;
   },
   /** R3: quem usa a internet agora, por programa (5 s). */
   quemUsaARede: async (): Promise<QuemUsaARede> => {

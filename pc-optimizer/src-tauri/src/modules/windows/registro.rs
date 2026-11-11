@@ -284,6 +284,17 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         desfazer: "Não precisa: só acrescenta um ponto de volta.",
     },
     Alteracao {
+        id: "prioridade_na_rede",
+        titulo: "Tráfego do jogo marcado como prioridade (experimento)",
+        modulo: "prioridade_jogo",
+        o_que_muda: "Só ligado pela pessoa, como administrador, e só com o jogo aberto: uma política QoS do Windows marca os pacotes do executável do jogo com DSCP 46. Roteador com QoS que respeita a marca passa o jogo na frente; o resto ignora. Nada além da marca muda.",
+        risco: Risco::Baixo,
+        escopo: Escopo::Jogo,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "A política some quando o jogo fecha, ao desligar o interruptor, na abertura seguinte do Otimiza e ao reiniciar o Windows (fica só na memória dele, ActiveStore).",
+    },
+    Alteracao {
         id: "placa_prova",
         titulo: "Placa de rede com prova",
         modulo: "placa_prova",

@@ -90,6 +90,12 @@ export const commands = {
 	redeProvarPlaca: () => __TAURI_INVOKE<ProvaDaPlaca_Serialize>("rede_provar_placa"),
 	/**  Quem está usando a internet agora, por programa (R3): 5 s de rastreamento. `LIVRES`: só lê. */
 	redeQuemUsa: () => __TAURI_INVOKE<QuemUsaARede>("rede_quem_usa"),
+	/**  O interruptor do R5 (o jogo marcado com DSCP 46). `LIVRES`: só lê. */
+	redePrioridadeEstado: () => __TAURI_INVOKE<boolean>("rede_prioridade_estado"),
+	/**  Liga o R5. `EXIGEM_LICENCA`. */
+	redePrioridadeLigar: () => __TAURI_INVOKE<boolean>("rede_prioridade_ligar"),
+	/**  Desliga o R5 (e tira a marca na hora). `LIVRES`: desligar nunca depende de licença. */
+	redePrioridadeDesligar: () => __TAURI_INVOKE<boolean>("rede_prioridade_desligar"),
 	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
 	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */

@@ -108,6 +108,37 @@ pub async fn rede_quem_usa() -> Result<crate::modules::windows::banda_por_progra
     }
 }
 
+/// O interruptor do R5 (o jogo marcado com DSCP 46). `LIVRES`: só lê.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn rede_prioridade_estado() -> bool {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::prioridade_jogo::ligado();
+    #[cfg(not(target_os = "windows"))]
+    false
+}
+
+/// Liga o R5. `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn rede_prioridade_ligar() -> Result<bool, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::prioridade_jogo::definir(true);
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Desliga o R5 (e tira a marca na hora). `LIVRES`: desligar nunca depende de licença.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn rede_prioridade_desligar() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::prioridade_jogo::definir(false);
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
 /// Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`.
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]

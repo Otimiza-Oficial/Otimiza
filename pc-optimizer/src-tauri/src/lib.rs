@@ -241,6 +241,9 @@ pub fn run() {
             commands::fivem_servidores_ping,
             commands::rede_provar_placa,
             commands::rede_quem_usa,
+            commands::rede_prioridade_estado,
+            commands::rede_prioridade_ligar,
+            commands::rede_prioridade_desligar,
             commands::rede_historico,
             commands::rede_wifi,
             commands::rede_varredura_wifi,
@@ -500,9 +503,11 @@ pub fn run() {
                         // "Jogar", a receita lembrada liga sozinha.
                         if let Some((jogo, executavel, caminho, desde, pelo_jogar)) = em_jogo.take() {
                             // FB8: o Frame Boost que a guarda aprovou nesta partida fica lembrado para o próximo "Jogar".
+                            // R5: a marca de prioridade do jogo sai junto com ele.
                             let fechado = executavel.clone();
                             let _ = tokio::task::spawn_blocking(move || {
-                                plataforma::fb_por_jogo::ao_fechar_o_jogo(&fechado)
+                                plataforma::fb_por_jogo::ao_fechar_o_jogo(&fechado);
+                                plataforma::prioridade_jogo::limpar();
                             })
                             .await;
                             let _ = handle.emit(
@@ -517,6 +522,8 @@ pub fn run() {
                             );
                         }
                         if let Some(j) = mudou.as_ref() {
+                            let marcar = j.executavel.clone();
+                            tauri::async_runtime::spawn_blocking(move || plataforma::prioridade_jogo::ao_abrir(&marcar));
                             let pelo_jogar = plataforma::partida::tomar_se_for(&j.nome, &j.executavel);
                             let caminho = modules::windows::frames::caminho_do_processo(&j.executavel);
                             em_jogo = Some((j.nome.clone(), j.executavel.clone(), caminho, std::time::Instant::now(), pelo_jogar));
@@ -795,6 +802,9 @@ pub fn run() {
             // Banda de fundo: o vigia dela devolve o que ficou e acompanha o jogo (thread própria, dorme 4 s por volta).
             #[cfg(target_os = "windows")]
             std::thread::spawn(crate::plataforma::banda::vigiar);
+            // R5: resto de marca de prioridade de uma sessão que caiu com o jogo aberto.
+            #[cfg(target_os = "windows")]
+            std::thread::spawn(crate::plataforma::prioridade_jogo::limpar);
 
             // Energia de jogo: devolve o que ficou de uma sessão que caiu e depois acompanha o jogo abrir e fechar. Duas
             // olhadas sem jogo antes de devolver: a troca de processo da tela de carregamento não derruba o ajuste.
