@@ -31,6 +31,7 @@ pub mod diskspace;
 pub mod display;
 pub mod dpc;
 pub mod essenciais;
+pub mod estabilidade;
 pub mod eventoshw;
 pub mod exhaustion;
 pub mod experimento;

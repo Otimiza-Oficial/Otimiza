@@ -123,6 +123,7 @@ mod tests {
             // Os eventos que a tela ouve (`listen`): o tipo vem daqui, como o dos comandos.
             .typ::<crate::plataforma::partida::Preparada>()
             .typ::<crate::plataforma::partida::Terminada>()
+            .typ::<crate::modules::windows::estabilidade::Relato>()
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)
             // Os `u64` que cruzam a ponte são carimbos de tempo e contagens: cabem com folga num `number`.

@@ -44,6 +44,7 @@ import {
   type RelatorioDaPartida_Serialize,
   type Preparada_Serialize,
   type Terminada as TerminadaGerada,
+  type RelatoDeEstabilidade,
   type VistoriaDoPlano,
   type DiagnosticoDeEnergia,
   type ResultadoDaProva_Serialize,
@@ -64,6 +65,7 @@ export type Lancamento = LancamentoGerado;
 export type RelatorioDaPartida = RelatorioDaPartida_Serialize;
 export type Preparada = Preparada_Serialize;
 export type Terminada = TerminadaGerada;
+export type AvisoDeEstabilidade = RelatoDeEstabilidade;
 export type ResumoDoJogo = ResumoDoJogo_Serialize;
 export type JogoDaLoja = JogoDaLoja_Serialize;
 export type Historico = HistoricoNaTela_Serialize;
@@ -739,6 +741,23 @@ export const ponte = {
     if (noTauri) return listen<Preparada>("partida:preparada", (e) => f(e.payload));
     partidaDemo.aoPreparar.push(f);
     return () => (partidaDemo.aoPreparar = partidaDemo.aoPreparar.filter((x) => x !== f));
+  },
+  /** `estabilidade:aviso`: o PC caiu depois de um ajuste, e o vigia desfez (ou explicou por que não). `?estabilidade`
+   *  mostra um aviso de exemplo no navegador. */
+  aoAvisoDeEstabilidade: async (f: (a: AvisoDeEstabilidade) => void): Promise<() => void> => {
+    if (noTauri) return listen<AvisoDeEstabilidade>("estabilidade:aviso", (e) => f(e.payload));
+    if (!new URLSearchParams(location.search).has("estabilidade")) return () => {};
+    const t = setTimeout(
+      () =>
+        f({
+          frase:
+            "Depois de ajustes do Otimiza, o Windows deu tela azul. O PC estava estável antes, então desfiz o que foi aplicado nas 48 horas antes disso.",
+          desfeitos: ["Timer fino para o sistema todo"],
+          falhas: [],
+        }),
+      2000,
+    );
+    return () => clearTimeout(t);
   },
   /** `partida:terminou`: o jogo fechou; a tela monta o cartão da partida. */
   aoTerminarPartida: async (f: (t: Terminada) => void): Promise<() => void> => {

@@ -719,6 +719,33 @@ pub fn run() {
                 }
             });
 
+            // Vigia de estabilidade (Plano de refino, E2 e E3): o PC estável que desligou sozinho, deu tela azul ou
+            // perdeu o driver de vídeo depois de um ajuste do Otimiza tem esse ajuste desfeito, e a tela avisa.
+            #[cfg(windows)]
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Emitter;
+                    // Depois de a abertura assentar: ler o registro de eventos custa um PowerShell.
+                    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+                    if utils::diagnostico::modo_seguro() {
+                        return;
+                    }
+                    let relatos = {
+                        let estado = handle.state::<commands::AppState>();
+                        let mut log = estado.changes.lock().await;
+                        modules::windows::estabilidade::conferir(&mut log)
+                    };
+                    for r in relatos {
+                        utils::Logger::warn(&format!(
+                            "estabilidade: {} Desfeitos: {:?}. Falhas: {:?}",
+                            r.frase, r.desfeitos, r.falhas
+                        ));
+                        let _ = handle.emit("estabilidade:aviso", &r);
+                    }
+                });
+            }
+
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
                 if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::windows::motorenergia_maquina::recuperar_teste_interrompido).await {

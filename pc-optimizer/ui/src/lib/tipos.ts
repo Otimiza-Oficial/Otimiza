@@ -1924,6 +1924,13 @@ export type RegistroDaRota_Serialize = {
 	operadora: string | null,
 };
 
+/**  O que o vigia fez nesta abertura, para o log e para a tela (`estabilidade:aviso`). */
+export type RelatoDeEstabilidade = {
+	frase: string,
+	desfeitos: string[],
+	falhas: string[],
+};
+
 export type Relatorio = Relatorio_Serialize | Relatorio_Deserialize;
 
 export type RelatorioDaPartida = RelatorioDaPartida_Serialize | RelatorioDaPartida_Deserialize;

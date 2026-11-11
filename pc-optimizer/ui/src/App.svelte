@@ -608,6 +608,16 @@
     window.addEventListener(JOGAR, pediuJogar);
     void Promise.all([
       ponte.aoPrepararPartida((p) => dizer(partidaPreparada(p), p.recusa || p.sem_receita ? 0 : 8000)),
+      ponte.aoAvisoDeEstabilidade((a) =>
+        dizer({
+          texto: a.desfeitos.length ? "Desfiz um ajuste que deixou o PC instável." : "O PC caiu depois de um ajuste.",
+          detalhe: [a.frase, a.desfeitos.length ? `Desfeito: ${a.desfeitos.join(", ")}.` : "", a.falhas.length ? `Não consegui desfazer: ${a.falhas.join("; ")}.` : ""]
+            .filter(Boolean)
+            .join(" "),
+          humor: "preocupado",
+          acoes: [{ rotulo: "Ver o histórico", tipo: "abrir", area: "historico", principal: true }],
+        }),
+      ),
       ponte.aoTerminarPartida(async (t) => {
         const r = await ponte.relatorioDaPartida().catch(() => null);
         cartao = montarCartao(t, r, Date.now() / 1000);
