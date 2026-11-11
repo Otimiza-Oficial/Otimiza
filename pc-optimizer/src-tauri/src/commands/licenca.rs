@@ -139,7 +139,7 @@ pub fn versao_do_app() -> VersaoDoApp {
     VersaoDoApp {
         interna: env!("CARGO_PKG_VERSION").to_string(),
         exibida: crate::modules::atualizacao::versao_de_exibicao(),
-        oficial: crate::modules::licenca_online::endereco().is_some(),
+        oficial: crate::modules::licenca_online::compilacao_oficial(),
     }
 }
 

@@ -363,6 +363,10 @@ deixa isso:
   nem o botão "Desligar".
 - E9 Detecção de jogo não mede de novo a cada volta (o PowerShell da GPU saía a cada 4 s na partida inteira).
 - 1.4 CSP ligada na janela; compilação local se identifica na barra e nos Ajustes.
+- 1.2 Etapa A: a API pública é o endereço padrão, então toda versão renova o atestado e obedece revogação (o selo
+  "compilação local" continua pela variável da esteira). Etapa B já estava no servidor (`licenca_pedidos`: IPs,
+  máquinas e executáveis por chave). A licença também é conferida dentro do Frame Boost, da medida do Turbo e do Jogo
+  liso, não só no comando.
 - 1.6 Esteira de segredos (`gitleaks`), `cargo audit` e `npm audit`; rustls/quinn corrigidos (0 vulnerabilidades).
 - R1 Ping com a internet ocupada (bufferbloat), na área Rede.
 - R6 Wi-Fi: o canal com bem menos disputa (1/6/11 no 2,4 GHz, sem DFS no 5 GHz), na ficha e no conselho.
@@ -390,4 +394,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

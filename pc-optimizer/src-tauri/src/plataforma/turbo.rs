@@ -652,6 +652,7 @@ pub fn painel() -> Painel {
 #[cfg(target_os = "windows")]
 pub fn medir() -> Result<(Receita, Option<f64>), String> {
     use crate::modules::windows::{bottleneck, presentmon};
+    crate::modules::licenca::exigir()?;
     let jogo = super::sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
     let pid = jogo.pid;
     let medida = std::thread::spawn(move || {

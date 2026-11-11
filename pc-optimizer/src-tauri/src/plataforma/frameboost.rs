@@ -562,6 +562,8 @@ pub fn ligar(
     escala: Option<geracao::escala::Nivel>,
     alvo_fps: Option<u32>,
 ) -> Result<Painel, String> {
+    // Plano de refino 1.2: a licença conferida também aqui, não só no comando (desligar nunca confere).
+    crate::modules::licenca::exigir()?;
     let jogo =
         super::sessao::atual().ok_or("Abra o jogo primeiro: o Frame Boost liga no jogo aberto.")?;
     let recomendado = jogo

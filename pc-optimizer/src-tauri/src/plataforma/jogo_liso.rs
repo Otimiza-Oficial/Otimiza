@@ -231,6 +231,7 @@ pub fn gravar_depois_da_partida(
     trancos_por_minuto: f64,
     log: &mut crate::modules::changelog::ChangeLog,
 ) -> Result<LisoGravado, String> {
+    crate::modules::licenca::exigir()?;
     let plano = planejar(fps, hz_principal(), trancos_por_minuto);
     let Some(teto) = plano.teto else {
         return Ok(LisoGravado { teto: None, motivo: plano.motivo });
