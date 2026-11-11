@@ -478,6 +478,12 @@ fn monitor_do_jogo(pid: u32) -> Option<(i32, i32)> {
 #[cfg(target_os = "windows")]
 static ALVO: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
 
+/// O alvo do automático ligado por último (FB8 guarda junto da escolha).
+#[cfg(target_os = "windows")]
+pub fn alvo_ligado() -> Option<u32> {
+    ALVO.lock().ok().and_then(|a| *a)
+}
+
 /// Trava o FPS base do jogo aberto para o Frame Boost do Otimiza (só ele: o do driver não tem o ritmo do Otimiza).
 #[cfg(target_os = "windows")]
 pub fn travar_base(log: &mut crate::modules::changelog::ChangeLog) {

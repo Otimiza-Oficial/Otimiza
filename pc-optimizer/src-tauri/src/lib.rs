@@ -496,6 +496,12 @@ pub fn run() {
                         // A partida (Plano "Partida de respeito"): ao fechar, a tela monta o cartão; ao abrir pelo
                         // "Jogar", a receita lembrada liga sozinha.
                         if let Some((jogo, executavel, caminho, desde, pelo_jogar)) = em_jogo.take() {
+                            // FB8: o Frame Boost que a guarda aprovou nesta partida fica lembrado para o próximo "Jogar".
+                            let fechado = executavel.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                plataforma::fb_por_jogo::ao_fechar_o_jogo(&fechado)
+                            })
+                            .await;
                             let _ = handle.emit(
                                 "partida:terminou",
                                 plataforma::partida::Terminada {
@@ -1349,6 +1355,36 @@ async fn preparar_partida(app: &tauri::AppHandle, jogo: String, executavel: &str
     let id = plataforma::historico::id_do_jogo(executavel).0;
     let sem_receita = plataforma::turbo::perfil(&id).is_none();
     if sem_receita {
+        // FB8: sem receita do Turbo, o Frame Boost que esta máquina já provou neste jogo volta sozinho.
+        #[cfg(target_os = "windows")]
+        if let Some(escolha) = plataforma::fb_por_jogo::escolha(&id) {
+            if !utils::diagnostico::modo_seguro() && modules::licenca::exigir().is_ok() {
+                let h = app.clone();
+                let e = escolha.clone();
+                let ligado = tokio::task::spawn_blocking(move || {
+                    plataforma::frameboost::ligar(&h, e.multiplicador, false, e.escala, e.alvo_fps).map(|_| ())
+                })
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|r| r);
+                match ligado {
+                    Ok(()) => {
+                        let estado = app.state::<AppState>();
+                        let mut log = estado.changes.lock().await;
+                        plataforma::frameboost::travar_base(&mut log);
+                        drop(log);
+                        let passo = format!(
+                            "{}, como na última partida (o jogo manteve {:.0}% do FPS)",
+                            plataforma::fb_por_jogo::descrever(&escolha),
+                            escolha.manteve_pct
+                        );
+                        utils::Logger::info(&format!("jogar: {} em {}", passo, jogo));
+                        return plataforma::partida::Preparada { jogo, passos: vec![passo], sem_receita: false, recusa: None };
+                    }
+                    Err(e) => utils::Logger::warn(&format!("jogar: o Frame Boost lembrado não ligou em {}: {}", jogo, e)),
+                }
+            }
+        }
         #[cfg(target_os = "windows")]
         tauri::async_runtime::spawn(medir_sem_receita(app.clone(), jogo.clone(), executavel.to_string()));
         return plataforma::partida::Preparada { jogo, passos: Vec::new(), sem_receita, recusa: None };
