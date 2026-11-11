@@ -615,6 +615,10 @@ const catalogoDemo: OptimizationInfo_Serialize[] = (
   retirado: false,
   expert: id === "foreground_priority",
   condicao: null,
+  cuidado:
+    id === "hags"
+      ? "Tranco ou tela preta com driver de vídeo antigo; só vale depois de reiniciar. Mais provável em: Placa NVIDIA antes da série 10, AMD antes da RX 5000, driver desatualizado"
+      : null,
   state,
   detail: state === "Unknown" ? "Não consegui ler o serviço agora." : null,
 }));

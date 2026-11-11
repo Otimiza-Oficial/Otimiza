@@ -377,6 +377,7 @@ impl OptimizationSpec {
                 Classe::Condicional(c) => Some(c.quando().to_string()),
                 _ => None,
             },
+            cuidado: super::riscos::cuidado(self.id),
             recommended,
             state,
             detail,

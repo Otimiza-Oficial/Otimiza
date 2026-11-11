@@ -349,6 +349,9 @@ deixa isso:
 - E1 O portão olha tranco; piora forte desfaz na primeira partida.
 - E2 e E3 Vigia de estabilidade: PC que cai depois de um ajuste (inclusive o de boot) tem o ajuste desfeito na abertura seguinte.
 - E5 Guarda térmica nos 30 minutos depois de um ajuste que esquenta.
+- E4 Cada item vivo do catálogo com o risco escrito (o que pode dar errado, onde, e a prova: portão, estabilidade,
+  térmica ou releitura) em `windows/riscos.rs`; item novo sem risco reprova o build. A tela mostra o "Pode dar errado"
+  nos que mexem em FPS ou estabilidade.
 - E6 Ajuste na chave de um serviço que a imagem "lite" removeu não é gravado ("não se aplica"), e o Windows modificado já é identificado.
 - E7 (parte) O tick fixo do `bcdedit` aposentado.
 - E8 Interruptor remoto: `ajustes_desligados` no `convite.json` desliga um ajuste para todos.
@@ -380,5 +383,5 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: E4; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D; itens 6.1,
+**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D; itens 6.1,
 6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

@@ -195,6 +195,9 @@
                     {#if a.requires_admin}<span>· administrador</span>{/if}
                     {#if a.requires_restart}<span>· reiniciar</span>{/if}
                   </span>
+                  {#if a.cuidado}
+                    <span class="apoio pequeno cuidado">Pode dar errado: {a.cuidado}</span>
+                  {/if}
                   {#if a.risco_de_fps.risco === "PodeCustar"}
                     <span class="risco">Pode custar FPS: {a.risco_de_fps.rotulo} ({a.risco_de_fps.quando})</span>
                   {/if}

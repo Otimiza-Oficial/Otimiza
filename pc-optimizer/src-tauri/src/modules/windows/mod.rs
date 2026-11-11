@@ -74,6 +74,7 @@ pub mod rbar;
 pub mod readiness;
 pub mod rede;
 pub mod registro;
+pub mod riscos;
 pub mod registry;
 pub mod restaurar;
 pub mod restore;

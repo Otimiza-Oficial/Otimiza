@@ -145,6 +145,10 @@ pub struct OptimizationInfo {
     pub expert: bool,
     #[serde(default)]
     pub condicao: Option<String>,
+    /// O que pode dar errado e onde (`windows::riscos`, Plano de refino E4). Só nos que mexem em FPS ou estabilidade:
+    /// o de gosto ("o Windows fica sem animações") não precisa de aviso.
+    #[serde(default)]
+    pub cuidado: Option<String>,
     pub state: OptimizationState,
     pub detail: Option<String>,
 }

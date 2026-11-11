@@ -1387,6 +1387,11 @@ export type OptimizationInfo_Deserialize = {
 	retirado?: boolean,
 	expert?: boolean,
 	condicao?: string | null,
+	/**
+	 *  O que pode dar errado e onde (`windows::riscos`, Plano de refino E4). Só nos que mexem em FPS ou estabilidade:
+	 *  o de gosto ("o Windows fica sem animações") não precisa de aviso.
+	 */
+	cuidado?: string | null,
 	state: EstadoDoAjuste,
 	detail?: string | null,
 };
@@ -1410,6 +1415,11 @@ export type OptimizationInfo_Serialize = {
 	retirado: boolean,
 	expert: boolean,
 	condicao: string | null,
+	/**
+	 *  O que pode dar errado e onde (`windows::riscos`, Plano de refino E4). Só nos que mexem em FPS ou estabilidade:
+	 *  o de gosto ("o Windows fica sem animações") não precisa de aviso.
+	 */
+	cuidado: string | null,
 	state: EstadoDoAjuste,
 	detail: string | null,
 };
