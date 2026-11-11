@@ -1,7 +1,7 @@
 # Pedido de feedback (3.3)
 
 Quem tem licença usa o Otimiza por **10 minutos**. Depois disso as **correções** pausam até existir um feedback
-dessa pessoa no canal de feedbacks (`1543436859529629707`). Medir, ver o diagnóstico e **desfazer** continuam livres.
+dessa pessoa no canal de feedbacks (`1563224882731290786`). Medir, ver o diagnóstico e **desfazer** continuam livres.
 Se a mensagem for apagada, as correções pausam de novo na próxima conferência.
 
 ## Como o programa sabe
@@ -29,7 +29,7 @@ licença. O programa confere a assinatura, o `tipo: "feedback"`, o código da m�
 {
   "discord": "https://discord.gg/ultimus",
   "api": "https://SEU-BOT.squareweb.app",
-  "canal_feedback": "https://discord.com/channels/<ID DO SERVIDOR>/1543436859529629707"
+  "canal_feedback": "https://discord.com/channels/<ID DO SERVIDOR>/1563224882731290786"
 }
 ```
 

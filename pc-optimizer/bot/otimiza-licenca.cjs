@@ -282,7 +282,7 @@ ${linha}
  * O canal de feedbacks. O Otimiza pausa as correções depois de 10 minutos de
  * uso até existir um feedback do cliente aqui (`plataforma/feedback.rs`).
  */
-const CANAL_DE_FEEDBACK = "1543436859529629707";
+const CANAL_DE_FEEDBACK = "1563224882731290786";
 
 /** O que conta como feedback: pelo menos 30 caracteres e um print (imagem). */
 const MINIMO_DE_CARACTERES = 30;
