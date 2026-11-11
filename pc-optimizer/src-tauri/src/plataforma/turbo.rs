@@ -84,6 +84,17 @@ pub struct Receita {
     pub explicacao: String,
 }
 
+/// Pura: só a receita de um gargalo de verdade vira perfil. "Nada no limite", "menu" e "o jogo segura" não ligam nada,
+/// e guardá-los faria o "Jogar" achar que o jogo já tem receita.
+pub fn vale_guardar(g: Gargalo) -> bool {
+    matches!(g, Gargalo::Placa | Gargalo::Processador | Gargalo::Memoria)
+}
+
+/// Plano de refino 6.4: na primeira partida sem receita, o Turbo mede sozinho depois destes segundos de jogo (o
+/// primeiro com a pessoa já fora do menu, quase sempre; o segundo se o primeiro pegou menu ou pausa). Só mede e guarda:
+/// nada muda no meio da partida, a receita liga no próximo "Jogar" e a prova automática a confere.
+pub const MEDIR_SEM_RECEITA_S: [u64; 2] = [120, 480];
+
 /// Pura: as duas receitas ligam a mesma coisa (escala, multiplicador e energia), mesmo com textos e FPS diferentes.
 /// É o que impede o "Medir de novo" de religar uma receita que a prova reprovou.
 pub fn mesma_acao(a: &Receita, b: &Receita) -> bool {
@@ -1005,6 +1016,15 @@ mod tests {
         assert!(!oferece_perfil_do_jogo("gta5"), "a trava de jogo aberto e o arquivo são do FiveM");
         assert!(!oferece_perfil_do_jogo("cs2"));
         assert!(PERFIS_DO_JOGO.iter().all(|p| ["competitivo", "equilibrado"].contains(p)));
+    }
+
+    #[test]
+    fn so_gargalo_de_verdade_vira_receita_guardada() {
+        assert!(vale_guardar(Gargalo::Placa) && vale_guardar(Gargalo::Processador) && vale_guardar(Gargalo::Memoria));
+        for g in [Gargalo::Nenhum, Gargalo::SemCarga, Gargalo::Jogo] {
+            assert!(!vale_guardar(g), "{g:?}");
+        }
+        assert!(MEDIR_SEM_RECEITA_S.windows(2).all(|w| w[0] < w[1]));
     }
 
     #[test]

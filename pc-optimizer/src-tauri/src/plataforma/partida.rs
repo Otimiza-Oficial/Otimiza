@@ -159,6 +159,14 @@ pub struct Preparada {
     pub recusa: Option<String>,
 }
 
+/// A receita que o Turbo mediu sozinho na primeira partida sem receita (`partida:receita_medida`).
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct ReceitaMedida {
+    pub jogo: String,
+    pub explicacao: String,
+}
+
 /// O que o vigia conta quando o jogo fecha (`partida:terminou`): a tela monta o cartão da partida com o relatório.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(specta::Type))]

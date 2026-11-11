@@ -172,7 +172,8 @@ export function partidaPreparada(p: { jogo: string; passos: string[]; sem_receit
   if (p.sem_receita)
     return {
       texto: `Abri o ${p.jogo}. Ainda não tenho a receita dele.`,
-      detalhe: "Com o jogo na frente, o Turbo mede 10 s e monta a receita. Da próxima vez, o Jogar liga ela sozinho.",
+      detalhe:
+        "Com uns minutos de partida eu meço o jogo e guardo a receita, sem mexer em nada agora. Da próxima vez, o Jogar liga ela sozinho. Se quiser já nesta partida, abra o Turbo.",
       humor: "atento",
       acoes: [{ rotulo: "Abrir o Turbo", tipo: "abrir", area: "turbo", principal: true }],
     };
@@ -180,6 +181,16 @@ export function partidaPreparada(p: { jogo: string; passos: string[]; sem_receit
     texto: `${p.jogo} pronto. Liguei a receita dele.`,
     detalhe: p.passos.length ? p.passos.join(" · ") : "A receita lembrada não precisou mudar nada agora.",
     humor: "jogando",
+    acoes: [],
+  };
+}
+
+/** A primeira partida sem receita mediu o jogo: a receita liga no próximo "Jogar" e se prova sozinha. */
+export function receitaMedida(r: { jogo: string; explicacao: string }): Fala {
+  return {
+    texto: `Medi o ${r.jogo} nesta partida e guardei a receita.`,
+    detalhe: `${r.explicacao} Ela liga sozinha da próxima vez que você jogar pelo Otimiza, e se deixar o jogo pior, desfaz.`,
+    humor: "feliz",
     acoes: [],
   };
 }

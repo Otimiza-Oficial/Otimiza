@@ -1941,6 +1941,12 @@ export type ReceitaDoTurbo_Serialize = {
 	explicacao: string,
 };
 
+/**  A receita que o Turbo mediu sozinho na primeira partida sem receita (`partida:receita_medida`). */
+export type ReceitaMedida = {
+	jogo: string,
+	explicacao: string,
+};
+
 export type Recurso = 
 /**  A geração do próprio jogo (DLSS, FSR ou XeSS com geração de quadros). */
 "FrameBoostDoJogo" | 

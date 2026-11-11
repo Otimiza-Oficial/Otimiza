@@ -43,6 +43,7 @@ import {
   type Lancamento as LancamentoGerado,
   type RelatorioDaPartida_Serialize,
   type Preparada_Serialize,
+  type ReceitaMedida,
   type Terminada as TerminadaGerada,
   type RelatoDeEstabilidade,
   type LisoGravado,
@@ -66,6 +67,7 @@ export type Hardware = PerfilDeHardware_Serialize;
 export type Lancamento = LancamentoGerado;
 export type RelatorioDaPartida = RelatorioDaPartida_Serialize;
 export type Preparada = Preparada_Serialize;
+export type { ReceitaMedida };
 export type Terminada = TerminadaGerada;
 export type AvisoDeEstabilidade = RelatoDeEstabilidade;
 export type { LisoGravado };
@@ -751,6 +753,11 @@ export const ponte = {
     if (noTauri) return listen<Preparada>("partida:preparada", (e) => f(e.payload));
     partidaDemo.aoPreparar.push(f);
     return () => (partidaDemo.aoPreparar = partidaDemo.aoPreparar.filter((x) => x !== f));
+  },
+  /** `partida:receita_medida`: a primeira partida sem receita mediu o jogo e guardou a receita para o próximo "Jogar". */
+  aoMedirReceita: async (f: (r: ReceitaMedida) => void): Promise<() => void> => {
+    if (noTauri) return listen<ReceitaMedida>("partida:receita_medida", (e) => f(e.payload));
+    return () => {};
   },
   /** `estabilidade:aviso`: o PC caiu depois de um ajuste, e o vigia desfez (ou explicou por que não). `?estabilidade`
    *  mostra um aviso de exemplo no navegador. */

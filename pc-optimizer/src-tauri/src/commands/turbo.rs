@@ -65,10 +65,7 @@ pub async fn turbo_ligar(
             }
             turbo::aplicar(&app, &receita, fps_antes);
             let aplicada = receita.clone();
-            if !lembrada && matches!(
-                receita.gargalo,
-                turbo::Gargalo::Placa | turbo::Gargalo::Processador | turbo::Gargalo::Memoria
-            ) {
+            if !lembrada && turbo::vale_guardar(receita.gargalo) {
                 let perfil = turbo::Perfil {
                     receita,
                     fps_antes,

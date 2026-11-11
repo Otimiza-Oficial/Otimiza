@@ -357,8 +357,9 @@ deixa isso:
 - R1 Ping com a internet ocupada (bufferbloat), na área Rede.
 - 6.2 "Jogar": Epic pelo inicializador dela, Roblox pela página inicial.
 - 6.3 MSI em português (`wix.language = pt-BR`).
+- 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - Partida de respeito, fase 3: "Deixar liso" no cartão da partida com tranco; aviso de memória apertada no "Jogar".
 
 **Falta**: E3, E4, E6, E10–E12; 2.1–2.3 (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R8; atestado A–D; itens 6.1,
-6.4–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados) e subir
+6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados) e subir
 o `bot-pacote.zip` na hospedagem.

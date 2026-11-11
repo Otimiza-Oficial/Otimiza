@@ -1293,10 +1293,56 @@ mod tests_da_janela {
 /// O jogo que o "Jogar" abriu apareceu: liga a receita que o Turbo lembra dele, a mesma do toque em "Ligar" no cartão.
 /// Sem receita guardada, não mede nada sozinho (medir leva 10 s com o jogo na frente): a tela oferece o Turbo.
 #[cfg(target_os = "windows")]
+/// Plano de refino 6.4: a primeira partida sem receita já monta a receita. O Turbo mede 10 s depois de uns minutos de
+/// jogo e guarda; nada é ligado agora (mudar a escala no meio da partida seria pior que esperar a próxima).
+#[cfg(target_os = "windows")]
+async fn medir_sem_receita(app: tauri::AppHandle, jogo: String, executavel: String) {
+    use plataforma::turbo;
+    let id = plataforma::historico::id_do_jogo(&executavel).0;
+    let mut passados = 0;
+    for momento in turbo::MEDIR_SEM_RECEITA_S {
+        tokio::time::sleep(std::time::Duration::from_secs(momento - passados)).await;
+        passados = momento;
+        let aberto = plataforma::sessao::atual().is_some_and(|j| j.executavel.eq_ignore_ascii_case(&executavel));
+        // O jogo fechou, ou a pessoa ligou o Turbo na mão (que já mediu e guardou).
+        if !aberto || turbo::perfil(&id).is_some() {
+            return;
+        }
+        if turbo::em_prova() || modules::provaalternada::em_andamento() {
+            continue;
+        }
+        match tokio::task::spawn_blocking(turbo::medir).await {
+            Ok(Ok((receita, fps_antes))) if turbo::vale_guardar(receita.gargalo) => {
+                let explicacao = receita.explicacao.clone();
+                let perfil = turbo::Perfil {
+                    receita,
+                    fps_antes,
+                    medido_em: modules::changelog::now_timestamp(),
+                    prova: None,
+                };
+                if let Err(e) = turbo::lembrar(&id, perfil) {
+                    utils::Logger::warn(&format!("jogar: não guardei a receita medida de {}: {}", id, e));
+                    return;
+                }
+                utils::Logger::info(&format!("jogar: receita de {} medida na partida e guardada", id));
+                let _ = tauri::Emitter::emit(&app, "partida:receita_medida", plataforma::partida::ReceitaMedida { jogo, explicacao });
+                return;
+            }
+            Ok(Ok((receita, _))) => {
+                utils::Logger::info(&format!("jogar: {} sem gargalo na medida ({:?})", id, receita.gargalo))
+            }
+            Ok(Err(e)) => utils::Logger::warn(&format!("jogar: a medida de {} não saiu: {}", id, e)),
+            Err(e) => utils::Logger::warn(&format!("jogar: a medida de {} parou: {}", id, e)),
+        }
+    }
+}
+
 async fn preparar_partida(app: &tauri::AppHandle, jogo: String, executavel: &str) -> plataforma::partida::Preparada {
     let id = plataforma::historico::id_do_jogo(executavel).0;
     let sem_receita = plataforma::turbo::perfil(&id).is_none();
     if sem_receita {
+        #[cfg(target_os = "windows")]
+        tauri::async_runtime::spawn(medir_sem_receita(app.clone(), jogo.clone(), executavel.to_string()));
         return plataforma::partida::Preparada { jogo, passos: Vec::new(), sem_receita, recusa: None };
     }
     if utils::diagnostico::modo_seguro() {

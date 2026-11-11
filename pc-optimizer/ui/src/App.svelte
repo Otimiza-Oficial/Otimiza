@@ -26,7 +26,7 @@
   import { areas, type IdDaArea } from "./lib/areas";
   import { avisos as lerAvisos } from "./lib/clima";
   import { capaRemota, iniciais } from "./lib/capas";
-  import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, type Acao, type Fala } from "./lib/conversa";
+  import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, receitaMedida, type Acao, type Fala } from "./lib/conversa";
   import { fraseDaComparacao, JOGAR, montarCartao, ofereceLiso, textoParaCompartilhar, type Cartao, type Terminada } from "./lib/partida";
   import {
     contaQueRoda,
@@ -640,6 +640,7 @@
     window.addEventListener(JOGAR, pediuJogar);
     void Promise.all([
       ponte.aoPrepararPartida((p) => dizer(partidaPreparada(p), p.recusa || p.sem_receita ? 0 : 8000)),
+      ponte.aoMedirReceita((r) => dizer(receitaMedida(r), 12000)),
       ponte.aoAvisoDeEstabilidade((a) =>
         dizer({
           texto: a.desfeitos.length ? "Desfiz um ajuste que deixou o PC instável." : "O PC caiu depois de um ajuste.",
