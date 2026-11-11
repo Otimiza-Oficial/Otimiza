@@ -25,6 +25,16 @@ pub const OFFLOAD_PERMITIDOS: &[&str] = &["ReceiveSideScaling", "ReceiveSegmentC
 
 pub const ADAPTADOR_PERMITIDOS: &[&str] = &["Lso", "ChecksumOffload"];
 
+/// Propriedades avançadas da placa que o teste com prova (R2) pode mudar, pela palavra do registro (igual em qualquer
+/// idioma). `*` são as padronizadas pela Microsoft; as outras, os nomes de Intel e Realtek para a mesma coisa.
+pub const PROPRIEDADES_PERMITIDAS: &[&str] = &[
+    "*InterruptModeration",
+    "*EEE",
+    "EEELinkAdvertisement",
+    "EnableGreenEthernet",
+    "*FlowControl",
+];
+
 const CLASSE_DE_VIDEO: &str =
     r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
 const PSTATE: &str = "DisableDynamicPstate";
@@ -180,6 +190,50 @@ pub fn mudar_na_placa(recurso: &str, placa: &str, ligar: bool) -> Result<(), Str
         aspas(placa),
         verbo,
         recurso
+    ))
+    .map(|_| ())
+}
+
+// ---------- propriedades avançadas da placa de rede (R2) ----------
+
+/// A placa FÍSICA por onde sai a rota padrão. `None`: rota por VPN, sem rede, ou não deu para ler.
+pub fn placa_da_rota() -> Option<String> {
+    ler_powershell(
+        "$r = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop | Sort-Object { $_.RouteMetric + $_.InterfaceMetric } | Select-Object -First 1; \
+         (Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.ifIndex -eq $r.ifIndex } | Select-Object -First 1).Name",
+    )
+}
+
+/// O valor atual e os aceitos, `valor|aceito1,aceito2`. `None`: a placa não tem a propriedade.
+pub fn ler_propriedade(placa: &str, palavra: &str) -> Option<(String, Vec<String>)> {
+    if !PROPRIEDADES_PERMITIDAS.contains(&palavra) {
+        return None;
+    }
+    let bruto = ler_powershell(&format!(
+        "Get-NetAdapterAdvancedProperty -AllProperties -ErrorAction Stop | Where-Object {{ $_.Name -eq {} -and $_.RegistryKeyword -eq {} }} | \
+         Select-Object -First 1 | ForEach-Object {{ \"$($_.RegistryValue -join ',')|$($_.ValidRegistryValues -join ',')\" }}",
+        aspas(placa),
+        aspas(palavra)
+    ))?;
+    let (valor, aceitos) = bruto.split_once('|')?;
+    let valor = valor.trim().to_string();
+    (!valor.is_empty()).then(|| (valor, aceitos.split(',').map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect()))
+}
+
+/// Muda a propriedade (a placa reinicia: a internet cai por alguns segundos).
+pub fn definir_propriedade(placa: &str, palavra: &str, valor: &str) -> Result<(), String> {
+    if !PROPRIEDADES_PERMITIDAS.contains(&palavra) {
+        return Err(format!("`{}` não é uma propriedade que o Otimiza muda.", palavra));
+    }
+    if !palavra_segura(valor) {
+        return Err(format!("O valor de `{}` não é válido.", palavra));
+    }
+    shell::powershell_checked(&format!(
+        "Get-NetAdapterAdvancedProperty -AllProperties -ErrorAction Stop | Where-Object {{ $_.Name -eq {} -and $_.RegistryKeyword -eq {} }} | \
+         Set-NetAdapterAdvancedProperty -RegistryValue {} -ErrorAction Stop",
+        aspas(placa),
+        aspas(palavra),
+        aspas(valor)
     ))
     .map(|_| ())
 }

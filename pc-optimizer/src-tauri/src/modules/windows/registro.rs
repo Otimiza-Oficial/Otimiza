@@ -284,6 +284,17 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         desfazer: "Não precisa: só acrescenta um ponto de volta.",
     },
     Alteracao {
+        id: "placa_prova",
+        titulo: "Placa de rede com prova",
+        modulo: "placa_prova",
+        o_que_muda: "Só ligado pela pessoa, como administrador e com o jogo fechado: na placa física por onde sai a internet, testa desligar a moderação de interrupção, a Ethernet de economia (EEE) e o controle de fluxo, um por vez, medindo 20 s de ping antes e depois. Fica só o que baixou a variação do ping sem aumentar perda nem ping; o resto volta na hora. A placa reinicia a cada troca (a internet cai alguns segundos).",
+        risco: Risco::Medio,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "O que ficou está no histórico, um por propriedade: o desfazer devolve o valor lido antes do teste. O que não melhorou já volta sozinho durante o teste, e a placa que não volta a responder é desfeita na hora.",
+    },
+    Alteracao {
         id: "banda_de_fundo",
         titulo: "Banda dos programas de fundo durante o jogo",
         modulo: "banda",

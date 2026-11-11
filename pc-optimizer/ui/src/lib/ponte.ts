@@ -55,6 +55,7 @@ import {
   type HistoricoDaRede_Serialize,
   type FilaMedida_Serialize,
   type ServidorMedido,
+  type ProvaDaPlaca,
   type TaxaDoMouse_Serialize,
   type PainelDoCs2,
   type PcsParecidos,
@@ -85,7 +86,7 @@ export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
 export type FilaMedida = FilaMedida_Serialize;
-export type { ServidorMedido };
+export type { ServidorMedido, ProvaDaPlaca };
 export type TaxaDoMouse = TaxaDoMouse_Serialize;
 export type { PainelDoCs2, PcsParecidos } from "./tipos";
 export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
@@ -971,6 +972,19 @@ export const ponte = {
       enviando: { ping_ms: 231, perda_pct: 3, mbps: 38, a_mais_ms: 213, classe: "Ruim" },
       frase:
         "É fila no modem (bufferbloat): com a linha cheia o ping sobe 213 ms enviando. Nenhum ajuste do PC resolve isso; o que resolve é ligar o SQM (\"QoS inteligente\") no roteador, ou limitar a velocidade a uns 90% do plano. No PC, segure o envio de fundo durante o jogo.",
+    };
+  },
+  /** R2: testa as propriedades da placa de rede no ping e mantém só o que melhorou (minutos, com quedas curtas). */
+  provarPlaca: async (): Promise<ProvaDaPlaca> => {
+    if (noTauri) return commands.redeProvarPlaca();
+    await new Promise((r) => setTimeout(r, 2500));
+    return {
+      placa: "Ethernet",
+      tentativas: [
+        { nome: "Moderação de interrupção", desfecho: "Voltou", variacao_antes_ms: 3.1, variacao_depois_ms: 2.9, frase: "Voltou como estava: variação de 3,1 para 2,9 ms, sem melhora que passe do ruído." },
+        { nome: "Ethernet de economia (EEE)", desfecho: "Ficou", variacao_antes_ms: 3.0, variacao_depois_ms: 1.6, frase: "Ficou: a variação do ping caiu de 3,0 para 1,6 ms." },
+      ],
+      frase: "1 de 2 mudanças melhoraram o ping nesta placa e ficaram (no histórico, com desfazer).",
     };
   },
   /** R8: o ping de cada servidor do FiveM colado, do menor para o maior. */

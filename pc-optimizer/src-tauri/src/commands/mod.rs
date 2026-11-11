@@ -388,6 +388,7 @@ mod tests {
         "tela_trocar_hz",
         "rede_varredura_wifi_ligar",
         "banda_ligar",
+        "rede_provar_placa",
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "cpuset_testar",

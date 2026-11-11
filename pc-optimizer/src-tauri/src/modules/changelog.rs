@@ -135,6 +135,12 @@ pub enum ChangeRecord {
         parametro: String,
         anterior: String,
     },
+    /// Propriedade avançada da placa de rede que o teste com prova manteve (`plataforma::placa_prova`, R2).
+    PropriedadeDaPlaca {
+        placa: String,
+        palavra: String,
+        anterior: String,
+    },
     /// As placas de rede em que o recurso estava ligado: o desfazer liga de novo só nelas.
     RedeAdaptador {
         recurso: String,
@@ -282,6 +288,9 @@ impl ChangeRecord {
             }
             ChangeRecord::RedeAdaptador { recurso, placas } => {
                 format!("rede · {} desligado em {}", recurso, placas.join(", "))
+            }
+            ChangeRecord::PropriedadeDaPlaca { placa, palavra, anterior } => {
+                format!("placa de rede {} · {} (antes: {})", placa, palavra, anterior)
             }
             ChangeRecord::ModoDeTela {
                 dispositivo,

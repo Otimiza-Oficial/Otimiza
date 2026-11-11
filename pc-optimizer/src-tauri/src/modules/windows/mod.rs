@@ -2982,6 +2982,9 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
             ChangeRecord::RedeOffload { parametro, anterior } => {
                 pacote::definir_offload(parametro, anterior)
             }
+            ChangeRecord::PropriedadeDaPlaca { placa, palavra, anterior } => {
+                pacote::definir_propriedade(placa, palavra, anterior)
+            }
             ChangeRecord::RedeAdaptador { recurso, placas } => {
                 let falhas: Vec<String> = placas
                     .iter()

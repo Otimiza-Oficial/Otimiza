@@ -63,6 +63,35 @@ pub async fn fivem_servidores_ping(
     crate::plataforma::servidores_fivem::medir(entradas).await
 }
 
+/// A placa de rede com prova (R2): testa cada propriedade no ping e mantém só o que melhorou. Uns 2 a 4 minutos, com
+/// a internet caindo alguns segundos a cada troca. `EXIGEM_LICENCA`.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn rede_provar_placa(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<crate::plataforma::placa_prova::ProvaDaPlaca, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        // A trava do histórico fica presa o teste inteiro: nada mais grava no meio. O teste grava no do disco (o mesmo
+        // conteúdo), e a memória é relida no fim.
+        let mut log = state.changes.lock().await;
+        let r = tokio::task::spawn_blocking(|| {
+            let mut do_disco = crate::modules::changelog::ChangeLog::load();
+            crate::plataforma::placa_prova::provar(&mut do_disco)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        *log = crate::modules::changelog::ChangeLog::load();
+        r
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`.
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]

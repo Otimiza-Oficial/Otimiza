@@ -9,6 +9,7 @@
     type DiagnosticoDoWifi,
     type FilaMedida,
     type ServidorMedido,
+    type ProvaDaPlaca,
     type HistoricoDaRede,
     type PainelDaBanda,
     type PainelDaVarredura,
@@ -78,6 +79,24 @@
       medindoServidores = false;
     }
   }
+
+  let provaDaPlaca = $state<ProvaDaPlaca | null>(null);
+  let provandoPlaca = $state(false);
+  let erroDaPlaca = $state<string | null>(null);
+
+  async function provarPlaca() {
+    provandoPlaca = true;
+    erroDaPlaca = null;
+    try {
+      provaDaPlaca = await ponte.provarPlaca();
+    } catch (e) {
+      erroDaPlaca = String(e);
+    } finally {
+      provandoPlaca = false;
+    }
+  }
+
+  const TOM_DA_TENTATIVA = { Ficou: "ok", Voltou: "neutro", PlacaNaoVoltou: "atencao", Recusado: "neutro" } as const;
 
   let fila = $state<FilaMedida | null>(null);
   let medindoFila = $state(false);
@@ -414,6 +433,36 @@
         {/each}
       </div>
       <p class="destaque">{fila.frase}</p>
+    {/if}
+  </section>
+
+  <!-- Placa de rede com prova -->
+  <section class="secao" aria-labelledby="rede-placa">
+    <h2 id="rede-placa">Testar a placa de rede</h2>
+    <p class="apoio">
+      Moderação de interrupção, Ethernet de economia e controle de fluxo: cada placa reage de um jeito. O Otimiza testa
+      cada uma no ping desta placa e só mantém o que deixou o ping mais estável. Leva de 2 a 4 minutos, a internet cai
+      alguns segundos a cada troca, e precisa do jogo fechado e do Otimiza como administrador.
+    </p>
+    <div>
+      <button class="btn primario" type="button" disabled={provandoPlaca} onclick={provarPlaca}>
+        {provandoPlaca ? "Testando… (não feche o Otimiza)" : provaDaPlaca ? "Testar de novo" : "Testar a placa"}
+      </button>
+    </div>
+    {#if erroDaPlaca}
+      <p class="erro">{erroDaPlaca}</p>
+    {:else if provaDaPlaca && !provandoPlaca}
+      <p class="destaque">{provaDaPlaca.frase}</p>
+      {#if provaDaPlaca.tentativas.length}
+        <ul class="achados">
+          {#each provaDaPlaca.tentativas as t (t.nome)}
+            <li>
+              <span class="ponto" data-tom={TOM_DA_TENTATIVA[t.desfecho]}></span>
+              <div><strong>{t.nome}</strong> <span class="apoio">{t.frase}</span></div>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     {/if}
   </section>
 

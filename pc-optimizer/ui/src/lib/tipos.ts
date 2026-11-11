@@ -83,6 +83,11 @@ export const commands = {
 	redeFila: () => __TAURI_INVOKE<FilaMedida_Serialize>("rede_fila"),
 	/**  O ping dos servidores do FiveM que a pessoa colou (R8), do menor para o maior. Uns 2 s. `LIVRES`. */
 	fivemServidoresPing: (entradas: string[]) => __TAURI_INVOKE<ServidorMedido_Serialize[]>("fivem_servidores_ping", { entradas }),
+	/**
+	 *  A placa de rede com prova (R2): testa cada propriedade no ping e mantém só o que melhorou. Uns 2 a 4 minutos, com
+	 *  a internet caindo alguns segundos a cada troca. `EXIGEM_LICENCA`.
+	 */
+	redeProvarPlaca: () => __TAURI_INVOKE<ProvaDaPlaca_Serialize>("rede_provar_placa"),
 	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
 	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
@@ -578,6 +583,12 @@ export type Conselho = {
 };
 
 export type Desfecho = { estado: "Voltou" } | { estado: "NadaAFazer" } | { estado: "Falhou"; motivo: string };
+
+export type DesfechoDaPlaca = "Ficou" | "Voltou" | 
+/**  A placa não voltou a responder depois da troca: desfeito na hora. */
+"PlacaNaoVoltou" | 
+/**  O Windows recusou a troca (driver não aceita o valor). */
+"Recusado";
 
 export type DesfechoDaProva = 
 /**  Mais FPS do jogo ou 1% pior mais alto, além do ruído, sem piora no outro. */
@@ -1905,6 +1916,20 @@ export type Preparada_Serialize = {
 
 export type ProblemaDaRota = "perda" | "variacao";
 
+export type ProvaDaPlaca = ProvaDaPlaca_Serialize | ProvaDaPlaca_Deserialize;
+
+export type ProvaDaPlaca_Deserialize = {
+	placa: string,
+	tentativas: TentativaNaPlaca_Deserialize[],
+	frase: string,
+};
+
+export type ProvaDaPlaca_Serialize = {
+	placa: string,
+	tentativas: TentativaNaPlaca_Serialize[],
+	frase: string,
+};
+
 export type Quality = "MEASURED" | "ESTIMATED" | "UNKNOWN";
 
 export type RAMMetrics = RAMMetrics_Serialize | RAMMetrics_Deserialize;
@@ -2800,6 +2825,24 @@ export type Telemetry_Serialize = {
 	collection_duration_ms: number,
 	summary: Summary,
 	metrics: { [key in string]: Metric_Serialize },
+};
+
+export type TentativaNaPlaca = TentativaNaPlaca_Serialize | TentativaNaPlaca_Deserialize;
+
+export type TentativaNaPlaca_Deserialize = {
+	nome: string,
+	desfecho: DesfechoDaPlaca,
+	variacao_antes_ms?: number | null,
+	variacao_depois_ms?: number | null,
+	frase: string,
+};
+
+export type TentativaNaPlaca_Serialize = {
+	nome: string,
+	desfecho: DesfechoDaPlaca,
+	variacao_antes_ms: number | null,
+	variacao_depois_ms: number | null,
+	frase: string,
 };
 
 /**  O que o vigia conta quando o jogo fecha (`partida:terminou`): a tela monta o cartão da partida com o relatório. */
