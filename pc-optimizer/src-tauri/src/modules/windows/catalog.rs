@@ -220,7 +220,6 @@ pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("prefetch_desligado", Condicao::SoSePedir),
     ("privacidade_do_pacote", Condicao::SoSePedir),
     ("placa_no_clock_maximo", Condicao::SoSePedir),
-    ("tick_do_pacote", Condicao::SoSePedir),
     ("tcp_do_pacote", Condicao::SoSePedir),
     ("compartilhamento_do_pacote", Condicao::SoSePedir),
     ("bufferbloat_do_pacote", Condicao::SoSePedir),
@@ -264,6 +263,10 @@ pub const RETIRADOS: &[&str] = &[
     "servicos_de_empresa_fora",
     "disable_search_indexing",
     "error_reporting_off",
+    // Plano de refino, E7: o relógio do boot pelo `bcdedit` (tick fixo, tick da plataforma, sincronismo antigo) é das
+    // dicas que mais deixam o PC menos regular, e só aparece depois de reiniciar, longe da causa.
+    // `nenhum_item_vivo_mexe_no_relogio_do_boot` reprova o build se voltar.
+    "tick_do_pacote",
 ];
 
 pub fn retirado(id: &str) -> bool {
@@ -2464,6 +2467,18 @@ mod tests {
             "estes itens param serviço do Windows e não estão em RETIRADOS: {:?}",
             vivos_que_param
         );
+    }
+
+    /// Plano de refino, E7: nenhum ajuste vivo mexe no relógio do Windows pelo `bcdedit`.
+    #[test]
+    fn nenhum_item_vivo_mexe_no_relogio_do_boot() {
+        let vivos: Vec<&str> = CATALOG
+            .iter()
+            .filter(|spec| !retirado(spec.id))
+            .filter(|spec| spec.actions.iter().any(|a| matches!(a, Action::BootValor { .. })))
+            .map(|spec| spec.id)
+            .collect();
+        assert!(vivos.is_empty(), "mexem no relógio do boot e não estão em RETIRADOS: {:?}", vivos);
     }
 
     #[test]

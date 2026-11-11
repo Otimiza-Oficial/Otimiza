@@ -41,6 +41,16 @@ pub static LISTA: &[NaoFazemos] = &[
                  que é o que o jogador sente como travada de rede.",
     },
     NaoFazemos {
+        id: "relogio_do_boot",
+        nome: "Mudar o relógio do Windows pelo bcdedit (tick fixo, useplatformtick, useplatformclock, tscsyncpolicy)",
+        natureza: Natureza::Prejudicial,
+        porque: "O Windows escolhe sozinho o relógio mais barato e mais estável de cada processador. Forçar o tick da \
+                 plataforma ou o sincronismo antigo deixa, em parte dos PCs, o tempo de cada quadro MENOS regular, que \
+                 é justamente o tranco que a dica promete tirar, e às vezes atrasa o boot. Como só vale depois de \
+                 reiniciar, a pessoa não liga o tranco à mudança. Nenhuma medição repetida mostra ganho que pague o \
+                 risco; o Otimiza deixa o relógio como o Windows escolheu.",
+    },
+    NaoFazemos {
         id: "parar_servicos_do_windows",
         nome: "Parar ou desativar serviços do Windows (SysMain, telemetria, compatibilidade, diagnóstico, indexação)",
         natureza: Natureza::Prejudicial,
