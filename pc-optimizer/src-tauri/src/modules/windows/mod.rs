@@ -73,6 +73,7 @@ pub mod prontojogo;
 pub mod rbar;
 pub mod readiness;
 pub mod rede;
+pub mod banda_por_programa;
 pub mod registro;
 pub mod riscos;
 pub mod registry;

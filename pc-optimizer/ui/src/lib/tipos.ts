@@ -88,6 +88,8 @@ export const commands = {
 	 *  a internet caindo alguns segundos a cada troca. `EXIGEM_LICENCA`.
 	 */
 	redeProvarPlaca: () => __TAURI_INVOKE<ProvaDaPlaca_Serialize>("rede_provar_placa"),
+	/**  Quem está usando a internet agora, por programa (R3): 5 s de rastreamento. `LIVRES`: só lê. */
+	redeQuemUsa: () => __TAURI_INVOKE<QuemUsaARede>("rede_quem_usa"),
 	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
 	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
@@ -1916,6 +1918,12 @@ export type Preparada_Serialize = {
 
 export type ProblemaDaRota = "perda" | "variacao";
 
+export type ProgramaNaRede = {
+	programa: string,
+	envio_mbps: number | null,
+	recebe_mbps: number | null,
+};
+
 export type ProvaDaPlaca = ProvaDaPlaca_Serialize | ProvaDaPlaca_Deserialize;
 
 export type ProvaDaPlaca_Deserialize = {
@@ -1931,6 +1939,12 @@ export type ProvaDaPlaca_Serialize = {
 };
 
 export type Quality = "MEASURED" | "ESTIMATED" | "UNKNOWN";
+
+export type QuemUsaARede = {
+	segundos: number,
+	programas: ProgramaNaRede[],
+	frase: string,
+};
 
 export type RAMMetrics = RAMMetrics_Serialize | RAMMetrics_Deserialize;
 

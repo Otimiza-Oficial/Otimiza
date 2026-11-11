@@ -92,6 +92,22 @@ pub async fn rede_provar_placa(
     }
 }
 
+/// Quem está usando a internet agora, por programa (R3): 5 s de rastreamento. `LIVRES`: só lê.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn rede_quem_usa() -> Result<crate::modules::windows::banda_por_programa::QuemUsaARede, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(|| crate::modules::windows::banda_por_programa::medir(5))
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`.
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]

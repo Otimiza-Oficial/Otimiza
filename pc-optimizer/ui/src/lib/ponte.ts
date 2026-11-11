@@ -56,6 +56,7 @@ import {
   type FilaMedida_Serialize,
   type ServidorMedido,
   type ProvaDaPlaca,
+  type QuemUsaARede,
   type TaxaDoMouse_Serialize,
   type PainelDoCs2,
   type PcsParecidos,
@@ -86,7 +87,7 @@ export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
 export type FilaMedida = FilaMedida_Serialize;
-export type { ServidorMedido, ProvaDaPlaca };
+export type { ServidorMedido, ProvaDaPlaca, QuemUsaARede };
 export type TaxaDoMouse = TaxaDoMouse_Serialize;
 export type { PainelDoCs2, PcsParecidos } from "./tipos";
 export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
@@ -972,6 +973,20 @@ export const ponte = {
       enviando: { ping_ms: 231, perda_pct: 3, mbps: 38, a_mais_ms: 213, classe: "Ruim" },
       frase:
         "É fila no modem (bufferbloat): com a linha cheia o ping sobe 213 ms enviando. Nenhum ajuste do PC resolve isso; o que resolve é ligar o SQM (\"QoS inteligente\") no roteador, ou limitar a velocidade a uns 90% do plano. No PC, segure o envio de fundo durante o jogo.",
+    };
+  },
+  /** R3: quem usa a internet agora, por programa (5 s). */
+  quemUsaARede: async (): Promise<QuemUsaARede> => {
+    if (noTauri) return commands.redeQuemUsa();
+    await new Promise((r) => setTimeout(r, 1500));
+    return {
+      segundos: 5,
+      programas: [
+        { programa: "OneDrive.exe", envio_mbps: 8.2, recebe_mbps: 0.1 },
+        { programa: "brave.exe", envio_mbps: 0.1, recebe_mbps: 2.9 },
+        { programa: "Discord.exe", envio_mbps: 0.3, recebe_mbps: 0.1 },
+      ],
+      frase: "O OneDrive.exe está enviando 8,2 Mb/s: envio enche a fila do modem e é o que mais sobe o ping. Pause ele durante o jogo.",
     };
   },
   /** R2: testa as propriedades da placa de rede no ping e mantém só o que melhorou (minutos, com quedas curtas). */

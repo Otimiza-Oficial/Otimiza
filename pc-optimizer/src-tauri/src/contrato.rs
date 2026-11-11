@@ -55,6 +55,7 @@ mod tests {
                 crate::commands::rede_fila,
                 crate::commands::fivem_servidores_ping,
                 crate::commands::rede_provar_placa,
+                crate::commands::rede_quem_usa,
                 crate::commands::rede_historico,
                 crate::commands::rede_wifi,
                 crate::commands::rede_varredura_wifi,

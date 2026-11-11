@@ -370,6 +370,8 @@ deixa isso:
 - 1.6 Esteira de segredos (`gitleaks`), `cargo audit` e `npm audit`; rustls/quinn corrigidos (0 vulnerabilidades).
 - R1 Ping com a internet ocupada (bufferbloat), na área Rede.
 - R6 Wi-Fi: o canal com bem menos disputa (1/6/11 no 2,4 GHz, sem DFS no 5 GHz), na ficha e no conselho.
+- R3 Quem usa a internet, por programa: 5 s do provedor Kernel-Network do Windows (o mesmo do Monitor de Recursos),
+  envio e recebimento por programa, e a frase aponta o envio (o que mais sobe o ping). Medido de verdade no PC do dono.
 - R2 Placa de rede com prova: moderação de interrupção, EEE e controle de fluxo testados um por vez no ping (20 s antes
   e depois); fica só o que baixou a variação sem piorar perda nem ping, no histórico com desfazer; placa que não volta
   é desfeita na hora. Só com o jogo fechado e como administrador.
@@ -399,4 +401,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R3, R5; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R5; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

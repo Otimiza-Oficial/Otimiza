@@ -361,6 +361,7 @@ mod tests {
         "rede_rota_do_jogo",
         "rede_fila",
         "fivem_servidores_ping",
+        "rede_quem_usa",
         "escala_nitidez",
         "rede_historico",
         "energia_calibrar_cancelar",

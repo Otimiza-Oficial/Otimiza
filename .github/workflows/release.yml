@@ -188,7 +188,7 @@ jobs:
 
       - name: Testes — catálogo e serviços
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::catalog:: modules::windows::power:: modules::windows::planoenergia:: modules::windows::cabecalho:: modules::windows::labcompat:: modules::windows::services:: modules::windows::startup:: modules::windows::essenciais:: modules::windows::riscos::"
+        run: "cargo test --lib -- modules::windows::catalog:: modules::windows::power:: modules::windows::planoenergia:: modules::windows::cabecalho:: modules::windows::labcompat:: modules::windows::services:: modules::windows::startup:: modules::windows::essenciais:: modules::windows::riscos:: modules::windows::banda_por_programa::"
 
       - name: Testes — registro
         working-directory: pc-optimizer/src-tauri

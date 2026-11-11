@@ -10,6 +10,7 @@
     type FilaMedida,
     type ServidorMedido,
     type ProvaDaPlaca,
+    type QuemUsaARede,
     type HistoricoDaRede,
     type PainelDaBanda,
     type PainelDaVarredura,
@@ -79,6 +80,24 @@
       medindoServidores = false;
     }
   }
+
+  let quemUsa = $state<QuemUsaARede | null>(null);
+  let medindoQuemUsa = $state(false);
+  let erroQuemUsa = $state<string | null>(null);
+
+  async function medirQuemUsa() {
+    medindoQuemUsa = true;
+    erroQuemUsa = null;
+    try {
+      quemUsa = await ponte.quemUsaARede();
+    } catch (e) {
+      erroQuemUsa = String(e);
+    } finally {
+      medindoQuemUsa = false;
+    }
+  }
+
+  const mb = (v: number | null) => (v ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
 
   let provaDaPlaca = $state<ProvaDaPlaca | null>(null);
   let provandoPlaca = $state(false);
@@ -401,6 +420,32 @@
         </tbody>
       </table>
       {#if rota.atribuicao}<p class="apoio atribuicao">{rota.atribuicao}</p>{/if}
+    {/if}
+  </section>
+
+  <!-- Quem usa a internet agora -->
+  <section class="secao" aria-labelledby="rede-quem">
+    <h2 id="rede-quem">Quem está usando a internet</h2>
+    <p class="apoio">Cinco segundos olhando cada programa que envia e recebe. Precisa do Otimiza como administrador.</p>
+    <div>
+      <button class="btn primario" type="button" disabled={medindoQuemUsa} onclick={medirQuemUsa}>
+        {medindoQuemUsa ? "Olhando… (5 s)" : quemUsa ? "Olhar de novo" : "Ver quem está usando"}
+      </button>
+    </div>
+    {#if erroQuemUsa}
+      <p class="erro">{erroQuemUsa}</p>
+    {:else if quemUsa && !medindoQuemUsa}
+      <p class="destaque">{quemUsa.frase}</p>
+      {#if quemUsa.programas.length}
+        <ul class="lista-servidores">
+          {#each quemUsa.programas as p (p.programa)}
+            <li>
+              <div><strong>{p.programa}</strong></div>
+              <span class="apoio">enviando <b class="numero">{mb(p.envio_mbps)}</b> · baixando <b class="numero">{mb(p.recebe_mbps)}</b> Mb/s</span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     {/if}
   </section>
 
