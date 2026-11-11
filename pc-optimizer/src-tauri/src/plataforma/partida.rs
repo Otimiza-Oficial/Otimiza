@@ -25,6 +25,10 @@ pub enum Caminho {
     Steam,
     /// O executável que a loja registrou.
     Executavel,
+    /// `com.epicgames.launcher://apps/<AppName>`: a Epic abre o jogo já logada (pelo executável, muitos recusam).
+    Epic,
+    /// O Roblox não tem jogo para abrir sozinho: abre a página inicial, a pessoa escolhe o jogo e o Otimiza reconhece.
+    Site,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -53,11 +57,19 @@ pub fn chave(nome: &str) -> String {
     }
 }
 
-/// **Pura.** Como abrir este jogo: a Steam quando ele é dela (respeita as opções de lançamento), senão o executável.
+/// **Pura.** Como abrir este jogo: pela loja quando ela sabe (a Steam respeita as opções de lançamento, a Epic faz o
+/// login), o Roblox pela página inicial (o executável registrado costuma ser o instalador, e sem um jogo escolhido ele
+/// não abre partida), senão o executável.
 pub fn caminho(j: &JogoInstalado) -> Option<(Caminho, String)> {
-    match (&j.origem, j.appid, &j.executavel) {
-        (Origem::Steam, Some(appid), _) => Some((Caminho::Steam, format!("steam://rungameid/{}", appid))),
-        (_, _, Some(exe)) => Some((Caminho::Executavel, exe.to_string_lossy().to_string())),
+    if chave(&j.nome) == "roblox" {
+        return Some((Caminho::Site, "https://www.roblox.com/home".to_string()));
+    }
+    match (&j.origem, j.appid, &j.epic, &j.executavel) {
+        (Origem::Steam, Some(appid), _, _) => Some((Caminho::Steam, format!("steam://rungameid/{}", appid))),
+        (Origem::Epic, _, Some(app), _) if app.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') => {
+            Some((Caminho::Epic, format!("com.epicgames.launcher://apps/{}?action=launch&silent=true", app)))
+        }
+        (_, _, _, Some(exe)) => Some((Caminho::Executavel, exe.to_string_lossy().to_string())),
         _ => None,
     }
 }
@@ -174,6 +186,7 @@ mod tests {
             ultima_vez: 0,
             bytes: 0,
             appid,
+            epic: None,
         }
     }
 
@@ -189,6 +202,22 @@ mod tests {
         );
         // Steam sem número: o executável, se houver.
         assert_eq!(caminho(&jogo(Origem::Steam, None, None)), None);
+    }
+
+    #[test]
+    fn epic_abre_pela_epic_e_roblox_pela_pagina() {
+        let mut fortnite = jogo(Origem::Epic, None, None);
+        fortnite.epic = Some("Fortnite".into());
+        assert_eq!(
+            caminho(&fortnite),
+            Some((Caminho::Epic, "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true".into()))
+        );
+        // Nome interno com caractere estranho não vira link: cai no executável (aqui, nenhum).
+        fortnite.epic = Some("a&b".into());
+        assert_eq!(caminho(&fortnite), None);
+        let mut roblox = jogo(Origem::Instalado, None, Some(r"C:\R\RobloxPlayerInstaller.exe"));
+        roblox.nome = "Roblox Player".into();
+        assert_eq!(caminho(&roblox).map(|c| c.0), Some(Caminho::Site));
     }
 
     #[test]

@@ -422,7 +422,11 @@ export type Caminho =
 /**  `steam://rungameid/<appid>`: a Steam abre com as opções de lançamento da pessoa. */
 "Steam" | 
 /**  O executável que a loja registrou. */
-"Executavel";
+"Executavel" | 
+/**  `com.epicgames.launcher://apps/<AppName>`: a Epic abre o jogo já logada (pelo executável, muitos recusam). */
+"Epic" | 
+/**  O Roblox não tem jogo para abrir sozinho: abre a página inicial, a pessoa escolhe o jogo e o Otimiza reconhece. */
+"Site";
 
 export type CantoDaSobreposicao = "SuperiorEsquerdo" | "SuperiorDireito" | "InferiorEsquerdo" | "InferiorDireito";
 

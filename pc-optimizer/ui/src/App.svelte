@@ -305,7 +305,10 @@
       const apertada = livre != null && livre < MEMORIA_LIVRE_MINIMA_GB;
       dizer(
         {
-          texto: `Abrindo o ${l.jogo}${l.caminho === "Steam" ? " pela Steam" : ""}…`,
+          texto:
+            l.caminho === "Site"
+              ? `Abrindo o ${l.jogo}: escolha o jogo na página e entre.`
+              : `Abrindo o ${l.jogo}${l.caminho === "Steam" ? " pela Steam" : l.caminho === "Epic" ? " pela Epic" : ""}…`,
           detalhe: apertada
             ? `Só ${livre!.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} GB de memória livre: o jogo pode travar ao carregar cenário. Feche o navegador e o que não for usar antes de entrar.`
             : "Quando ele aparecer, eu ligo a receita dele.",

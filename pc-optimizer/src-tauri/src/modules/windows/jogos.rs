@@ -26,6 +26,9 @@ pub struct JogoInstalado {
     pub bytes: u64,
     #[serde(default)]
     pub appid: Option<u32>,
+    /// O nome interno da Epic (`AppName` do manifesto): o "Jogar" abre pelo inicializador dela, que faz o login.
+    #[serde(default)]
+    pub epic: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -101,6 +104,7 @@ pub fn jogo_do_manifest(conteudo: &str, raiz: &Path) -> Option<JogoInstalado> {
         ultima_vez: numero("LastPlayed"),
         bytes: numero("SizeOnDisk"),
         appid: valor_vdf(conteudo, "appid").and_then(|v| v.trim().parse().ok()),
+        epic: None,
     })
 }
 
@@ -245,6 +249,7 @@ fn ler_epic(biblioteca: &mut Biblioteca) {
             ultima_vez: 0,
             bytes: 0,
             appid: None,
+            epic: json.get("AppName").and_then(|v| v.as_str()).filter(|a| !a.is_empty()).map(str::to_string),
         });
     }
 }
@@ -298,6 +303,7 @@ fn ler_windows(biblioteca: &mut Biblioteca) {
             ultima_vez: 0,
             bytes: 0,
             appid: None,
+            epic: None,
         });
     }
 }
@@ -517,6 +523,7 @@ fn ler_instalados(biblioteca: &mut Biblioteca) {
                 ultima_vez: 0,
                 bytes: 0,
                 appid: None,
+                epic: None,
             });
         }
     }
@@ -660,6 +667,7 @@ fn ler_detectados(biblioteca: &mut Biblioteca) {
             ultima_vez: v.ultima_vez,
             bytes: 0,
             appid: None,
+            epic: None,
         });
     }
 }
@@ -692,6 +700,7 @@ mod testes_da_prateleira {
             ultima_vez,
             bytes: 2 * 1_073_741_824,
             appid: Some(1),
+            epic: None,
         }
     }
 
