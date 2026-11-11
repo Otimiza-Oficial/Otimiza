@@ -455,11 +455,26 @@ pub fn ligar(config: Configuracao) -> Result<Estado, String> {
     Ok(estado())
 }
 
+/// Quanto o desligar espera a linha do gerador terminar (ela devolve a janela do jogo e o cursor). Plano de refino,
+/// E12: uma linha presa na placa de vídeo não pode travar o fechamento do Otimiza nem o botão "Desligar".
+pub const PRAZO_PARA_PARAR: Duration = Duration::from_secs(5);
+
 pub fn desligar() {
     let em = EM_EXECUCAO.lock().ok().and_then(|mut g| g.take());
     if let Some((parar, linha)) = em {
         parar.store(true, Ordering::SeqCst);
-        let _ = linha.join();
+        let inicio = Instant::now();
+        while !linha.is_finished() && inicio.elapsed() < PRAZO_PARA_PARAR {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        if linha.is_finished() {
+            let _ = linha.join();
+        } else {
+            crate::utils::Logger::warn(&format!(
+                "gerador: a linha não terminou em {} s; sigo sem esperar",
+                PRAZO_PARA_PARAR.as_secs()
+            ));
+        }
     }
     publicar(|e| {
         e.situacao = Situacao::Parado;

@@ -352,6 +352,12 @@ deixa isso:
 - E6 Ajuste na chave de um serviço que a imagem "lite" removeu não é gravado ("não se aplica"), e o Windows modificado já é identificado.
 - E7 (parte) O tick fixo do `bcdedit` aposentado.
 - E8 Interruptor remoto: `ajustes_desligados` no `convite.json` desliga um ajuste para todos.
+- E10 Por construção: o Otimiza não instala driver (o pacote leva só o PresentMon, programa comum), e DPC é rotina
+  de driver.
+- E11 Conferido: toda medição pelo PresentMon tem prazo (3 a 120 s, nas janelas agendadas ou quando pedida); o único
+  contínuo é o FPS por cima do jogo, desligado por padrão e ligado pela pessoa.
+- E12 O desligar do gerador espera no máximo 5 s pela linha dele: placa de vídeo presa não trava mais o fechamento
+  nem o botão "Desligar".
 - E9 Detecção de jogo não mede de novo a cada volta (o PowerShell da GPU saía a cada 4 s na partida inteira).
 - 1.4 CSP ligada na janela; compilação local se identifica na barra e nos Ajustes.
 - 1.6 Esteira de segredos (`gitleaks`), `cargo audit` e `npm audit`; rustls/quinn corrigidos (0 vulnerabilidades).
@@ -374,5 +380,5 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: E4, E10–E12; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D; itens 6.1,
+**Falta**: E4; 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D; itens 6.1,
 6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
