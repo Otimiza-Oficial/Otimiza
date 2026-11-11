@@ -349,6 +349,7 @@ deixa isso:
 - E1 O portão olha tranco; piora forte desfaz na primeira partida.
 - E2 Vigia de estabilidade: PC que cai depois de um ajuste tem o ajuste desfeito.
 - E5 Guarda térmica nos 30 minutos depois de um ajuste que esquenta.
+- E6 Ajuste na chave de um serviço que a imagem "lite" removeu não é gravado ("não se aplica"), e o Windows modificado já é identificado.
 - E7 (parte) O tick fixo do `bcdedit` aposentado.
 - E8 Interruptor remoto: `ajustes_desligados` no `convite.json` desliga um ajuste para todos.
 - E9 Detecção de jogo não mede de novo a cada volta (o PowerShell da GPU saía a cada 4 s na partida inteira).
@@ -360,6 +361,5 @@ deixa isso:
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - Partida de respeito, fase 3: "Deixar liso" no cartão da partida com tranco; aviso de memória apertada no "Jogar".
 
-**Falta**: E3, E4, E6, E10–E12; 2.1–2.3 (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R8; atestado A–D; itens 6.1,
-6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados) e subir
-o `bot-pacote.zip` na hospedagem.
+**Falta**: E3, E4, E10–E12; 2.1–2.3 (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R8; atestado A–D; itens 6.1,
+6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
