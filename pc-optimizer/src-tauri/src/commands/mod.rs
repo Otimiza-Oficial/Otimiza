@@ -360,6 +360,7 @@ mod tests {
         "rede_rota",
         "rede_rota_do_jogo",
         "rede_fila",
+        "escala_nitidez",
         "rede_historico",
         "energia_calibrar_cancelar",
         "energia_salvar_calibrado_para_o_jogo",

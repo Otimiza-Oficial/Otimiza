@@ -18,6 +18,13 @@
   const CHAVE_MULT = "otimiza-fb-mult";
   const CHAVE_ESCALA = "otimiza-fb-escala";
   const CHAVE_ALVO = "otimiza-fb-alvo";
+  const CHAVE_NITIDEZ = "otimiza-fb-nitidez";
+  /** FB6: três pontos da faixa do FSR (0 a 2 "stops"); o padrão é o dos exemplos da AMD. */
+  const NITIDEZES = [
+    { nome: "Suave", stops: 1 },
+    { nome: "Padrão", stops: 0.2 },
+    { nome: "Forte", stops: 0 },
+  ];
   /** Alvos do Auto abaixo do monitor (Plano de refino, FB3): menos quadros gerados, mais placa sobrando para o jogo. */
   const ALVOS = [60, 90, 120, 144, 165, 200, 240];
   const NIVEIS = Object.keys(NOMES_DA_ESCALA) as NivelDeEscala[];
@@ -28,6 +35,7 @@
   let pedido = $state(ler(CHAVE_MULT, "0"));
   let escalaPedida = $state<NivelDeEscala | null>(lerEscala());
   let alvoPedido = $state<number | null>(Number(ler(CHAVE_ALVO, "")) || null);
+  let nitidez = $state(Number(ler(CHAVE_NITIDEZ, "0.2")));
   let relogio: ReturnType<typeof setInterval> | undefined;
 
   function ler(chave: string, padrao: string) {
@@ -61,6 +69,8 @@
 
   onMount(() => {
     void carregar();
+    // A escolha da pessoa vale desde já: o gerador lê a nitidez a cada quadro.
+    void ferramentas.escalaNitidez(nitidez).catch(() => {});
     // Ligado pelo gerador do Otimiza o número muda a cada segundo; desligado, basta olhar de vez em quando.
     relogio = setInterval(() => {
       if (!ocupado) void carregar();
@@ -156,6 +166,11 @@
   function escolherMult(m: number) {
     pedido = String(m);
     gravar(CHAVE_MULT, pedido);
+  }
+  function escolherNitidez(stops: number) {
+    nitidez = stops;
+    gravar(CHAVE_NITIDEZ, String(stops));
+    void ferramentas.escalaNitidez(stops).catch(() => {});
   }
   function escolherAlvo(v: number | null) {
     alvoPedido = v;
@@ -288,6 +303,18 @@
           </button>
         {/if}
         {#if doOtimiza}<span class="apoio pequeno">Ctrl+Alt+G desliga de dentro do jogo</span>{/if}
+      </div>
+    {/if}
+
+    {#if doOtimiza && (escala || a?.escala)}
+      <div class="escolha">
+        <span class="rotulo">Nitidez da escala</span>
+        <div class="segmento" role="radiogroup" aria-label="Nitidez da escala">
+          {#each NITIDEZES as o (o.nome)}
+            <button role="radio" aria-checked={nitidez === o.stops} onclick={() => escolherNitidez(o.stops)}>{o.nome}</button>
+          {/each}
+        </div>
+        <p class="apoio pequeno">Muda na hora, com o Frame Boost ligado. Forte deixa a imagem ampliada mais definida; Suave, menos serrilhada.</p>
       </div>
     {/if}
 

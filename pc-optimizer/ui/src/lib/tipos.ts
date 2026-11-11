@@ -27,6 +27,11 @@ export const commands = {
 	relatorioDaUltimaPartida: () => __TAURI_INVOKE<RelatorioDaPartida_Serialize | null>("relatorio_da_ultima_partida"),
 	/**  "Deixar liso" no cartão da partida: o teto pela partida que acabou, sem o jogo aberto. `EXIGEM_LICENCA`. */
 	jogoLisoDepoisDaPartida: (executavel: string, caminho: string | null, fps: number | null, trancosPorMinuto: number | null) => __TAURI_INVOKE<LisoGravado_Serialize>("jogo_liso_depois_da_partida", { executavel, caminho, fps, trancosPorMinuto }),
+	/**
+	 *  A nitidez da escala em "stops" do FSR (0 = a máxima, 2 = a mais suave). Vale no próximo quadro, ligado ou não.
+	 *  `LIVRES`: só mexe na imagem que o próprio Otimiza desenha.
+	 */
+	escalaNitidez: (stops: number | null) => __TAURI_INVOKE<number | null>("escala_nitidez", { stops }),
 	/**  A capa do jogo pela Steam deste PC (`data:` URL). `None`: sem Steam ou sem arte; a tela desenha uma. `LIVRES`. */
 	capaDoJogo: (appid: number) => __TAURI_INVOKE<string | null>("capa_do_jogo", { appid }),
 	startMonitoring: () => __TAURI_INVOKE<string>("start_monitoring"),

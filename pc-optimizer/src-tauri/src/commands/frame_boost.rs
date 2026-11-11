@@ -196,6 +196,17 @@ pub struct ComparacaoNaTela {
     pub tela_px: [u32; 2],
 }
 
+/// A nitidez da escala em "stops" do FSR (0 = a máxima, 2 = a mais suave). Vale no próximo quadro, ligado ou não.
+/// `LIVRES`: só mexe na imagem que o próprio Otimiza desenha.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn escala_nitidez(stops: f32) -> f32 {
+    #[cfg(target_os = "windows")]
+    return crate::modules::windows::geracao::gpu::definir_nitidez(stops);
+    #[cfg(not(target_os = "windows"))]
+    stops
+}
+
 /// Pede a comparação da escala: o próximo quadro real com o jogo na frente. `LIVRES`: só lê a tela.
 #[tauri::command(async)]
 pub fn escala_pedir_comparacao() -> Result<(), String> {

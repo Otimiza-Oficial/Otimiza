@@ -327,6 +327,7 @@ pub fn run() {
             commands::jogo_liso_medir,
             commands::jogo_liso_aplicar,
             commands::jogo_liso_depois_da_partida,
+            commands::escala_nitidez,
             commands::memoria_para_o_jogo,
             commands::memoria_fechar,
             commands::energia_de_jogo,

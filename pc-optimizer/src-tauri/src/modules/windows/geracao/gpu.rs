@@ -88,8 +88,31 @@ struct Ampliacao {
     ampliado: Alvo,
 }
 
-/// Nitidez do `Rcas`, em "stops" do FSR (0 = a máxima). 0,2 é o padrão dos exemplos da AMD.
-const NITIDEZ_DA_ESCALA: f32 = 0.2;
+/// Nitidez do `Rcas`, em "stops" do FSR (0 = a máxima). 0,2 é o padrão dos exemplos da AMD. Escolhível na tela
+/// (Plano de refino, FB6) e lida a cada quadro: muda sem religar o gerador.
+pub const NITIDEZ_PADRAO: f32 = 0.2;
+/// Mais que isto já não afia nada que se veja (o FSR fala em 0 a 2 stops).
+pub const NITIDEZ_MAIS_SUAVE: f32 = 2.0;
+static NITIDEZ_DA_ESCALA: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(NITIDEZ_PADRAO.to_bits());
+
+/// **Pura.** O valor pedido dentro da faixa do FSR; fora do número (NaN), o padrão.
+pub fn nitidez_valida(stops: f32) -> f32 {
+    if stops.is_finite() {
+        stops.clamp(0.0, NITIDEZ_MAIS_SUAVE)
+    } else {
+        NITIDEZ_PADRAO
+    }
+}
+
+pub fn definir_nitidez(stops: f32) -> f32 {
+    let v = nitidez_valida(stops);
+    NITIDEZ_DA_ESCALA.store(v.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    v
+}
+
+pub fn nitidez() -> f32 {
+    f32::from_bits(NITIDEZ_DA_ESCALA.load(std::sync::atomic::Ordering::Relaxed))
+}
 
 struct Trabalho {
     largura: u32,
@@ -1671,7 +1694,7 @@ impl Gpu {
             &[Some(amp.ampliado.srv.clone())],
             Parametros {
                 tamanho_origem: [amp.ampliado.largura as i32, amp.ampliado.altura as i32],
-                lambda: (-NITIDEZ_DA_ESCALA).exp2(),
+                lambda: (-nitidez()).exp2(),
                 extra: [area.x as f32, area.y as f32, 0.0, 0.0],
                 ..Default::default()
             },
@@ -2756,5 +2779,18 @@ mod qualidade {
             tempos[2] / n,
             tempos[3] / n
         );
+    }
+}
+
+#[cfg(test)]
+mod testes_da_nitidez {
+    use super::*;
+
+    #[test]
+    fn a_nitidez_fica_na_faixa_do_fsr() {
+        assert_eq!(nitidez_valida(-1.0), 0.0);
+        assert_eq!(nitidez_valida(9.0), NITIDEZ_MAIS_SUAVE);
+        assert_eq!(nitidez_valida(f32::NAN), NITIDEZ_PADRAO);
+        assert_eq!(nitidez_valida(0.5), 0.5);
     }
 }

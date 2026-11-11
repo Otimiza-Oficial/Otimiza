@@ -5,6 +5,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { noTauri } from "./ponte";
+import { commands } from "./tipos";
 import type { Mira } from "./mira";
 
 export type Suporte =
@@ -244,6 +245,8 @@ export const ferramentas = {
     noTauri
       ? invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite: false, escala, alvo })
       : Promise.resolve(fbLigadoDemo(multiplicador, escala)),
+  /** Nitidez da escala (FB6), em "stops" do FSR: 0 a mais forte, 2 a mais suave. Vale no próximo quadro. */
+  escalaNitidez: async (stops: number): Promise<number> => (noTauri ? ((await commands.escalaNitidez(stops)) ?? stops) : stops),
   frameBoostDesligar: (): Promise<PainelFrameBoost> => {
     if (noTauri) return invoke<PainelFrameBoost>("frame_boost_desligar");
     fbDemo = {
