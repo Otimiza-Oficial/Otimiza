@@ -746,6 +746,14 @@ export const ponte = {
       janelas_com_freio_lido: 4,
       ja_freava: false,
       anteriores: { partidas: 5, mediana_fps: 79, menor_fps: 71, maior_fps: 84 },
+      rede: {
+        janelas: 4,
+        ping_ms: 19,
+        variacao_ms: 2.4,
+        perda_pct: 0,
+        firmeza: "Firme",
+        frase: "Rede firme: 19 ms até a internet, sem perda. Se travou, não foi a rede.",
+      },
     };
   },
   /** `partida:preparada`: o jogo que o "Jogar" abriu apareceu e a receita ligou (ou não, e por quê). */

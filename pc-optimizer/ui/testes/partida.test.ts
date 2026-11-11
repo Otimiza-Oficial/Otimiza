@@ -74,3 +74,11 @@ test("\"Deixar liso\" só para partida com tranco, medida e com placa NVIDIA", (
   assert.equal(ofereceLiso(montarCartao({ ...fim, segundos: 60 }, null, agora), true), false);
   assert.equal(ofereceLiso(null, true), false);
 });
+
+test("a rede da partida chega ao cartão, e relatório antigo fica sem ela", () => {
+  const rede = { firmeza: "Perdeu" as const, frase: "A rede perdeu 4,0% dos pacotes." };
+  const c = montarCartao(fim, { ...relatorio({}), rede }, agora);
+  assert.ok(c.medido && c.rede?.firmeza === "Perdeu");
+  const antigo = montarCartao(fim, relatorio({}), agora);
+  assert.ok(antigo.medido && antigo.rede === null);
+});

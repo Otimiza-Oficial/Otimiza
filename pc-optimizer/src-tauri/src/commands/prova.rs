@@ -217,7 +217,17 @@ pub async fn perfil_do_pc() -> Result<crate::modules::perfil::Perfil, String> {
 pub async fn relatorio_da_ultima_partida(
 ) -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
     tokio::task::spawn_blocking(|| {
-        crate::modules::medicoes::ler().map(|m| crate::modules::relatoriodapartida::ultima(&m))
+        crate::modules::medicoes::ler().map(|m| {
+            crate::modules::relatoriodapartida::ultima(&m).map(|mut r| {
+                r.rede = crate::plataforma::rede_partida::da_partida(
+                    &crate::plataforma::rede_partida::ler(),
+                    &r.jogo,
+                    r.inicio,
+                    r.fim,
+                );
+                r
+            })
+        })
     })
     .await
     .map_err(|e| format!("Falha ao montar o relatório da partida: {}", e))?

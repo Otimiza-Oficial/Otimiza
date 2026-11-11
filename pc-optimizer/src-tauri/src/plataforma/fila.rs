@@ -132,20 +132,20 @@ mod medicao {
     const ENTRE_ECOS: Duration = Duration::from_millis(250);
     const FASE: Duration = Duration::from_secs(8);
 
-    /// Ecos a cada 250 ms durante `quanto`, numa thread (a chamada ICMP é síncrona).
+    /// Ecos a cada 250 ms durante `quanto`. Bloqueia (a chamada ICMP é síncrona); a rede na partida usa também.
+    pub fn ecos(quanto: Duration) -> Vec<Option<u32>> {
+        let fim = Instant::now() + quanto;
+        let mut v = Vec::new();
+        while Instant::now() < fim {
+            let r = crate::plataforma::rota::sondar(ALVO, 64, 1000);
+            v.push(r.ms.filter(|_| matches!(r.tipo, crate::plataforma::rota::TipoResposta::Destino)));
+            std::thread::sleep(ENTRE_ECOS);
+        }
+        v
+    }
+
     async fn ecos_por(quanto: Duration) -> Vec<Option<u32>> {
-        tokio::task::spawn_blocking(move || {
-            let fim = Instant::now() + quanto;
-            let mut v = Vec::new();
-            while Instant::now() < fim {
-                let r = crate::plataforma::rota::sondar(ALVO, 64, 1000);
-                v.push(r.ms.filter(|_| matches!(r.tipo, crate::plataforma::rota::TipoResposta::Destino)));
-                std::thread::sleep(ENTRE_ECOS);
-            }
-            v
-        })
-        .await
-        .unwrap_or_default()
+        tokio::task::spawn_blocking(move || ecos(quanto)).await.unwrap_or_default()
     }
 
     fn cliente() -> Option<reqwest::Client> {
@@ -210,7 +210,7 @@ mod medicao {
 }
 
 #[cfg(windows)]
-pub use medicao::medir;
+pub use medicao::{ecos, medir};
 
 #[cfg(test)]
 mod tests {

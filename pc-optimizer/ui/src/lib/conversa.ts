@@ -212,7 +212,7 @@ export function partidaTerminou(c: Cartao): Fala {
   const trancos = c.trancosPorMinuto != null ? ` · ${c.trancosPorMinuto.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} trancos/min` : "";
   return {
     texto: `${c.jogo}: ${n(c.fps)} FPS médio, 1% pior ${n(c.low)}${trancos}.`,
-    detalhe: `${c.duracao} de partida.${c.comparacao ? ` ${fraseDaComparacao(c.comparacao)}` : ""}`,
+    detalhe: `${c.duracao} de partida.${c.comparacao ? ` ${fraseDaComparacao(c.comparacao)}` : ""}${c.rede ? ` ${c.rede.frase}` : ""}`,
     humor: c.comparacao?.sentido === "abaixo" ? "preocupado" : "feliz",
     gesto: c.comparacao?.sentido === "acima" ? "comemorar" : undefined,
     acoes: [ver],

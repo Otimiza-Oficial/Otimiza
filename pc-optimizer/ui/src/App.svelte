@@ -854,7 +854,7 @@
                     {/if}
                   </dl>
                   <p class="sec pequeno">
-                    {#if lisoGravado}{lisoGravado}{:else if cartao.comparacao}{fraseDaComparacao(cartao.comparacao)}{:else}Com mais partidas medidas, aparece a faixa das anteriores.{/if}
+                    {#if lisoGravado}{lisoGravado}{:else if cartao.rede && cartao.rede.firmeza !== "Firme"}{cartao.rede.frase}{:else if cartao.comparacao}{fraseDaComparacao(cartao.comparacao)}{:else}Com mais partidas medidas, aparece a faixa das anteriores.{/if}
                   </p>
                   {@const liso = !lisoGravado && ofereceLiso(cartao, hardware?.placa.fabricante === "Nvidia")}
                   <div class="acoes-cartao">

@@ -59,6 +59,8 @@ pub struct Relatorio {
     pub ja_freava: bool,
     /// As partidas anteriores deste jogo, só janelas comparáveis. `None` com menos de duas.
     pub anteriores: Option<Faixa>,
+    /// A rede nas mesmas janelas (`plataforma::rede_partida`), posta pelo comando. `None`: sem ping nas janelas.
+    pub rede: Option<crate::plataforma::rede_partida::RedeDaPartida>,
 }
 
 /// **Pura.** As partidas de um jogo, cada uma com as suas janelas, em ordem.
@@ -242,6 +244,7 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
         janelas_com_freio_lido: lidos.len(),
         ja_freava,
         anteriores: faixa,
+        rede: None,
     })
 }
 

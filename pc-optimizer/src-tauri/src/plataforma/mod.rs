@@ -25,6 +25,7 @@ pub mod historico;
 #[allow(dead_code)]
 pub mod hz;
 pub mod fila;
+pub mod rede_partida;
 pub mod jogo_liso;
 pub mod jogos;
 pub mod lab;

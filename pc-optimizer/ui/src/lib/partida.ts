@@ -20,7 +20,11 @@ export type RelatorioUsado = {
   janelas_com_trancos: number;
   /** `f64` no Rust: um NaN chega como `null`, e aí não há faixa para comparar. */
   anteriores: { partidas: number; mediana_fps: number | null; menor_fps: number | null; maior_fps: number | null } | null;
+  /** A rede nas mesmas janelas (`plataforma::rede_partida`). Ausente em versão antiga, `null` sem ping. */
+  rede?: RedeUsada | null;
 };
+
+export type RedeUsada = { firmeza: "Firme" | "Oscilou" | "Perdeu"; frase: string };
 
 /** `partida:terminou` (`plataforma::partida::Terminada`). */
 export type Terminada = { jogo: string; executavel: string; caminho?: string | null; segundos: number; pelo_jogar: boolean };
@@ -41,6 +45,8 @@ export type Cartao =
       low: number | null;
       trancosPorMinuto: number | null;
       comparacao: Comparacao | null;
+      /** "Foi a rede ou o PC?" (Plano de refino, R7). */
+      rede: RedeUsada | null;
       pelo_jogar: boolean;
     }
   | { medido: false; jogo: string; duracao: string; porque: "curta" | "sem-medicao"; pelo_jogar: boolean };
@@ -89,6 +95,7 @@ export function montarCartao(t: Terminada, r: RelatorioUsado | null, agora_s: nu
     low: r.pior_low_1pct,
     trancosPorMinuto: r.trancos != null && minutosLidos > 0 ? r.trancos / minutosLidos : null,
     comparacao: comparar(r.fps_medio, r.anteriores),
+    rede: r.rede ?? null,
   };
 }
 

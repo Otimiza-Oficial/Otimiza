@@ -1012,6 +1012,10 @@ pub fn run() {
 
                         // PresentMon primeiro (separa quadro do jogo de gerado e sabe se chegou à tela); o canal antigo
                         // fica de reserva, e o log diz qual mediu.
+                        // A rede na mesma janela (Plano de refino, R7): o cartão diz se foi a rede ou o PC.
+                        let ecos_da_rede = tokio::task::spawn_blocking(|| {
+                            plataforma::fila::ecos(std::time::Duration::from_secs(medicoes::SEGUNDOS_DE_MEDICAO))
+                        });
                         let medido = tokio::task::spawn_blocking(move || {
                             match modules::windows::presentmon::medir_como_antes(
                                 jogo.pid,
@@ -1095,6 +1099,9 @@ pub fn run() {
                                     ),
                                     _ => None,
                                 };
+                                if let Ok(ecos) = ecos_da_rede.await {
+                                    plataforma::rede_partida::guardar(&m.process, agora, &ecos);
+                                }
                                 let registro = MedicaoAutomatica {
                                     jogo: m.process,
                                     quando: agora,

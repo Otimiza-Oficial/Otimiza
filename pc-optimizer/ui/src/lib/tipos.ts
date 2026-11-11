@@ -909,6 +909,8 @@ export type FimDaTroca =
 /**  Voltou ao modo anterior (pedido da pessoa). */
 { estado: "Voltou"; hz: number };
 
+export type Firmeza = "Firme" | "Oscilou" | "Perdeu";
+
 export type FonteDaNativa = 
 /**  Temporização preferida da EDID. */
 "Edid" | 
@@ -1963,6 +1965,15 @@ export type RecursoAvaliado = {
 	suporte: Suporte,
 };
 
+export type RedeDaPartida = {
+	janelas: number,
+	ping_ms: number | null,
+	variacao_ms: number | null,
+	perda_pct: number | null,
+	firmeza: Firmeza,
+	frase: string,
+};
+
 export type RegistroDaRota = RegistroDaRota_Serialize | RegistroDaRota_Deserialize;
 
 export type RegistroDaRota_Deserialize = {
@@ -2050,6 +2061,8 @@ export type RelatorioDaPartida_Deserialize = {
 	ja_freava: boolean,
 	/**  As partidas anteriores deste jogo, só janelas comparáveis. `None` com menos de duas. */
 	anteriores?: FaixaDasPartidas | null,
+	/**  A rede nas mesmas janelas (`plataforma::rede_partida`), posta pelo comando. `None`: sem ping nas janelas. */
+	rede?: RedeDaPartida | null,
 };
 
 export type RelatorioDaPartida_Serialize = {
@@ -2086,6 +2099,8 @@ export type RelatorioDaPartida_Serialize = {
 	ja_freava: boolean,
 	/**  As partidas anteriores deste jogo, só janelas comparáveis. `None` com menos de duas. */
 	anteriores: FaixaDasPartidas | null,
+	/**  A rede nas mesmas janelas (`plataforma::rede_partida`), posta pelo comando. `None`: sem ping nas janelas. */
+	rede: RedeDaPartida | null,
 };
 
 export type RelatorioDeTetos = RelatorioDeTetos_Serialize | RelatorioDeTetos_Deserialize;
