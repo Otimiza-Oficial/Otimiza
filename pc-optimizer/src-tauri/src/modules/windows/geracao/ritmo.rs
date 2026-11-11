@@ -52,6 +52,21 @@ pub fn quadros_no_automatico(acumulado: &mut f64, intervalo: f64, hz: u32, maxim
     m
 }
 
+/// O menor alvo que vale: abaixo disto a geração não compensa o atraso que acrescenta.
+pub const ALVO_MINIMO: u32 = 60;
+
+/// **Pura.** Para onde o automático enche: o alvo escolhido (nunca acima dos Hz nem abaixo de `ALVO_MINIMO`), os Hz, ou
+/// o dobro deles passando do limite do monitor.
+pub fn mira_do_automatico(hz: u32, sem_limite: bool, alvo: Option<u32>) -> u32 {
+    if sem_limite {
+        return hz * 2;
+    }
+    match alvo.filter(|a| *a > 0) {
+        Some(a) if hz > 0 => a.clamp(ALVO_MINIMO.min(hz), hz),
+        _ => hz,
+    }
+}
+
 /// O que chegou à tela, pelas estatísticas da swap chain (`GetFrameStatistics`): `PresentCount` é o último quadro
 /// exibido e `SyncRefreshCount` a atualização do monitor em que ele entrou. Atualização sem quadro novo é o micro-tranco
 /// que o olho vê (o quadro anterior fica duas vezes na tela).
@@ -402,6 +417,19 @@ mod tests {
         assert_eq!(e.exibidos, 3);
         assert_eq!(e.atualizacoes, 4);
         assert!((e.repetidas_pct() - 25.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn o_alvo_fica_entre_o_minimo_e_os_hz() {
+        assert_eq!(mira_do_automatico(180, false, Some(120)), 120);
+        assert_eq!(mira_do_automatico(180, false, Some(500)), 180);
+        assert_eq!(mira_do_automatico(180, false, Some(30)), ALVO_MINIMO);
+        assert_eq!(mira_do_automatico(180, false, None), 180);
+        assert_eq!(mira_do_automatico(180, true, Some(120)), 360);
+        // A 120 num de 180 com o jogo a 48: 2,5 por quadro real, e a tela chega aos 120.
+        let mut acc = 0.0;
+        let soma: u32 = (0..48).map(|_| quadros_no_automatico(&mut acc, 1.0 / 48.0, 120, 6) as u32).sum();
+        assert!((118..=122).contains(&soma), "{soma}");
     }
 
     #[test]

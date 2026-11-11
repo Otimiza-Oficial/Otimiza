@@ -239,10 +239,10 @@ let coresDemo: EstadoDasCores = {
 export const ferramentas = {
   frameBoost: (): Promise<PainelFrameBoost> =>
     noTauri ? invoke<PainelFrameBoost>("frame_boost_painel") : Promise.resolve(structuredClone(fbDemo)),
-  /** `multiplicador` 0 = Auto (enche o monitor); 1 = só escala (vale com `escala`). */
-  frameBoostLigar: (multiplicador: number, escala: NivelDeEscala | null): Promise<PainelFrameBoost> =>
+  /** `multiplicador` 0 = Auto (enche o monitor, ou o `alvo`); 1 = só escala (vale com `escala`). */
+  frameBoostLigar: (multiplicador: number, escala: NivelDeEscala | null, alvo: number | null = null): Promise<PainelFrameBoost> =>
     noTauri
-      ? invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite: false, escala })
+      ? invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite: false, escala, alvo })
       : Promise.resolve(fbLigadoDemo(multiplicador, escala)),
   frameBoostDesligar: (): Promise<PainelFrameBoost> => {
     if (noTauri) return invoke<PainelFrameBoost>("frame_boost_desligar");

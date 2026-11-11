@@ -708,7 +708,7 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> V
         }
     }
     if let Some(m) = r.multiplicador {
-        match super::frameboost::ligar(app, m, false, r.escala) {
+        match super::frameboost::ligar(app, m, false, r.escala, None) {
             Ok(_) => passos.push(match (r.escala, m) {
                 (Some(n), 1) => format!("Escala {:?}: ligada, sem geração.", n),
                 (Some(n), _) => format!("Escala {:?} e geração de quadros: ligadas.", n),
@@ -860,7 +860,7 @@ fn ligar_o_lado(app: &tauri::AppHandle, r: &Receita) -> Result<(), String> {
         super::energia_jogo::definir(true).map(|_| ())?;
     }
     if let Some(m) = r.multiplicador {
-        super::frameboost::ligar(app, m, false, r.escala).map(|_| ())?;
+        super::frameboost::ligar(app, m, false, r.escala, None).map(|_| ())?;
     }
     Ok(())
 }

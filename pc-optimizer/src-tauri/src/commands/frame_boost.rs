@@ -105,6 +105,7 @@ pub async fn gerador_ligar(
             sem_limite: false,
             leve: false,
             escala: None,
+            alvo_fps: None,
         })
     })
     .await
@@ -156,6 +157,7 @@ pub async fn frame_boost_ligar(
     multiplicador: u8,
     sem_limite: Option<bool>,
     escala: Option<crate::modules::windows::geracao::escala::Nivel>,
+    alvo: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
     crate::modules::licenca::exigir()?;
@@ -167,6 +169,7 @@ pub async fn frame_boost_ligar(
                 multiplicador,
                 sem_limite.unwrap_or(false),
                 escala,
+                alvo,
             )
         })
         .await
@@ -178,7 +181,7 @@ pub async fn frame_boost_ligar(
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (app, multiplicador, sem_limite, state);
+        let _ = (app, multiplicador, sem_limite, alvo, state);
         Err("O Frame Boost só existe no Windows.".to_string())
     }
 }

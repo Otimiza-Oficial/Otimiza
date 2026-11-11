@@ -374,6 +374,10 @@ pub struct Configuracao {
     /// Escala: a sobreposição cobre o monitor e amplia a janela do jogo (FSR 1). Com `multiplicador` 1, só escala.
     #[serde(default)]
     pub escala: Option<escala::Nivel>,
+    /// FPS alvo do automático (Plano de refino, FB3): a tela chega nele em vez dos Hz. Menos quadros gerados, menos
+    /// placa gasta com a geração e mais FPS real sobrando para o jogo. `None`: os Hz do monitor.
+    #[serde(default)]
+    pub alvo_fps: Option<u32>,
 }
 
 impl Configuracao {
@@ -1968,7 +1972,7 @@ fn sessao(
                                 let m = ritmo::quadros_no_automatico(
                                     &mut acumulado_do_automatico,
                                     intervalo.estimado.unwrap_or(0.0),
-                                    if config.sem_limite { hz * 2 } else { hz },
+                                    ritmo::mira_do_automatico(hz, config.sem_limite, config.alvo_fps),
                                     multiplicador,
                                 );
                                 ultimo_do_automatico = m;
@@ -2133,6 +2137,8 @@ mod tests {
             escala: std::env::var("OTIMIZA_FG_ESCALA")
                 .ok()
                 .and_then(|v| serde_json::from_value(serde_json::Value::String(v)).ok()),
+            // OTIMIZA_FG_ALVO=120: o automático mira 120 em vez dos Hz.
+            alvo_fps: std::env::var("OTIMIZA_FG_ALVO").ok().and_then(|v| v.parse().ok()),
         })
         .unwrap();
         println!("inicio: {:?}", e);

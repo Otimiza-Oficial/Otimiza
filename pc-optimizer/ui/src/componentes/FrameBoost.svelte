@@ -17,6 +17,9 @@
 
   const CHAVE_MULT = "otimiza-fb-mult";
   const CHAVE_ESCALA = "otimiza-fb-escala";
+  const CHAVE_ALVO = "otimiza-fb-alvo";
+  /** Alvos do Auto abaixo do monitor (Plano de refino, FB3): menos quadros gerados, mais placa sobrando para o jogo. */
+  const ALVOS = [60, 90, 120, 144, 165, 200, 240];
   const NIVEIS = Object.keys(NOMES_DA_ESCALA) as NivelDeEscala[];
 
   let p = $state<PainelFrameBoost | null>(null);
@@ -24,6 +27,7 @@
   let ocupado = $state(false);
   let pedido = $state(ler(CHAVE_MULT, "0"));
   let escalaPedida = $state<NivelDeEscala | null>(lerEscala());
+  let alvoPedido = $state<number | null>(Number(ler(CHAVE_ALVO, "")) || null);
   let relogio: ReturnType<typeof setInterval> | undefined;
 
   function ler(chave: string, padrao: string) {
@@ -79,12 +83,16 @@
     if (n === 0 || cabem.includes(n) || (n === 1 && escala !== null)) return n;
     return cabem.filter((m) => m <= n).pop() ?? cabem[0] ?? 2;
   });
+  /** Os alvos que ficam abaixo deste monitor; o pedido só vale se couber (outro monitor, outro alvo). */
+  const alvos = $derived(p?.hz ? ALVOS.filter((x) => x < (p?.hz ?? 0)) : []);
+  const alvo = $derived(alvoPedido != null && alvos.includes(alvoPedido) ? alvoPedido : null);
   const estimativa = $derived.by(() => {
     if (!p || mult === 1) return null;
     const dois = p.estimativas.find((e) => e.multiplicador === 2);
     if (mult === 0) {
       if (!dois || !p.hz) return null;
-      return { minimo: Math.min(p.hz, (dois.faixa.minimo / 2) * 6), maximo: Math.min(p.hz, (dois.faixa.maximo / 2) * 6) };
+      const teto = alvo ?? p.hz;
+      return { minimo: Math.min(teto, (dois.faixa.minimo / 2) * 6), maximo: Math.min(teto, (dois.faixa.maximo / 2) * 6) };
     }
     return p.estimativas.find((e) => e.multiplicador === mult)?.faixa ?? null;
   });
@@ -148,6 +156,10 @@
   function escolherMult(m: number) {
     pedido = String(m);
     gravar(CHAVE_MULT, pedido);
+  }
+  function escolherAlvo(v: number | null) {
+    alvoPedido = v;
+    gravar(CHAVE_ALVO, v == null ? null : String(v));
   }
   function escolherEscala(e: NivelDeEscala | null) {
     escalaPedida = e;
@@ -245,6 +257,22 @@
           </p>
         {/if}
       </div>
+      {#if mult === 0 && alvos.length}
+        <div class="escolha">
+          <span class="rotulo">FPS na tela</span>
+          <div class="segmento" role="radiogroup" aria-label="FPS alvo">
+            <button role="radio" aria-checked={alvo === null} onclick={() => escolherAlvo(null)}>Monitor ({p.hz})</button>
+            {#each alvos as v (v)}
+              <button role="radio" aria-checked={alvo === v} onclick={() => escolherAlvo(v)}>{v}</button>
+            {/each}
+          </div>
+          <p class="apoio pequeno">
+            {alvo
+              ? `A tela recebe ${alvo} em vez de ${p.hz}: o Otimiza gera menos quadros, gasta menos placa, e o jogo fica com mais FPS de verdade.`
+              : "Abaixo do monitor, o gerador gasta menos placa e o jogo perde menos FPS. Bom quando a placa já está no limite."}
+          </p>
+        </div>
+      {/if}
     {/if}
 
     {#if rec}
@@ -255,7 +283,7 @@
             <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostMedir)}>{ocupado ? "Medindo 6 s…" : "Medir agora"}</button>
           {/if}
         {:else}
-          <button class="btn primario" disabled={ocupado || !liga} onclick={() => agir(() => ferramentas.frameBoostLigar(mult, escala))}>
+          <button class="btn primario" disabled={ocupado || !liga} onclick={() => agir(() => ferramentas.frameBoostLigar(mult, escala, mult === 0 ? alvo : null))}>
             {experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Liga pelo painel do driver"}
           </button>
         {/if}
