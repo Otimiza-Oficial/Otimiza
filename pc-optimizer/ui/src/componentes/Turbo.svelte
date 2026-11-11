@@ -340,7 +340,7 @@
             <p class="erro">Não consegui desfazer depois de piorar: {prova.falha_ao_desfazer}</p>
           {/if}
           {#if prova.desfecho === "Ganhou"}
-            <button class="btn" onclick={compartilhar}>{copiado ? "Copiado!" : "Copiar para o Discord"}</button>
+            <button class="btn" onclick={compartilhar}>{copiado ? "Copiado" : "Copiar para o Discord"}</button>
           {/if}
         </div>
       {/if}

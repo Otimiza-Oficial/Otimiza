@@ -377,11 +377,17 @@ deixa isso:
 - 6.3 MSI em português (`wix.language = pt-BR`).
 - 2.2.4 Esqueleto de carregamento no lugar do "Lendo…" solto (17 lugares, parado com jogo aberto).
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
+- 6.1 Investigado no PC do dono: nenhum pânico no log e nenhum arquivo em `falhas/`; toda sessão sem fechamento normal
+  foi encerramento forçado (testes de desenvolvimento e o instalador fechando o Otimiza), e a abertura já não conta
+  reinício do Windows nem atualização como queda.
+- 6.5 Medido na versão final: janela pedida em 1,2 s e primeiro desenho em 1,6 s; antes da janela só roda coisa leve
+  (o resto é a WebView2 subindo). Nada que valha cortar.
+- 6.6 Textos e marcações conferidos com o `ui/DESIGN.md`: o teste de fila trocou a borda colorida na lateral (proibida)
+  pelo ponto de estado.
 - Partida de respeito, fase 3: "Deixar liso" no cartão da partida com tranco; aviso de memória apertada no "Jogar".
 
 **Não feitos, com o motivo**: R4 (trocar DNS não muda o ping; está no "o que não fazemos"); FB5 (sem os marcadores
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D; itens 6.1,
-6.5–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado A–D. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

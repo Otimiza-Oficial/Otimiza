@@ -370,8 +370,8 @@
     {:else if fila && !medindoFila}
       <div class="fases" role="list">
         {#each [["Parado", fila.parado], ["Baixando", fila.baixando], ["Enviando", fila.enviando]] as const as [nome, f] (nome)}
-          <div class="fase" role="listitem" data-tom={f.classe ? TOM_DA_FILA[f.classe] : "neutro"}>
-            <span class="apoio">{nome}</span>
+          <div class="fase" role="listitem">
+            <span class="apoio">{#if f.classe}<span class="ponto" data-tom={TOM_DA_FILA[f.classe]}></span> {/if}{nome}</span>
             <strong class="numero">{f.ping_ms != null ? `${Math.round(f.ping_ms)} ms` : "—"}</strong>
             <span class="apoio pequeno">
               {#if f.a_mais_ms != null}+{Math.round(f.a_mais_ms)} ms · {mbps(f.mbps)}{:else if nome === "Parado"}sem carga{:else}não encheu a linha{/if}{(f.perda_pct ?? 0) >= 1
@@ -597,16 +597,6 @@
     padding: 10px 12px;
     border: 1px solid var(--linha);
     border-radius: 12px;
-    border-left-width: 3px;
-  }
-  .fase[data-tom="ok"] {
-    border-left-color: var(--ok);
-  }
-  .fase[data-tom="atencao"] {
-    border-left-color: var(--atencao);
-  }
-  .fase[data-tom="perigo"] {
-    border-left-color: var(--perigo);
   }
   .fase strong {
     font-size: 18px;
