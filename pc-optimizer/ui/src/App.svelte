@@ -868,7 +868,10 @@
                   </p>
                 {/if}
               {:else}
-              <h3>{jogo ? "Jogando agora" : "Última partida"}</h3>
+              <div class="cabeca-bloco">
+                <h3>{jogo ? "Jogando agora" : "Última partida"}</h3>
+                <button class="link pequeno" onclick={() => abrir("jogos")}>Ver partidas <Icone nome="seta_direita" tamanho={12} /></button>
+              </div>
               <div class="faixa">
                 <span class="capa">
                   {#if capaDaUltima}<img src={capaDaUltima} alt="" onerror={() => jogoDoPlayer && fotoFalhou(jogoDoPlayer)} />{:else if jogoDoPlayer}<span class="ini">{iniciais(jogoDoPlayer)}</span>{/if}
@@ -886,7 +889,6 @@
               {:else}
                 <p class="sec pequeno">Jogue com o Otimiza aberto: ele mede o FPS sozinho, sem nada por cima do jogo.</p>
               {/if}
-              <button class="link" onclick={() => abrir("jogos")}>Ver partidas <Icone nome="seta_direita" tamanho={14} /></button>
               {/if}
             </section>
 
@@ -1740,6 +1742,16 @@
     background:
       radial-gradient(260px circle at var(--mx) var(--my), rgb(255 255 255 / 0.06), transparent 60%),
       var(--bloco);
+  }
+  /* Título do bloco com a ação dele na mesma linha: não gasta uma linha do card com o link. */
+  .cabeca-bloco {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .cabeca-bloco .link {
+    font-size: 12px;
   }
   .bloco h3 {
     margin: 0;

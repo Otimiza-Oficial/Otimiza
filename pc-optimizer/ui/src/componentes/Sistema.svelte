@@ -174,7 +174,7 @@
       <p class="vazio">Lendo os ajustes deste PC…</p>
     {:else}
       <div class="filtros">
-        <span class="apoio"><b class="numero">{aplicados}</b> aplicados de {catalogo.length}</span>
+        <span class="apoio"><b class="numero">{aplicados}</b> {aplicados === 1 ? "aplicado" : "aplicados"} de {catalogo.length}</span>
         <label class="marcar"><input type="checkbox" bind:checked={soRecomendados} /> Só os recomendados</label>
         <label class="marcar"><input type="checkbox" bind:checked={avancados} /> Mostrar avançados</label>
       </div>

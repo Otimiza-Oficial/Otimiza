@@ -591,9 +591,9 @@ const catalogoDemo: OptimizationInfo_Serialize[] = (
   [
     ["game_dvr", "Desligar a gravação em segundo plano do Xbox", "A Xbox Game Bar grava os últimos minutos o tempo todo: custa placa e disco no jogo.", "Gaming", "Measurable", "Applied", false],
     ["hags", "Agendamento de GPU acelerado por hardware", "A placa organiza a própria fila de quadros: menos atraso em placas novas.", "Gaming", "Situational", "Available", true],
-    ["nagle", "Desligar o algoritmo de Nagle", "Pacotes pequenos saem na hora em vez de esperar juntar: menos atraso em jogo de tiro.", "Network", "Responsiveness", "Available", false],
+    ["nic_power_saving_off", "Placa de rede sem economia de energia", "A placa que dorme atrasa o primeiro pacote: é o pico de ping no meio da partida.", "Network", "Responsiveness", "Available", false],
     ["telemetria", "Reduzir a telemetria do Windows", "Menos envio de dados para a Microsoft. Não muda FPS.", "Privacy", "NoGain", "AlreadyOptimal", false],
-    ["sysmain", "Desligar o SysMain (Superfetch)", "Em SSD, para de pré-carregar programas e de mexer no disco no meio do jogo.", "System", "Situational", "Unknown", false],
+    ["foreground_priority", "Prioridade para o programa em primeiro plano", "O jogo na frente recebe mais tempo de processador que o que roda por trás.", "System", "Situational", "Unknown", false],
   ] as const
 ).map(([id, name, honest_effect, category, expected_gain, state, admin]) => ({
   id,
@@ -609,7 +609,7 @@ const catalogoDemo: OptimizationInfo_Serialize[] = (
   security_tradeoff: false,
   recommended: id !== "telemetria",
   retirado: false,
-  expert: id === "sysmain",
+  expert: id === "foreground_priority",
   condicao: null,
   state,
   detail: state === "Unknown" ? "Não consegui ler o serviço agora." : null,
