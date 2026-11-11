@@ -458,6 +458,12 @@ impl WindowsOptimizer {
 
         let resultado = self.aplicar_sem_registro(id, log);
         anotar_fim("aplicar", id, inicio, &resultado);
+        // Plano de refino, E5: ajuste que esquenta liga a guarda térmica pelos próximos 30 minutos.
+        if let Ok(r) = &resultado {
+            if r.success {
+                crate::plataforma::guarda_termica::depois_de_aplicar(id, &r.name);
+            }
+        }
         resultado
     }
 

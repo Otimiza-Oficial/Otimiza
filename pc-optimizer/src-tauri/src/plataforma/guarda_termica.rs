@@ -112,6 +112,37 @@ pub fn deve_avisar(novo: TipoDeAviso, ultimo: Option<(TipoDeAviso, u64)>, agora_
 /// Liga a vigia em segundo plano: dorme enquanto não há jogo, e com jogo lê a cada 15 s. Avisos pelo evento
 /// `oti:aviso-termico`.
 #[cfg(target_os = "windows")]
+/// Plano de refino, E5: ajuste que faz a máquina gastar mais (plano de energia, placa no clock máximo) liga a guarda
+/// também SEM jogo aberto por este tempo. Ganhar 3% e perder 20% quando esquenta é travada disfarçada.
+pub const VIGIA_DEPOIS_DE_AJUSTE_S: u64 = 30 * 60;
+/// Os ajustes do catálogo que aumentam o consumo e o calor.
+pub const AJUSTES_QUE_ESQUENTAM: &[&str] = &["plano_otimiza", "placa_no_clock_maximo"];
+
+static VIGIAR_ATE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// O nome do ajuste que pediu a vigília, para o aviso dizer de onde veio o calor.
+static AJUSTE_VIGIADO: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn agora_s() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Chamado pelo motor do catálogo depois de aplicar `id`: se ele esquenta, a guarda vigia os próximos 30 minutos.
+pub fn depois_de_aplicar(id: &str, nome: &str) {
+    if !AJUSTES_QUE_ESQUENTAM.contains(&id) {
+        return;
+    }
+    VIGIAR_ATE.store(agora_s() + VIGIA_DEPOIS_DE_AJUSTE_S, std::sync::atomic::Ordering::SeqCst);
+    *AJUSTE_VIGIADO.lock().unwrap_or_else(|e| e.into_inner()) = Some(nome.to_string());
+}
+
+/// **Pura.** A guarda olha agora? Com jogo aberto sempre; sem jogo, só dentro da vigília depois de um ajuste.
+pub fn deve_vigiar(jogo_aberto: bool, agora: u64, vigiar_ate: u64) -> bool {
+    jogo_aberto || agora < vigiar_ate
+}
+
 pub fn vigiar(app: tauri::AppHandle) {
     use tauri::Emitter;
     std::thread::Builder::new()
@@ -121,10 +152,12 @@ pub fn vigiar(app: tauri::AppHandle) {
             let mut ultimo: Option<(TipoDeAviso, u64)> = None;
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(SEGUNDOS_ENTRE_LEITURAS));
-                let Some(jogo) = super::sessao::atual() else {
+                let jogo = super::sessao::atual();
+                let ate = VIGIAR_ATE.load(std::sync::atomic::Ordering::SeqCst);
+                if !deve_vigiar(jogo.is_some(), agora_s(), ate) {
                     janela.clear();
                     continue;
-                };
+                }
                 let cpu = crate::modules::windows::motorenergia_maquina::amostra_agora();
                 let placa = crate::modules::windows::nvml::amostrar_com_motivos(true);
                 janela.push(Leitura {
@@ -137,7 +170,17 @@ pub fn vigiar(app: tauri::AppHandle) {
                 if janela.len() > JANELA {
                     janela.remove(0);
                 }
-                if let Some(aviso) = avaliar(&janela, Some(&jogo.nome)) {
+                let nome = jogo.as_ref().map(|j| j.nome.clone());
+                if let Some(mut aviso) = avaliar(&janela, nome.as_deref()) {
+                    // Sem jogo, o calor veio na vigília de um ajuste: o aviso diz qual, para a pessoa poder desfazer.
+                    if jogo.is_none() {
+                        if let Some(ajuste) = AJUSTE_VIGIADO.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+                            aviso.frase = format!(
+                                "{} Começou depois do ajuste \"{}\": se continuar, desfaça ele no Histórico.",
+                                aviso.frase, ajuste
+                            );
+                        }
+                    }
                     let agora = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_secs())
@@ -158,6 +201,21 @@ mod testes {
 
     fn l(cpu: Option<bool>, c: Option<u32>, placa: Option<bool>) -> Leitura {
         Leitura { cpu_freio_termico: cpu, placa_c: c, placa_freio_termico: placa }
+    }
+
+    #[test]
+    fn sem_jogo_so_vigia_na_meia_hora_depois_do_ajuste() {
+        assert!(deve_vigiar(true, 1000, 0));
+        assert!(deve_vigiar(false, 1000, 1000 + VIGIA_DEPOIS_DE_AJUSTE_S));
+        assert!(!deve_vigiar(false, 1000 + VIGIA_DEPOIS_DE_AJUSTE_S, 1000 + VIGIA_DEPOIS_DE_AJUSTE_S));
+        assert!(!deve_vigiar(false, 1000, 0));
+    }
+
+    #[test]
+    fn os_ajustes_que_esquentam_existem_no_catalogo() {
+        for id in AJUSTES_QUE_ESQUENTAM {
+            assert!(crate::modules::windows::catalog::find(id).is_some(), "{id} não está no catálogo");
+        }
     }
 
     #[test]
