@@ -27,6 +27,7 @@ pub mod hz;
 pub mod fb_por_jogo;
 pub mod fila;
 pub mod rede_partida;
+pub mod servidores_fivem;
 pub mod jogo_liso;
 pub mod jogos;
 pub mod lab;

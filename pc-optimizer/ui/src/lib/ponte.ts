@@ -54,6 +54,7 @@ import {
   type Rota_Serialize,
   type HistoricoDaRede_Serialize,
   type FilaMedida_Serialize,
+  type ServidorMedido,
   type TaxaDoMouse_Serialize,
   type PainelDoCs2,
   type PcsParecidos,
@@ -84,6 +85,7 @@ export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
 export type FilaMedida = FilaMedida_Serialize;
+export type { ServidorMedido };
 export type TaxaDoMouse = TaxaDoMouse_Serialize;
 export type { PainelDoCs2, PcsParecidos } from "./tipos";
 export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
@@ -970,6 +972,28 @@ export const ponte = {
       frase:
         "É fila no modem (bufferbloat): com a linha cheia o ping sobe 213 ms enviando. Nenhum ajuste do PC resolve isso; o que resolve é ligar o SQM (\"QoS inteligente\") no roteador, ou limitar a velocidade a uns 90% do plano. No PC, segure o envio de fundo durante o jogo.",
     };
+  },
+  /** R8: o ping de cada servidor do FiveM colado, do menor para o maior. */
+  servidoresFivem: async (entradas: string[]): Promise<ServidorMedido[]> => {
+    if (noTauri) return commands.fivemServidoresPing(entradas);
+    await new Promise((r) => setTimeout(r, 1200));
+    const exemplo = [
+      { nome: "Cidade de exemplo RP", ping: 14, proxy: false },
+      { nome: "Servidor de exemplo (Miami)", ping: 128, proxy: false },
+      { nome: "Exemplo atrás do proxy", ping: 41, proxy: true },
+    ];
+    return entradas
+      .filter((e) => e.trim())
+      .map((e, i) => ({
+        entrada: e.trim(),
+        nome: exemplo[i % 3].nome,
+        endereco: `45.10.20.${30 + i}:30120`,
+        ping_ms: exemplo[i % 3].ping,
+        falhas_pct: 0,
+        por_proxy: exemplo[i % 3].proxy,
+        erro: null,
+      }))
+      .sort((a, b) => (a.ping_ms ?? 0) - (b.ping_ms ?? 0));
   },
   rotaDoJogo: (): Promise<Rota> =>
     noTauri

@@ -54,6 +54,15 @@ pub async fn rede_fila() -> Result<crate::plataforma::fila::FilaMedida, String> 
     }
 }
 
+/// O ping dos servidores do FiveM que a pessoa colou (R8), do menor para o maior. Uns 2 s. `LIVRES`.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn fivem_servidores_ping(
+    entradas: Vec<String>,
+) -> Result<Vec<crate::plataforma::servidores_fivem::ServidorMedido>, String> {
+    crate::plataforma::servidores_fivem::medir(entradas).await
+}
+
 /// Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`.
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]

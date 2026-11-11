@@ -81,6 +81,8 @@ export const commands = {
 	redeRotaDoJogo: () => __TAURI_INVOKE<Rota_Serialize>("rede_rota_do_jogo"),
 	/**  Ping com a internet ocupada (bufferbloat): parado, baixando e enviando, uns 21 s. `LIVRES`. */
 	redeFila: () => __TAURI_INVOKE<FilaMedida_Serialize>("rede_fila"),
+	/**  O ping dos servidores do FiveM que a pessoa colou (R8), do menor para o maior. Uns 2 s. `LIVRES`. */
+	fivemServidoresPing: (entradas: string[]) => __TAURI_INVOKE<ServidorMedido_Serialize[]>("fivem_servidores_ping", { entradas }),
 	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
 	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
@@ -2678,6 +2680,34 @@ export type SaltoDaRota_Serialize = {
 	trecho: TrechoDaRota,
 	asn: number | null,
 	operadora: string | null,
+};
+
+export type ServidorMedido = ServidorMedido_Serialize | ServidorMedido_Deserialize;
+
+export type ServidorMedido_Deserialize = {
+	/**  O que a pessoa colou. */
+	entrada: string,
+	/**  O nome do servidor na lista do FiveM, sem os códigos de cor. `None` para endereço colado. */
+	nome?: string | null,
+	endereco?: string | null,
+	ping_ms?: number | null,
+	/**  Tentativas sem resposta, em %. */
+	falhas_pct: number | null,
+	por_proxy: boolean,
+	erro?: string | null,
+};
+
+export type ServidorMedido_Serialize = {
+	/**  O que a pessoa colou. */
+	entrada: string,
+	/**  O nome do servidor na lista do FiveM, sem os códigos de cor. `None` para endereço colado. */
+	nome: string | null,
+	endereco: string | null,
+	ping_ms: number | null,
+	/**  Tentativas sem resposta, em %. */
+	falhas_pct: number | null,
+	por_proxy: boolean,
+	erro: string | null,
 };
 
 export type SinalDoWifi = "Forte" | "Bom" | "Fraco" | "MuitoFraco";

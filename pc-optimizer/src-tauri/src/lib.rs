@@ -238,6 +238,7 @@ pub fn run() {
             commands::rede_rota,
             commands::rede_rota_do_jogo,
             commands::rede_fila,
+            commands::fivem_servidores_ping,
             commands::rede_historico,
             commands::rede_wifi,
             commands::rede_varredura_wifi,

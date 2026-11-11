@@ -53,6 +53,7 @@ mod tests {
                 crate::commands::rede_rota,
                 crate::commands::rede_rota_do_jogo,
                 crate::commands::rede_fila,
+                crate::commands::fivem_servidores_ping,
                 crate::commands::rede_historico,
                 crate::commands::rede_wifi,
                 crate::commands::rede_varredura_wifi,

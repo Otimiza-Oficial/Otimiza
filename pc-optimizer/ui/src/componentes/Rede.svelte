@@ -8,6 +8,7 @@
     ponte,
     type DiagnosticoDoWifi,
     type FilaMedida,
+    type ServidorMedido,
     type HistoricoDaRede,
     type PainelDaBanda,
     type PainelDaVarredura,
@@ -46,6 +47,37 @@
   let rota = $state<Rota | null>(null);
   let medindo = $state<"destino" | "jogo" | null>(null);
   let erroRota = $state<string | null>(null);
+
+  const CHAVE_SERVIDORES = "otimiza-servidores-fivem";
+  let listaDeServidores = $state(lerServidores());
+  let servidores = $state<ServidorMedido[] | null>(null);
+  let medindoServidores = $state(false);
+  let erroServidores = $state<string | null>(null);
+
+  function lerServidores(): string {
+    try {
+      return localStorage.getItem(CHAVE_SERVIDORES) ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  async function medirServidores() {
+    medindoServidores = true;
+    erroServidores = null;
+    try {
+      localStorage.setItem(CHAVE_SERVIDORES, listaDeServidores);
+    } catch {
+      // Vale nesta sessão.
+    }
+    try {
+      servidores = await ponte.servidoresFivem(listaDeServidores.split(/\r?\n/));
+    } catch (e) {
+      erroServidores = String(e);
+    } finally {
+      medindoServidores = false;
+    }
+  }
 
   let fila = $state<FilaMedida | null>(null);
   let medindoFila = $state(false);
@@ -385,6 +417,45 @@
     {/if}
   </section>
 
+  <!-- Servidores do FiveM -->
+  <section class="secao" aria-labelledby="rede-fivem">
+    <h2 id="rede-fivem">Servidores do FiveM</h2>
+    <p class="apoio">
+      Cole os servidores que você joga, um por linha: o link cfx.re/join/… ou o endereço (ip:porta). O Otimiza mede o
+      ping de cada um e põe o mais perto primeiro.
+    </p>
+    <textarea
+      class="campo servidores"
+      rows="4"
+      bind:value={listaDeServidores}
+      aria-label="Servidores do FiveM, um por linha"
+      placeholder="cfx.re/join/abc123"
+      disabled={medindoServidores}
+    ></textarea>
+    <div>
+      <button class="btn primario" type="button" disabled={medindoServidores || !listaDeServidores.trim()} onclick={medirServidores}>
+        {medindoServidores ? "Medindo…" : "Medir os servidores"}
+      </button>
+    </div>
+    {#if erroServidores}
+      <p class="erro">{erroServidores}</p>
+    {:else if servidores && !medindoServidores}
+      <ul class="lista-servidores">
+        {#each servidores as s, i (s.entrada + i)}
+          <li>
+            <div>
+              <strong>{s.nome ?? s.entrada}</strong>
+              <span class="apoio pequeno">
+                {s.erro ?? `${s.endereco ?? ""}${s.por_proxy ? " · pelo proxy da Cfx.re (mede o proxy)" : ""}${(s.falhas_pct ?? 0) >= 1 ? ` · ${Math.round(s.falhas_pct ?? 0)}% sem resposta` : ""}`}
+              </span>
+            </div>
+            <span class="numero">{s.ping_ms != null ? `${Math.round(s.ping_ms)} ms` : "—"}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
   <!-- Quando piora -->
   <section class="secao" aria-labelledby="rede-quando">
     <h2 id="rede-quando">Quando piora</h2>
@@ -585,6 +656,36 @@
   }
   .saltos tr.problema td {
     background: var(--ambar-fundo);
+  }
+  .servidores {
+    width: 100%;
+    resize: vertical;
+    font-family: inherit;
+  }
+  .lista-servidores {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+  }
+  .lista-servidores li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--linha);
+  }
+  .lista-servidores li > div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .lista-servidores .numero {
+    font-size: 18px;
+    font-weight: 600;
+    white-space: nowrap;
   }
   .fases {
     display: grid;

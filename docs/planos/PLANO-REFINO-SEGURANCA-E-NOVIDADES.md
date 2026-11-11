@@ -370,6 +370,8 @@ deixa isso:
 - 1.6 Esteira de segredos (`gitleaks`), `cargo audit` e `npm audit`; rustls/quinn corrigidos (0 vulnerabilidades).
 - R1 Ping com a internet ocupada (bufferbloat), na área Rede.
 - R6 Wi-Fi: o canal com bem menos disputa (1/6/11 no 2,4 GHz, sem DFS no 5 GHz), na ficha e no conselho.
+- R8 Servidores do FiveM: a pessoa cola os links cfx.re/join/… ou ip:porta, e o Otimiza mede o ping de cada um
+  (conexão TCP na porta do jogo) e ordena; o código vira endereço pela lista pública do FiveM.
 - R7 A rede na partida: ping nas janelas da medição automática; o cartão e o Oti dizem se foi a rede ou o PC.
 - FB1 e FB2 já existiam: o fluxo óptico no método do AMD FidelityFX foi testado contra o fluxo denso próprio (o denso
   ficou de padrão, melhor nos quadros gravados do FiveM), e a máscara de interface protege o HUD desde a 3.3.
@@ -394,4 +396,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5, R8; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1–2.3 menos o esqueleto (dívida de tipos, tokens, 4 abas); R2, R3, R5; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
