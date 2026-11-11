@@ -2265,12 +2265,15 @@
     --superficie-2: rgb(255 255 255 / 0.5);
     --tinta: var(--texto);
     --tinta-2: var(--sec);
+    /* O terceiro tom também neutro: o de `tokens.css` é azulado e destoava do cinza da casca. */
+    --tinta-3: #8e8e93;
     --linha: rgb(0 0 0 / 0.08);
     --linha-forte: rgb(0 0 0 / 0.14);
     --acao: #1d1d1f;
     --acao-forte: #000;
   }
   :global(:root[data-tema="noite"]) .area-aberta {
+    --tinta-3: #85858c;
     --superficie: rgb(255 255 255 / 0.08);
     --superficie-2: rgb(255 255 255 / 0.12);
     --linha: rgb(255 255 255 / 0.08);
