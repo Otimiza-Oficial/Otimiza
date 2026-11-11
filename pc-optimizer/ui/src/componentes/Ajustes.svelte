@@ -380,6 +380,9 @@
       <li>
         <span class="info">
           Otimiza {versao?.exibida ?? ""}
+          {#if versao && !versao.oficial}
+            <span class="apoio">Compilação local: sem a conferência online da licença. Para cliente, use o instalador publicado.</span>
+          {/if}
           <span class="apoio">
             {aviso?.comparacao === "HaVersaoNova"
               ? `A ${aviso.versao_publicada_exibida ?? aviso.versao_publicada} já saiu`

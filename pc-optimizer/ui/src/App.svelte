@@ -682,7 +682,7 @@
       <span class="avatar"><Oti acessorio={temporada?.acessorio ?? null} humor={humor} tamanho={30} segueCursor={false} /></span>
       <div class="ola">
         <strong>{temporada?.saudacao ?? "Bem-vindo de volta"}</strong>
-        <span class="sec">Otimiza {versao?.exibida ?? ""}{hardware ? ` · ${nomeCurto(hardware.processador)}` : ""}</span>
+        <span class="sec">Otimiza {versao?.exibida ?? ""}{versao && !versao.oficial ? " · compilação local" : ""}{hardware ? ` · ${nomeCurto(hardware.processador)}` : ""}</span>
       </div>
     </div>
 

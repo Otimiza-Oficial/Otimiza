@@ -2767,6 +2767,12 @@ export type VersaoDoApp = {
 	interna: string,
 	/**  O que o cliente vê ("1.0"). */
 	exibida: string,
+	/**
+	 *  Compilado pela esteira oficial (com o endereço da API da licença). Falso: compilação local, sem a conferência
+	 *  online da licença; a tela diz isso para ninguém mandar esse instalador a um cliente por engano (Plano de refino,
+	 *  1.1).
+	 */
+	oficial: boolean,
 };
 
 /**  LEITURA PURA. */

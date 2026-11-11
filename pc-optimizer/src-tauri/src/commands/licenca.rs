@@ -126,6 +126,10 @@ pub struct VersaoDoApp {
     pub interna: String,
     /// O que o cliente vê ("1.0").
     pub exibida: String,
+    /// Compilado pela esteira oficial (com o endereço da API da licença). Falso: compilação local, sem a conferência
+    /// online da licença; a tela diz isso para ninguém mandar esse instalador a um cliente por engano (Plano de refino,
+    /// 1.1).
+    pub oficial: bool,
 }
 
 /// `LIVRES`: só lê a versão compilada no executável.
@@ -135,6 +139,7 @@ pub fn versao_do_app() -> VersaoDoApp {
     VersaoDoApp {
         interna: env!("CARGO_PKG_VERSION").to_string(),
         exibida: crate::modules::atualizacao::versao_de_exibicao(),
+        oficial: crate::modules::licenca_online::endereco().is_some(),
     }
 }
 

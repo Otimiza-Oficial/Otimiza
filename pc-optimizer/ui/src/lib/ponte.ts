@@ -151,7 +151,7 @@ const demo: {
   biblioteca: ResumoDoJogo[];
   instalados: JogoDaLoja[];
 } = {
-  versao: { interna: "4.0.0", exibida: "1.0" },
+  versao: { interna: "4.0.0", exibida: "1.0", oficial: true },
   hardware: {
     processador: "Intel Core i3-10100F",
     nucleos_logicos: 8,
