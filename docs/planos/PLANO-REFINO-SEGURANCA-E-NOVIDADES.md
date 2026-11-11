@@ -338,3 +338,27 @@ deixa isso:
 2. **Assinatura**: contratar o Azure Trusted Signing (mensal) ou um certificado tradicional?
 3. **Atestado obrigatório**: aceitar a tolerância de 30 dias sem rede?
 4. **Receitas pela comunidade**: coletar, com opt-in, o resultado das partidas para montar as receitas?
+
+---
+
+## 9. Andamento (11/11/2026)
+
+**Feito** (commits locais, nada publicado no GitHub):
+
+- 5.2 Nenhum serviço do Windows fica parado.
+- E1 O portão olha tranco; piora forte desfaz na primeira partida.
+- E2 Vigia de estabilidade: PC que cai depois de um ajuste tem o ajuste desfeito.
+- E5 Guarda térmica nos 30 minutos depois de um ajuste que esquenta.
+- E7 (parte) O tick fixo do `bcdedit` aposentado.
+- E8 Interruptor remoto: `ajustes_desligados` no `convite.json` desliga um ajuste para todos.
+- E9 Detecção de jogo não mede de novo a cada volta (o PowerShell da GPU saía a cada 4 s na partida inteira).
+- 1.4 CSP ligada na janela; compilação local se identifica na barra e nos Ajustes.
+- 1.6 Esteira de segredos (`gitleaks`), `cargo audit` e `npm audit`; rustls/quinn corrigidos (0 vulnerabilidades).
+- R1 Ping com a internet ocupada (bufferbloat), na área Rede.
+- 6.2 "Jogar": Epic pelo inicializador dela, Roblox pela página inicial.
+- 6.3 MSI em português (`wix.language = pt-BR`).
+- Partida de respeito, fase 3: "Deixar liso" no cartão da partida com tranco; aviso de memória apertada no "Jogar".
+
+**Falta**: E3, E4, E6, E10–E12; 2.1–2.3 (dívida de tipos, tokens, 4 abas); FB1–FB8; R2–R8; atestado A–D; itens 6.1,
+6.4–6.6. **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados) e subir
+o `bot-pacote.zip` na hospedagem.

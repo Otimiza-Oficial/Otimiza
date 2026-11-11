@@ -71,6 +71,9 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "wix": {
+        "language": "pt-BR"
+      },
       "webviewInstallMode": {
         "type": "embedBootstrapper"
       },
