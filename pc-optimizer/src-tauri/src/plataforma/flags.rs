@@ -25,6 +25,10 @@ pub struct Flags {
     pub vibracao_nvidia: bool,
     /// R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão.
     pub prioridade_na_rede: bool,
+    /// A escala do Frame Boost (o jogo numa janela menor, ampliada para a tela). Desligada por padrão, decisão do dono
+    /// (13/11/2026): o Otimiza não muda a resolução do jogo sem a pessoa pedir. Vale para o Frame Boost, o Turbo e o
+    /// "Jogar".
+    pub escala_permitida: bool,
 }
 
 impl Default for Flags {
@@ -40,6 +44,7 @@ impl Default for Flags {
             smooth_motion_drs: false,
             vibracao_nvidia: true,
             prioridade_na_rede: false,
+            escala_permitida: false,
         }
     }
 }

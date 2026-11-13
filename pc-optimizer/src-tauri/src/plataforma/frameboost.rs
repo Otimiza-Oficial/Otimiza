@@ -569,6 +569,16 @@ pub fn ligar(
 ) -> Result<Painel, String> {
     // Plano de refino 1.2: a licença conferida também aqui, não só no comando (desligar nunca confere).
     crate::modules::licenca::exigir()?;
+    // A escala só com a pessoa permitindo (Ajustes): o Otimiza não muda a resolução do jogo por conta própria. Todo
+    // caminho passa aqui (Frame Boost, Turbo, "Jogar", a escolha lembrada).
+    let escala = if super::flags::Flags::load().escala_permitida {
+        escala
+    } else {
+        if escala.is_some() && multiplicador == 1 {
+            return Err("A escala está desligada nos Ajustes: o Otimiza não muda a resolução do jogo. Para usar, ligue \"Permitir a escala\" em Ajustes.".to_string());
+        }
+        None
+    };
     let jogo =
         super::sessao::atual().ok_or("Abra o jogo primeiro: o Frame Boost liga no jogo aberto.")?;
     let recomendado = jogo

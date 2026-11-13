@@ -36,6 +36,8 @@
   let escalaPedida = $state<NivelDeEscala | null>(lerEscala());
   let alvoPedido = $state<number | null>(Number(ler(CHAVE_ALVO, "")) || null);
   let nitidez = $state(Number(ler(CHAVE_NITIDEZ, "0.2")));
+  /** Sem a escala permitida nos Ajustes, as opções dela nem aparecem: o Otimiza não muda a resolução do jogo. */
+  let escalaPermitida = $state(false);
   let relogio: ReturnType<typeof setInterval> | undefined;
 
   function ler(chave: string, padrao: string) {
@@ -71,6 +73,7 @@
     void carregar();
     // A escolha da pessoa vale desde já: o gerador lê a nitidez a cada quadro.
     void ferramentas.escalaNitidez(nitidez).catch(() => {});
+    void ferramentas.escalaPermitida().then((v) => (escalaPermitida = v)).catch(() => {});
     // Ligado pelo gerador do Otimiza o número muda a cada segundo; desligado, basta olhar de vez em quando.
     relogio = setInterval(() => {
       if (!ocupado) void carregar();
@@ -85,7 +88,7 @@
     rec?.recurso === "FrameBoostSmoothMotion" && (rec ? (motivo(rec.suporte) ?? "") : "").startsWith("Experimental"),
   );
   const liga = $derived(doOtimiza || rec?.recurso === "FrameBoostAfmf" || experimental);
-  const escala = $derived(doOtimiza ? escalaPedida : null);
+  const escala = $derived(doOtimiza && escalaPermitida ? escalaPedida : null);
   /** O pedido, se couber no monitor; senão o maior que cabe abaixo dele. 1 = só escala (só com a escala ligada). */
   const mult = $derived.by(() => {
     const cabem = p?.multiplicadores ?? [];
@@ -237,6 +240,9 @@
     {/if}
 
     {#if doOtimiza && !a}
+      {#if !escalaPermitida}
+        <p class="apoio pequeno">Sem escala: o Frame Boost só gera quadros e não muda a resolução do jogo. Para usar a escala, ligue "Permitir a escala" nos Ajustes.</p>
+      {:else}
       <div class="escolha">
         <span class="rotulo">Escala</span>
         <div class="segmento" role="radiogroup" aria-label="Escala">
@@ -256,6 +262,7 @@
           {/if}
         </p>
       </div>
+      {/if}
       <div class="escolha">
         <span class="rotulo">Quadros gerados</span>
         <div class="segmento" role="radiogroup" aria-label="Multiplicador">

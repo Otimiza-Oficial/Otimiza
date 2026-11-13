@@ -2552,6 +2552,12 @@ export type Flags_Deserialize = {
 	vibracao_nvidia?: boolean,
 	/**  R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão. */
 	prioridade_na_rede?: boolean,
+	/**
+	 *  A escala do Frame Boost (o jogo numa janela menor, ampliada para a tela). Desligada por padrão, decisão do dono
+	 *  (13/11/2026): o Otimiza não muda a resolução do jogo sem a pessoa pedir. Vale para o Frame Boost, o Turbo e o
+	 *  "Jogar".
+	 */
+	escala_permitida?: boolean,
 };
 
 export type Flags_Serialize = {
@@ -2572,6 +2578,12 @@ export type Flags_Serialize = {
 	vibracao_nvidia: boolean,
 	/**  R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão. */
 	prioridade_na_rede: boolean,
+	/**
+	 *  A escala do Frame Boost (o jogo numa janela menor, ampliada para a tela). Desligada por padrão, decisão do dono
+	 *  (13/11/2026): o Otimiza não muda a resolução do jogo sem a pessoa pedir. Vale para o Frame Boost, o Turbo e o
+	 *  "Jogar".
+	 */
+	escala_permitida: boolean,
 };
 
 export type FonteDaNativa = 
