@@ -245,6 +245,16 @@ export const ferramentas = {
     noTauri
       ? como<PainelFrameBoost>(commands.frameBoostLigar(multiplicador, false, escala, alvo))
       : Promise.resolve(fbLigadoDemo(multiplicador, escala)),
+  /** A escala permitida (Ajustes)? Desligada por padrão: o Otimiza não muda a resolução do jogo sem a pessoa pedir.
+   *  Na demonstração, desligada como num PC novo. */
+  escalaPermitida: async (): Promise<boolean> =>
+    noTauri ? !!(await como<{ escala_permitida?: boolean }>(commands.flagsLer())).escala_permitida : false,
+  definirEscalaPermitida: async (permitir: boolean): Promise<boolean> => {
+    if (!noTauri) return permitir;
+    const atual = await como<Record<string, unknown>>(commands.flagsLer());
+    await commands.flagsGravar({ ...atual, escala_permitida: permitir } as never);
+    return permitir;
+  },
   /** Nitidez da escala (FB6), em "stops" do FSR: 0 a mais forte, 2 a mais suave. Vale no próximo quadro. */
   escalaNitidez: async (stops: number): Promise<number> => (noTauri ? ((await commands.escalaNitidez(stops)) ?? stops) : stops),
   frameBoostDesligar: (): Promise<PainelFrameBoost> => {

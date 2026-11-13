@@ -198,7 +198,7 @@ pub async fn turbo_compartilhar() -> Result<String, String> {
                     .map(|p| crate::plataforma::historico::id_do_jogo(&p.jogo).0)
             })
             .and_then(|id| crate::plataforma::turbo::perfil(&id))
-            .and_then(|p| crate::plataforma::turbo::receita_da_prova(&p.receita))
+            .and_then(|p| crate::plataforma::turbo::receita_da_prova(&crate::plataforma::turbo::conforme_os_ajustes(p.receita)))
             .map(|r| crate::plataforma::turbo::descrever(&r))
             .unwrap_or_else(|| "Turbo".to_string());
         let data = prova

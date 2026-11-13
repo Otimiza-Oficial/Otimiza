@@ -95,6 +95,38 @@ pub fn vale_guardar(g: Gargalo) -> bool {
 /// nada muda no meio da partida, a receita liga no próximo "Jogar" e a prova automática a confere.
 pub const MEDIR_SEM_RECEITA_S: [u64; 2] = [120, 480];
 
+/// **Pura.** A receita sem a escala (a escala desligada nos Ajustes: o Otimiza não muda a resolução do jogo). "Só
+/// escala" vira nada de Frame Boost; escala com geração fica só com a geração. O texto diz o que mudou.
+pub fn sem_escala(r: Receita) -> Receita {
+    if r.escala.is_none() {
+        return r;
+    }
+    let multiplicador = r.multiplicador.filter(|m| *m != 1);
+    let resto = match (multiplicador, r.energia) {
+        (Some(_), _) => "a geração de quadros completa o monitor, sem mexer na resolução do jogo.",
+        (None, true) => "o Turbo fica com a energia de jogo, sem mexer na resolução do jogo.",
+        (None, false) => "sem a escala, não sobra o que ligar para a placa.",
+    };
+    Receita {
+        escala: None,
+        multiplicador,
+        explicacao: format!(
+            "A placa de vídeo está no limite. A escala (o jogo com menos pixels) está desligada nos Ajustes: {}",
+            resto
+        ),
+        ..r
+    }
+}
+
+/// A receita como vale nesta máquina: sem a escala, se a pessoa não a permitiu.
+pub fn conforme_os_ajustes(r: Receita) -> Receita {
+    if super::flags::Flags::load().escala_permitida {
+        r
+    } else {
+        sem_escala(r)
+    }
+}
+
 /// Pura: as duas receitas ligam a mesma coisa (escala, multiplicador e energia), mesmo com textos e FPS diferentes.
 /// É o que impede o "Medir de novo" de religar uma receita que a prova reprovou.
 pub fn mesma_acao(a: &Receita, b: &Receita) -> bool {
@@ -671,7 +703,12 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
         "turbo: {} · {:?} (CPU {:.0}%, núcleo {:.0}%, placa {:.0}%) · {:?} fps · {:?} Hz",
         id, relatorio.limite, relatorio.cpu_total, relatorio.cpu_max_core, relatorio.gpu_percent, fps, hz
     ));
-    let receita = montar(gargalo_da_medida(relatorio.limite, relatorio.gpu_percent > 0.0), fps, hz, menor_atraso(&id));
+    let receita = conforme_os_ajustes(montar(
+        gargalo_da_medida(relatorio.limite, relatorio.gpu_percent > 0.0),
+        fps,
+        hz,
+        menor_atraso(&id),
+    ));
     let ritmo = medida.as_ref().and_then(|r| {
         ritmo_a_oferecer(&receita, r.fps_do_jogo_mediana, r.engasgos_por_minuto, hz.unwrap_or(0))
     });
@@ -690,6 +727,9 @@ static RITMO: std::sync::Mutex<Option<(String, Ritmo)>> = std::sync::Mutex::new(
 #[cfg(target_os = "windows")]
 pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> Vec<String> {
     use std::sync::atomic::Ordering;
+    // A receita lembrada de antes da escala ser desligada também perde a escala.
+    let ajustada = conforme_os_ajustes(r.clone());
+    let r = &ajustada;
     if let Ok(mut a) = APLICADA.lock() {
         *a = Some((fps_antes, r.clone()));
     }
@@ -911,7 +951,7 @@ pub fn provar(
     let (id, _) = super::historico::id_do_jogo(&jogo.executavel);
     let mut perfil = perfil(&id)
         .ok_or("Ligue o Turbo uma vez neste jogo: a prova usa a receita que ele escolheu para ele.")?;
-    let lado_com = receita_da_prova(&perfil.receita).ok_or(
+    let lado_com = receita_da_prova(&conforme_os_ajustes(perfil.receita.clone())).ok_or(
         "Esta receita não muda o FPS do jogo (só a geração de quadros ou a memória): não há o que provar com o FPS \
          do jogo. A guarda do Frame Boost já confere a geração.",
     )?;
@@ -1017,6 +1057,21 @@ mod tests {
         assert!(!oferece_perfil_do_jogo("gta5"), "a trava de jogo aberto e o arquivo são do FiveM");
         assert!(!oferece_perfil_do_jogo("cs2"));
         assert!(PERFIS_DO_JOGO.iter().all(|p| ["competitivo", "equilibrado"].contains(p)));
+    }
+
+    #[test]
+    fn sem_escala_a_receita_nao_mexe_na_resolucao() {
+        let so_escala = montar(Gargalo::Placa, Some(70.0), Some(144), true);
+        assert!(so_escala.escala.is_some() && so_escala.multiplicador == Some(1));
+        let r = sem_escala(so_escala);
+        assert_eq!((r.escala, r.multiplicador), (None, None));
+        assert!(r.explicacao.contains("desligada nos Ajustes"), "{}", r.explicacao);
+        let com_geracao = montar(Gargalo::Placa, Some(40.0), Some(144), false);
+        assert!(com_geracao.escala.is_some());
+        let r = sem_escala(com_geracao);
+        assert_eq!((r.escala, r.multiplicador), (None, Some(0)));
+        let cpu = montar(Gargalo::Processador, Some(70.0), Some(144), false);
+        assert_eq!(sem_escala(cpu.clone()), cpu, "sem escala não muda nada");
     }
 
     #[test]

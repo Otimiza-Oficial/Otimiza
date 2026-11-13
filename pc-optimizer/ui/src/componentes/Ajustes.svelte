@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ferramentas } from "../lib/ferramentas";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
@@ -41,6 +42,16 @@
    *  de fábrica. As outras chaves de `flags` ficam como estão: lê tudo e grava tudo, trocando só esta. */
   let nvidia = $state(false);
   let smoothMotion = $state<boolean | null>(null);
+  /** A escala do Frame Boost (o jogo com menos pixels, ampliado para a tela): desligada por padrão. */
+  let escalaPermitida = $state<boolean | null>(null);
+  async function alternarEscala() {
+    if (escalaPermitida === null) return;
+    try {
+      escalaPermitida = await ferramentas.definirEscalaPermitida(!escalaPermitida);
+    } catch (e) {
+      recado = { tom: "perigo", texto: String(e) };
+    }
+  }
   async function alternarSmoothMotion() {
     if (!noTauri || smoothMotion === null) return;
     try {
@@ -143,6 +154,7 @@
       .hardwareUltimo()
       .then((h) => {
         nvidia = h?.placa.fabricante === "Nvidia";
+        ferramentas.escalaPermitida().then((v) => (escalaPermitida = v)).catch(() => (escalaPermitida = false));
         if (nvidia && noTauri) como<{ smooth_motion_drs: boolean }>(commands.flagsLer()).then((f) => (smoothMotion = f.smooth_motion_drs)).catch(() => {});
       })
       .catch(() => {});
@@ -320,6 +332,22 @@
       <button class="interruptor" role="switch" aria-checked={epoca} aria-label="Temas de época" onclick={alternarEpoca}></button>
     </div>
   </section>
+
+  <!-- A resolução do jogo -->
+  {#if escalaPermitida !== null}
+    <section class="secao">
+      <div class="linha">
+        <div class="info">
+          <h2>Permitir a escala</h2>
+          <span class="apoio">
+            Com ela, o Frame Boost e o Turbo podem deixar o jogo numa janela menor (menos pixels, mais FPS) e ampliar para a
+            tela. Desligada, o Otimiza nunca muda a resolução do jogo: o Frame Boost só gera quadros.
+          </span>
+        </div>
+        <button class="interruptor" role="switch" aria-checked={escalaPermitida} aria-label="Permitir a escala" onclick={alternarEscala}></button>
+      </div>
+    </section>
+  {/if}
 
   {#if nvidia && smoothMotion !== null}
     <!-- Experimental -->
