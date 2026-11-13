@@ -1,0 +1,11 @@
+# Exceções do `cargo audit` (esteira de segurança, `.github/workflows/seguranca.yml`). Cada uma com o motivo: exceção sem
+# motivo vira lista que ninguém confere. Qualquer falha nova continua reprovando.
+
+[advisories]
+ignore = [
+    # quinn-udp 0.5.15, "Receive loop can spin after a truncated datagram", sem versão corrigida (13/11/2026). Está no
+    # Cargo.lock só como dependência opcional do `reqwest` para HTTP/3; o Otimiza usa o reqwest sem esse recurso
+    # (features = ["json", "rustls"]), e `cargo tree -i quinn-udp --target all` não acha nada: não entra no executável.
+    # Tirar daqui quando sair a correção.
+    "RUSTSEC-2026-0538",
+]
