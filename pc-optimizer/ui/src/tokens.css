@@ -63,6 +63,15 @@
   --t-titulo: 20px;
   --t-numero: 28px;
 
+  /* Movimento (Plano de refino 2.3.1): três durações e duas curvas para o app inteiro. Rápido para resposta a toque
+     (hover, interruptor), médio para troca de estado, entrar para o que aparece. Tudo para com o jogo aberto e com
+     "reduzir movimento" (regras no fim deste arquivo). */
+  --mov-rapido: 140ms;
+  --mov-medio: 200ms;
+  --mov-entrar: 420ms;
+  --curva-mola: cubic-bezier(0.3, 1.4, 0.5, 1);
+  --curva-saida: cubic-bezier(0.2, 0.8, 0.2, 1);
+
   --fonte-titulo: "Jakarta", "Segoe UI Variable Display", "Segoe UI", sans-serif;
   --fonte-texto: "Geist", "Segoe UI Variable Text", "Segoe UI", sans-serif;
 
@@ -121,6 +130,8 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  /* Plano de refino 2.3.2: dígitos da mesma largura no app inteiro, para o número que muda não dançar. */
+  font-variant-numeric: tabular-nums;
 }
 
 body {
@@ -178,7 +189,7 @@ h2 {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background var(--mov-rapido) ease, border-color var(--mov-rapido) ease;
 }
 .btn:hover:not(:disabled) {
   background: var(--superficie-2);
@@ -244,7 +255,7 @@ h2 {
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--mov-rapido) ease, color var(--mov-rapido) ease;
 }
 .segmento > button:hover:not(:disabled) {
   color: var(--tinta);
@@ -293,7 +304,7 @@ h2 {
   border-radius: 4px;
   background: var(--superficie-2);
   color: var(--tinta-2);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1.5;
@@ -321,7 +332,7 @@ h2 {
   border-radius: 4px;
   background: var(--ambar-fundo);
   color: var(--ambar);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -372,7 +383,7 @@ h2 {
   border-radius: 12px;
   background: var(--linha-forte);
   cursor: pointer;
-  transition: background 140ms ease;
+  transition: background var(--mov-rapido) ease;
 }
 .interruptor::after {
   content: "";
@@ -384,7 +395,7 @@ h2 {
   border-radius: 50%;
   background: #fff;
   box-shadow: var(--sombra-1);
-  transition: transform 140ms ease;
+  transition: transform var(--mov-rapido) ease;
 }
 .interruptor[aria-checked="true"] {
   background: var(--ligado, var(--acao));
@@ -425,6 +436,7 @@ h2 {
 }
 
 .jogo-aberto *,
+.jogo-aberto *::before,
 .jogo-aberto *::after {
   transition: none !important;
   animation: none !important;
@@ -432,6 +444,7 @@ h2 {
 
 @media (prefers-reduced-motion: reduce) {
   *,
+  *::before,
   *::after {
     transition: none !important;
     animation: none !important;
@@ -468,7 +481,7 @@ details > summary::before {
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: rotate(-45deg);
-  transition: transform 140ms ease;
+  transition: transform var(--mov-rapido) ease;
 }
 details[open] > summary::before {
   transform: rotate(45deg) translate(-1px, -1px);
@@ -505,7 +518,7 @@ input[type="range"].deslizante::-webkit-slider-thumb {
   box-shadow:
     0 1px 4px rgb(0 0 0 / 0.3),
     0 0 0 1px rgb(0 0 0 / 0.08);
-  transition: transform 140ms ease;
+  transition: transform var(--mov-rapido) ease;
 }
 input[type="range"].deslizante:active::-webkit-slider-thumb {
   transform: scale(1.15);

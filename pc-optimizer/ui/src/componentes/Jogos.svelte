@@ -340,7 +340,7 @@
     text-align: left;
     cursor: pointer;
     transition:
-      background 160ms ease,
+      background var(--mov-rapido) ease,
       transform 200ms cubic-bezier(0.3, 1.4, 0.5, 1);
   }
   .cartao:hover {
@@ -370,6 +370,6 @@
     white-space: nowrap;
   }
   .cartao .apoio {
-    font-size: 11px;
+    font-size: 12px;
   }
 </style>

@@ -862,7 +862,7 @@
     color: var(--tinta-3);
   }
   .pequeno {
-    font-size: 11px;
+    font-size: 12px;
   }
   .chamado {
     display: flex;
@@ -876,7 +876,7 @@
     min-width: 220px;
   }
   .atribuicao {
-    font-size: 11px;
+    font-size: 12px;
   }
   .lista > li {
     align-items: flex-start;

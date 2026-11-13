@@ -220,7 +220,7 @@
   .cabeca {
     transform-origin: 100px 100px;
     animation: flutuar 5s ease-in-out infinite;
-    transition: rotate 400ms cubic-bezier(0.3, 1.4, 0.5, 1);
+    transition: rotate var(--mov-entrar) var(--curva-mola);
   }
   .chao {
     transform-box: fill-box;

@@ -411,14 +411,14 @@
   h1 {
     margin: 8px 0 0;
     font-family: var(--fonte-titulo);
-    font-size: 34px;
+    font-size: 28px;
     font-weight: 650;
     letter-spacing: -0.02em;
   }
   h2 {
     margin: 0;
     font-family: var(--fonte-titulo);
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 650;
     letter-spacing: -0.015em;
   }
@@ -431,7 +431,7 @@
   .sub,
   .rodape {
     margin: 0;
-    font-size: 13.5px;
+    font-size: 13px;
     opacity: 0.66;
   }
   .rodape {
@@ -453,7 +453,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 12.5px;
+    font-size: 12px;
   }
   .historia figcaption > span:first-child {
     opacity: 0.6;
@@ -462,7 +462,7 @@
     padding: 2px 9px;
     border-radius: 999px;
     background: rgb(0 0 0 / 0.07);
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
   }
   :global(:root[data-tema="noite"]) .etiqueta {
@@ -473,7 +473,7 @@
     padding: 1px 8px;
     border: 1px dashed currentColor;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 12px;
     opacity: 0.5;
   }
   .historia svg {
@@ -544,7 +544,7 @@
     display: flex;
     gap: 14px;
     margin-top: 6px;
-    font-size: 11.5px;
+    font-size: 12px;
   }
   .tag {
     display: inline-flex;
@@ -596,7 +596,7 @@
     border-top-color: currentColor;
   }
   .marca {
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     opacity: 0.55;
     font-variant-numeric: tabular-nums;
@@ -605,7 +605,7 @@
     font-size: 15px;
   }
   .batidas li > span:last-child {
-    font-size: 12.5px;
+    font-size: 12px;
     line-height: 1.45;
     opacity: 0.72;
   }
@@ -639,7 +639,7 @@
     border-color: color-mix(in srgb, var(--laranja, #c2730f) 45%, transparent);
   }
   .rotulo {
-    font-size: 12.5px;
+    font-size: 12px;
     opacity: 0.6;
     align-self: center;
   }
@@ -649,7 +649,7 @@
   }
   .nota {
     grid-column: 2;
-    font-size: 12.5px;
+    font-size: 12px;
     opacity: 0.68;
   }
   .atencao .nota {
@@ -716,7 +716,7 @@
     cursor: pointer;
     transition:
       border-color 200ms,
-      transform 200ms cubic-bezier(0.3, 1.5, 0.5, 1);
+      transform var(--mov-medio) var(--curva-mola);
   }
   .tema-op:hover {
     transform: translateY(-2px);

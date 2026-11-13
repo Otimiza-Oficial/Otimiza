@@ -1339,7 +1339,7 @@
     font-weight: 600;
   }
   .ola span {
-    font-size: 11px;
+    font-size: 12px;
   }
   .busca {
     flex: 1;
@@ -1449,7 +1449,7 @@
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 200ms ease, color 200ms ease;
+    transition: background var(--mov-medio) ease, color var(--mov-medio) ease;
   }
   .segmento button[aria-checked="true"] {
     background: var(--ativo);
@@ -1632,8 +1632,8 @@
     color: var(--texto);
     cursor: pointer;
     transition:
-      background 200ms ease,
-      transform 200ms cubic-bezier(0.3, 1.5, 0.5, 1);
+      background var(--mov-medio) ease,
+      transform var(--mov-medio) var(--curva-mola);
   }
   .trilho-botao:hover {
     background: var(--bloco-2);
@@ -1786,7 +1786,7 @@
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 120ms ease;
+    transition: opacity var(--mov-rapido) ease;
   }
   .botao-principal:hover {
     opacity: 0.88;
@@ -1848,7 +1848,7 @@
     border-radius: 12px;
     background: rgb(120 120 128 / 0.32);
     cursor: pointer;
-    transition: background 200ms ease;
+    transition: background var(--mov-medio) ease;
   }
   .chave::after {
     content: "";
@@ -1963,7 +1963,7 @@
     font-weight: 600;
     cursor: pointer;
     box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
-    transition: transform 160ms ease;
+    transition: transform var(--mov-rapido) ease;
   }
   .jogar:hover {
     transform: scale(1.05);
@@ -1979,7 +1979,7 @@
     background: var(--texto);
     color: var(--contra, #fff);
     font: inherit;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
   }
@@ -2080,7 +2080,7 @@
   }
   .numeros dd {
     margin: 0;
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 600;
     line-height: 1.1;
   }
@@ -2114,7 +2114,7 @@
   }
   .atalhos button :global(.icone) {
     color: var(--sec);
-    transition: transform 160ms ease;
+    transition: transform var(--mov-rapido) ease;
   }
   .atalhos button:hover :global(.icone) {
     color: var(--texto);
@@ -2332,9 +2332,9 @@
     background: var(--ativo);
     box-shadow: 0 4px 14px rgb(0 0 0 / 0.14);
     transition:
-      transform 420ms cubic-bezier(0.3, 1.25, 0.4, 1),
-      width 420ms cubic-bezier(0.3, 1.25, 0.4, 1),
-      opacity 200ms ease;
+      transform var(--mov-entrar) var(--curva-mola),
+      width var(--mov-entrar) var(--curva-mola),
+      opacity var(--mov-medio) ease;
   }
   .aba {
     position: relative;
@@ -2347,7 +2347,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: color 200ms ease;
+    transition: color var(--mov-medio) ease;
   }
   .aba.ativa {
     color: var(--ativo-texto);

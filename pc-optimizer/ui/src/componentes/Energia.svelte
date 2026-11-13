@@ -519,7 +519,7 @@
     text-align: right;
   }
   .pequeno {
-    font-size: 11px;
+    font-size: 12px;
   }
   .achados-calibracao {
     list-style: none;

@@ -205,7 +205,7 @@
     height: 22px;
     border-radius: 50%;
     background: var(--superficie-2);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
   }
   .passos li.agora {
@@ -233,7 +233,7 @@
     border-left: 1px solid var(--linha-forte);
   }
   .grande {
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 600;
     line-height: 1.1;
   }

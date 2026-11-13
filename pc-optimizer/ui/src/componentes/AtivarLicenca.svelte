@@ -175,7 +175,7 @@
   }
   .apoio {
     color: var(--tinta-2, var(--sec, #5d5d63));
-    font-size: 12.5px;
+    font-size: 12px;
     line-height: 1.4;
   }
   .codigo {
@@ -224,11 +224,11 @@
   }
   .dica {
     color: var(--atencao, #b25e00);
-    font-size: 12.5px;
+    font-size: 12px;
   }
   .recusa {
     color: var(--perigo, #c0392b);
-    font-size: 12.5px;
+    font-size: 12px;
   }
   .ativa {
     display: flex;

@@ -325,7 +325,7 @@
     opacity: 0.5;
   }
   .porque {
-    font-size: 11.5px;
+    font-size: 12px;
     color: var(--tinta-2);
   }
   .barra {
@@ -352,7 +352,7 @@
   .recado,
   .nota {
     margin: 0;
-    font-size: 12.5px;
+    font-size: 12px;
   }
   .recado[data-tom="ok"] {
     color: var(--ok);

@@ -176,7 +176,7 @@
     font-size: 12px;
   }
   .fim {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 500;
   }
 </style>

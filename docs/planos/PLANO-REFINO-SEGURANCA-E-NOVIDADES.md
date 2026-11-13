@@ -400,6 +400,10 @@ deixa isso:
 - 2.2.4 Esqueleto de carregamento no lugar do "Lendo…" solto (17 lugares, parado com jogo aberto).
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - 2.2.5 A fumaça confere também o notebook de 1366×768 a 125% (1093×614): cards, trilho, barra de cima e abas cabem.
+- 2.3.1 Movimento com sistema: três durações e duas curvas em `tokens.css` (`--mov-*`, `--curva-*`), 23 valores soltos
+  trocados por elas; o congelamento com jogo aberto e "reduzir movimento" agora cobre também o `::before`.
+- 2.3.2 Tipografia: 30 tamanhos quebrados (11, 11,5, 12,5, 13,5, 26, 30, 34 px) trazidos para a escala; dígitos tabulares
+  no app inteiro.
 - 6.1 Investigado no PC do dono: nenhum pânico no log e nenhum arquivo em `falhas/`; toda sessão sem fechamento normal
   foi encerramento forçado (testes de desenvolvimento e o instalador fechando o Otimiza), e a abertura já não conta
   reinício do Windows nem atualização como queda.
@@ -413,4 +417,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1.2 (dados reais nos testes), 2.3; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1.2 (dados reais nos testes), 2.3.3 a 2.3.5; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

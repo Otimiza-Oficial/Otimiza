@@ -243,6 +243,6 @@
     padding-left: 18px;
     display: grid;
     gap: 4px;
-    font-size: 12.5px;
+    font-size: 12px;
   }
 </style>
