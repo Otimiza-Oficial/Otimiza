@@ -98,12 +98,24 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
 await cdp("Runtime.enable");
 await cdp("Page.enable");
+// Plano de refino 2.1.2: com `OTIMIZA_DADOS_REAIS=<pasta>` (gravada por `cargo test -- --ignored dados_reais`), os
+// comandos que têm resposta gravada respondem com ela; o resto continua recusando.
+const DADOS_REAIS = {};
+if (process.env.OTIMIZA_DADOS_REAIS) {
+  const { readdir } = await import("node:fs/promises");
+  for (const f of await readdir(process.env.OTIMIZA_DADOS_REAIS)) {
+    if (f.endsWith(".json")) DADOS_REAIS[f.slice(0, -5)] = JSON.parse(await readFile(path.join(process.env.OTIMIZA_DADOS_REAIS, f), "utf8"));
+  }
+  console.log(`Com dados reais: ${Object.keys(DADOS_REAIS).length} comandos (${Object.keys(DADOS_REAIS).join(", ")})`);
+}
 await cdp("Page.addScriptToEvaluateOnNewDocument", {
   source: `
+    const DADOS_REAIS = ${JSON.stringify(DADOS_REAIS)};
     window.__TAURI_INTERNALS__ = {
       transformCallback: (f) => { const k = Math.random(); window['_' + k] = f; return k; },
       invoke: async (cmd) => {
         if (cmd.startsWith('plugin:event')) return 1;
+        if (cmd in DADOS_REAIS) return structuredClone(DADOS_REAIS[cmd]);
         // O pior caso: nenhum comando do Windows responde. A tela precisa aguentar.
         throw 'sem resposta do Windows (teste de fumaça)';
       },

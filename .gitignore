@@ -44,3 +44,4 @@ npm-debug.log*
 .claude/worktrees/
 .cargo-target-ferramentas/
 pc-optimizer/prints-nova/
+pc-optimizer/ui/testes/dados-reais/

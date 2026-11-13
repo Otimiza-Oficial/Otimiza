@@ -13,6 +13,7 @@ mod ci_coverage;
 
 mod commands;
 mod contrato;
+mod dados_reais;
 mod core;
 mod modules;
 mod plataforma;

@@ -390,6 +390,9 @@ deixa isso:
 - 6.3 MSI em português (`wix.language = pt-BR`).
 - 2.1.1 Dívida de tipos paga: os 115 comandos que a tela chamava com `invoke` solto entraram no contrato gerado
   (`invoke-solto.json` vazio). O tipo de cada resposta continua o da área, pelo `como<T>` de `ui/src/lib/contrato.ts`.
+- 2.1.2 Dados reais nos testes: `cargo test --lib -- --ignored dados_reais` grava as respostas reais desta máquina
+  (11 comandos de leitura) em `ui/testes/dados-reais/` (fora do Git), e `OTIMIZA_DADOS_REAIS=... node
+  scripts/fumaca-nova.mjs` roda as 20 telas com elas. Passou no PC do dono.
 - 2.1.3 Tokens únicos: `tokens.css` é a única fonte, com os tons neutros do painel nos dois temas (o azul-marinho
   saiu); `--texto`/`--sec`/`--contra` viraram apelidos dos mesmos tons, e a casca não redefine mais nada.
 - 2.2.1 As 4 abas: o trilho mostra Jogar, Meu PC, Prova e Ajustes (com o nome sob o ícone), e a barra de baixo mostra
@@ -424,4 +427,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1.2 (dados reais nos testes); atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

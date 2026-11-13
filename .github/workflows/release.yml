@@ -180,7 +180,7 @@ jobs:
 
       - name: Testes — licença e comandos
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- commands:: contrato:: modules::licenca:: modules::maquina:: plataforma::"
+        run: "cargo test --lib -- commands:: contrato:: dados_reais:: modules::licenca:: modules::maquina:: plataforma::"
 
       - name: Testes — medição
         working-directory: pc-optimizer/src-tauri
