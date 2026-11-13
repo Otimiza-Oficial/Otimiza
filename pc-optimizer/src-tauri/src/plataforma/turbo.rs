@@ -951,7 +951,7 @@ pub fn provar(
     let (id, _) = super::historico::id_do_jogo(&jogo.executavel);
     let mut perfil = perfil(&id)
         .ok_or("Ligue o Turbo uma vez neste jogo: a prova usa a receita que ele escolheu para ele.")?;
-    let lado_com = receita_da_prova(&perfil.receita).ok_or(
+    let lado_com = receita_da_prova(&conforme_os_ajustes(perfil.receita.clone())).ok_or(
         "Esta receita não muda o FPS do jogo (só a geração de quadros ou a memória): não há o que provar com o FPS \
          do jogo. A guarda do Frame Boost já confere a geração.",
     )?;
