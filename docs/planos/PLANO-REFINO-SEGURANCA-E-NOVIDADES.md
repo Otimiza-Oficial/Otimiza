@@ -396,8 +396,10 @@ deixa isso:
   as áreas da aba ativa; o "+" saiu porque toda área mora numa aba. A fumaça passa pelas duas camadas (20 telas).
 - 2.2.2 Topo de área com contexto: o que a área já sabe, com ponto de estado ("Monitor em 60 Hz, aceita 180", "Wi-Fi
   com sinal de 66%", "4 mudanças no histórico"), de `lib/contexto.ts`, testado.
+- 2.2.3 Estados vazios conferidos: todos dizem o que fazer para ter o dado; Histórico e Jogos ganharam o caminho.
 - 2.2.4 Esqueleto de carregamento no lugar do "Lendo…" solto (17 lugares, parado com jogo aberto).
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
+- 2.2.5 A fumaça confere também o notebook de 1366×768 a 125% (1093×614): cards, trilho, barra de cima e abas cabem.
 - 6.1 Investigado no PC do dono: nenhum pânico no log e nenhum arquivo em `falhas/`; toda sessão sem fechamento normal
   foi encerramento forçado (testes de desenvolvimento e o instalador fechando o Otimiza), e a abertura já não conta
   reinício do Windows nem atualização como queda.
@@ -411,4 +413,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1.2 (dados reais nos testes), 2.2.3, 2.2.5 e 2.3; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1.2 (dados reais nos testes), 2.3; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

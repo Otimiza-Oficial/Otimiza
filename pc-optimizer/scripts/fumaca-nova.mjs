@@ -204,6 +204,36 @@ const estreita = await cdp("Runtime.evaluate", {
 });
 erros.push(...(estreita.result?.result?.value ?? ["a conferência da janela estreita não retornou"]));
 
+// Notebook de 1366×768 com a escala de 125% do Windows (Plano de refino 2.2.5): 1093×614 de área útil. Os cards cabem,
+// e o trilho, a barra de cima e as abas de baixo não saem da janela nem se cobrem.
+await cdp("Emulation.setDeviceMetricsOverride", { width: 1093, height: 614, deviceScaleFactor: 1.25, mobile: false });
+await espera(800);
+const notebook = await cdp("Runtime.evaluate", {
+  expression: `(() => {
+    const falhas = [];
+    const janela = { w: innerWidth, h: innerHeight };
+    const caixa = (sel) => document.querySelector(sel)?.getBoundingClientRect();
+    const largura = caixa('.conteudo');
+    for (const b of document.querySelectorAll('.grade > .bloco')) {
+      const r = b.getBoundingClientRect();
+      const nome = [...b.classList].find((c) => c.startsWith('b-')) ?? 'bloco';
+      if (!largura || r.right > largura.right + 1 || r.left < largura.left - 1) falhas.push('1366 a 125%: o card ' + nome + ' sai da largura');
+    }
+    for (const [sel, nome] of [['.trilho', 'o trilho'], ['.topo', 'a barra de cima'], ['nav.abas', 'as abas de baixo']]) {
+      const r = caixa(sel);
+      if (!r) { falhas.push('1366 a 125%: sem ' + nome); continue; }
+      if (r.top < 0 || r.left < 0 || r.bottom > janela.h + 1 || r.right > janela.w + 1) falhas.push('1366 a 125%: ' + nome + ' sai da janela');
+    }
+    const topo = document.querySelector('.topo');
+    if (topo && topo.scrollWidth > topo.clientWidth + 2) falhas.push('1366 a 125%: a barra de cima não cabe (' + topo.scrollWidth + ' > ' + topo.clientWidth + ')');
+    const t = caixa('.trilho'), a = caixa('nav.abas');
+    if (t && a && t.bottom > a.top && t.right > a.left) falhas.push('1366 a 125%: o trilho cobre as abas de baixo');
+    return falhas;
+  })()`,
+  returnByValue: true,
+});
+erros.push(...(notebook.result?.result?.value ?? ["a conferência do notebook a 125% não retornou"]));
+
 if (r.result?.exceptionDetails) erros.push(r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text);
 const resultado = r.result?.result?.value;
 erros.push(...(resultado?.falhas ?? ["o roteiro da interface nova não retornou"]));

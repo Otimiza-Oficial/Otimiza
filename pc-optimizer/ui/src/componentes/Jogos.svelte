@@ -110,7 +110,7 @@
   {:else if itens === null}
     <Esqueleto linhas={4} rotulo="Lendo seus jogos" />
   {:else if itens.length === 0}
-    <p class="vazio">Não achei jogos instalados pela Steam, pela Epic ou por instalador.</p>
+    <p class="vazio">Não achei jogos instalados pela Steam, pela Epic ou por instalador. Jogo instalado em outro lugar também serve: abra ele com o Otimiza aberto, e a partida é reconhecida e medida.</p>
   {:else}
     {#if atual}
       <section class="destaque">

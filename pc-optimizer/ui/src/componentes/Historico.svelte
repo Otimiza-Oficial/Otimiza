@@ -180,7 +180,7 @@
   {#if historico === null && !erroDeLeitura}
     <Esqueleto linhas={4} rotulo="Lendo o histórico" />
   {:else if historico && mudancas.length === 0 && historico.leitura.estado === "Ok"}
-    <p class="vazio">O Otimiza não tem nenhuma mudança ativa neste PC.</p>
+    <p class="vazio">O Otimiza não tem nenhuma mudança ativa neste PC. O que você aplicar (o "Otimizar agora", na Visão geral, ou um ajuste do Sistema) aparece aqui, cada um com o valor de antes e o desfazer.</p>
   {:else if mudancas.length > 0}
     <div class="topo">
       <p class="apoio">
