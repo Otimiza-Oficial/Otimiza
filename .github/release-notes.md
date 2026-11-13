@@ -8,13 +8,59 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_3.6.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_3.6.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_4.0.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.0_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0 Nova Geração (4.0.0): o Otimiza de cara nova, e o jogo mais liso
+
+A Nova Geração recomeça a contagem: esta é a **1.0** (o número interno continua subindo, 4.0.0). Interface nova
+inteira, e cada coisa que o Otimiza muda continua com o valor de antes e o desfazer.
+
+## Interface nova
+
+- **Quatro abas:** Jogar, Meu PC, Prova e Ajustes, no trilho da esquerda, com as áreas de cada uma embaixo.
+- **Jogar** em um toque: o Otimiza abre o jogo (Steam, Epic, Roblox ou o executável) e já liga a receita que este PC
+  provou para ele. Na primeira partida sem receita, ele mede o jogo sozinho e guarda a receita para a próxima.
+- **Cartão da partida** quando o jogo fecha: FPS médio, 1% pior, trancos por minuto e se a rede ficou firme. Com
+  tranco e placa NVIDIA, o botão **Deixar liso** grava um teto de FPS estável para a próxima vez.
+- **Gráfico da partida** na aba Prova, com cada medição sobre a faixa das suas partidas anteriores.
+- Apresentação nova na primeira abertura, com a ativação da licença à vista; claro, escuro e **sem fundo** (a área de
+  trabalho aparece entre os cards).
+
+## Mais FPS e jogo mais liso
+
+- **Frame Boost:** no Auto, escolha o FPS na tela (60 a 240): o gerador gasta menos placa e o jogo fica com mais FPS
+  de verdade. Nitidez da escala em três níveis, que muda na hora. O Frame Boost que você usar e a guarda aprovar volta
+  sozinho no próximo "Jogar".
+- **Nada que trave o PC:** o Otimiza não deixa mais serviço do Windows parado; ajuste que piora os trancos é desfeito
+  na primeira partida; PC que cai, dá tela azul ou reinicia o driver de vídeo depois de um ajuste tem o ajuste desfeito
+  na abertura seguinte; a temperatura é vigiada por meia hora depois de um ajuste que esquenta.
+- Cada ajuste do Sistema mostra **o que pode dar errado** e em que tipo de PC.
+- Em Windows modificado ("lite"), ajuste de serviço que a imagem removeu não é gravado.
+
+## Rede
+
+- **Ping com a internet ocupada:** mede o ping parado, baixando e enviando, e diz se é fila no modem (bufferbloat) e
+  o que fazer.
+- **Quem está usando a internet**, por programa, em 5 segundos.
+- **Testar a placa de rede:** moderação de interrupção, Ethernet de economia e controle de fluxo, testados no seu
+  ping; só fica o que melhorou.
+- **Servidores do FiveM:** cole os links cfx.re/join e veja o ping de cada um, do mais perto para o mais longe.
+- **Canal do Wi-Fi** recomendado pelas redes vizinhas, e o jogo com **prioridade na rede** (experimento, depende do
+  roteador).
+
+## Segurança
+
+Toda versão confere a licença com o servidor e respeita chave revogada; a janela tem política de segurança (CSP).
+
+A 1.0 traz também tudo da 3.6 e da 3.5 abaixo.
 
 ---
 
