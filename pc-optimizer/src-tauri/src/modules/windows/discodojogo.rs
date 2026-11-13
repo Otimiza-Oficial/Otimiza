@@ -7,6 +7,8 @@ use std::path::Path;
 
 /// Três estados: chamar de SSD um disco ilegível absolveria a causa procurada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "MidiaDiscodojogo"))]
 pub enum Midia {
     Ssd,
     Mecanico,
@@ -14,6 +16,7 @@ pub enum Midia {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct OndeMora {
     pub jogo: String,
     pub caminho: String,
@@ -25,12 +28,15 @@ pub struct OndeMora {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct UnidadeLida {
     pub midia: Midia,
     pub modelo: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LeituraDiscodojogo"))]
 pub struct Leitura {
     pub unidades: HashMap<char, UnidadeLida>,
     /// Nunca omitido: numa imagem modificada, é a explicação de por que o produto não sabe.
@@ -238,6 +244,8 @@ pub fn explicar(jogo: &str, unidade: char) -> String {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RelatorioDiscodojogo"))]
 pub struct Relatorio {
     pub jogos: Vec<OndeMora>,
     pub lacunas: Vec<String>,

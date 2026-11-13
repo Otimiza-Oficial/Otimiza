@@ -322,3 +322,33 @@ fn o_resumo_da_maquina_bate_com_o_do_bot() {
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
 }
+
+/// O que o bot (`emitirAtestado` e `emitirRevogacao` em `otimiza-licenca.cjs`) gera, com um par de TESTE descartável:
+/// o formato dos dois lados tem de bater, ou o atestado em produção seria ignorado em silêncio.
+#[test]
+fn o_atestado_e_a_revogacao_do_bot_conferem_aqui() {
+    use base64::Engine;
+    let bytes: [u8; 32] = base64::engine::general_purpose::STANDARD
+        .decode("eln5ho9U20lPYOEWspfqDZHDySVlZPEaggt8H7QDD1U=")
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let publica = ed25519_dalek::VerifyingKey::from_bytes(&bytes).unwrap();
+    let chave = "eyJjaGF2ZSI6InRlc3RlIn0.assinatura-de-teste";
+    let maquina = "OTZ-AB2C-D3EF-4GH5";
+    let atestado = "eyJ0aXBvIjoibGljZW5jYS1vbmxpbmUiLCJtYXF1aW5hIjoiT1RaLUFCMkMtRDNFRi00R0g1IiwibGljZW5jYSI6IjMzMmJiYTlkNmZkZjYzZjI0OWNmNWJkMjhjMjkwNDk0ZTRiZTQzZDAyZGZlYTdjM2M1MmExZWRkOWI1M2U5ODMiLCJlbWl0aWRvIjoiMjAyNi0xMS0wOCIsInZhbGlkb19hdGUiOiIyMDI2LTEyLTA4In0.SlLDHVn4V0vxWHxrF9fvLfB-D49bhCQn09q92gO_ucdKt6BT-txGu-wrOUd4Xo4p8KCOtGV3stMKHa_Z5XuVBA";
+    let revogacao = "eyJ0aXBvIjoicmV2b2dhY2FvIiwibWFxdWluYSI6Ik9UWi1BQjJDLUQzRUYtNEdINSIsImxpY2VuY2EiOiIzMzJiYmE5ZDZmZGY2M2YyNDljZjViZDI4YzI5MDQ5NGU0YmU0M2QwMmRmZWE3YzNjNTJhMWVkZDliNTNlOTgzIiwibW90aXZvIjoiY2hhdmUgcmVwYXNzYWRhIn0.-_0hHW1cqpYJtGDH4uBaiYMtBV3TvLXQX3LNqvYgDQu6axTObyHcK3Pnm9_JRARbddfEME7vYssdEAOY9h0ZDQ";
+
+    let a = super::conferir(publica, atestado, chave, maquina, "2026-11-20").expect("o atestado do bot tem de conferir");
+    assert_eq!(a.emitido, "2026-11-08");
+    assert_eq!(a.valido_ate, "2026-12-08");
+    assert!(matches!(
+        super::conferir(publica, atestado, chave, maquina, "2026-12-09"),
+        Err(super::Falta::Vencido { .. })
+    ));
+    assert!(super::conferir(publica, atestado, "outra-chave", maquina, "2026-11-20").is_err());
+
+    let r = super::conferir_revogacao(publica, revogacao, chave, maquina).expect("a revogação do bot tem de conferir");
+    assert_eq!(r.motivo, "chave repassada");
+    assert!(super::conferir_revogacao(publica, revogacao, chave, "OTZ-ZZZZ-ZZZZ-ZZZZ").is_none());
+}

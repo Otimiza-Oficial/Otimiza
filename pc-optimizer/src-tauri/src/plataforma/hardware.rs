@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 const VALIDADE_EM_MEMORIA: Duration = Duration::from_secs(600);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Fabricante {
     Nvidia,
     Amd,
@@ -31,6 +32,7 @@ impl Fabricante {
 
 /// A família decide o que o driver oferece (Smooth Motion só em RTX 40/50, AFMF só em RX 6000 em diante).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Familia {
     Rtx50,
     Rtx40,
@@ -47,6 +49,7 @@ pub enum Familia {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Placa {
     pub nome: String,
     pub fabricante: Fabricante,
@@ -55,6 +58,7 @@ pub struct Placa {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Vrr {
     Anunciado,
     Provavel,
@@ -63,6 +67,7 @@ pub enum Vrr {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Tela {
     pub nome: String,
     pub dispositivo: String,
@@ -82,6 +87,7 @@ impl Tela {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PerfilDeHardware {
     pub processador: String,
     pub nucleos_logicos: usize,

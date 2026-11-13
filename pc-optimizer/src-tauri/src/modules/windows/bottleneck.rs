@@ -1,18 +1,21 @@
 // Gargalo: mede CPU, núcleos, placa, VRAM, RAM e disco por alguns segundos e diz qual chegou ao limite. O caso
 // clássico: FiveM com um núcleo a 100% e a placa a 40%, e o Gerenciador de Tarefas mostrando "CPU 25%". Sem
 // carga não há gargalo: o veredito é "não identificamos", nunca o palpite mais vendável.
+//
+// Não confundir com `modules::gargalo`: este MEDE por alguns segundos (WMI e contadores) e devolve o
+// `BottleneckReport` da tela de diagnóstico; aquele só CLASSIFICA a telemetria que o painel já tem. Os limiares
+// (`SATURADO`, `FOLGADO`, `CARGA_MINIMA`) eram cópias com o mesmo valor nos dois; agora moram em `gargalo.rs` e
+// este os reexporta, para não divergirem.
 
 use super::shell;
 use serde::{Deserialize, Serialize};
 
-/// Não é 100 (nenhum contador fica cravado) nem 80 (ainda tem folga, e mandaria trocar peça à toa).
-pub const SATURADO: f64 = 92.0;
-
-pub const FOLGADO: f64 = 60.0;
-
-pub const CARGA_MINIMA: f64 = 15.0;
+/// Os mesmos números da classificação do painel (92 / 60 / 15): a tela de diagnóstico e o painel não podem chamar
+/// de "no limite" coisas diferentes. Os porquês de cada valor estão em `gargalo.rs`.
+pub use crate::modules::gargalo::{CARGA_MINIMA, FOLGADO, SATURADO};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Limite {
     CpuUmNucleo,
     CpuTodos,
@@ -25,6 +28,7 @@ pub enum Limite {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BottleneckReport {
     pub limite: Limite,
     pub summary: String,

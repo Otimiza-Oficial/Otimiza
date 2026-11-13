@@ -1,6 +1,6 @@
 import { ArrowUpRight, Hash } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
-import { Ilustrativo } from "@/components/features/FeatureCard";
+import { Ilustrativo } from "@/components/ui/Ilustrativo";
 import { Reveal } from "@/components/motion/Reveal";
 import { DecryptedText } from "@/components/reactbits/DecryptedText";
 import { ChatAoVivo } from "./ChatAoVivo";

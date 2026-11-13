@@ -5,6 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VrrVrr"))]
 pub enum Vrr {
     /// O bloco da AMD (FreeSync) está no EDID: o monitor faz taxa variável.
     Anunciado,
@@ -15,6 +17,7 @@ pub enum Vrr {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct MonitorVrr {
     /// Nome gravado no próprio monitor (descritor 0xFC), quando há.
     pub nome: Option<String>,

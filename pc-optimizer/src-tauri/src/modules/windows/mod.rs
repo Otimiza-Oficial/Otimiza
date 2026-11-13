@@ -29,7 +29,9 @@ pub mod devices;
 pub mod discodojogo;
 pub mod diskspace;
 pub mod display;
+pub mod dpc;
 pub mod essenciais;
+pub mod estabilidade;
 pub mod eventoshw;
 pub mod exhaustion;
 pub mod experimento;
@@ -71,7 +73,9 @@ pub mod prontojogo;
 pub mod rbar;
 pub mod readiness;
 pub mod rede;
+pub mod banda_por_programa;
 pub mod registro;
+pub mod riscos;
 pub mod registry;
 pub mod restaurar;
 pub mod restore;
@@ -245,6 +249,10 @@ impl WindowsOptimizer {
                 name,
                 value,
             } => {
+                // Plano de refino E6: o serviço que a imagem "lite" removeu não tem o que ajustar.
+                if servico_removido(hive, path).is_some() {
+                    return ActionState::NotApplicable;
+                }
                 let current = registry::read(hive, path, name);
                 let target = match value {
                     RegValue::Dword(v) => PreviousValue::Dword(*v),
@@ -456,6 +464,12 @@ impl WindowsOptimizer {
 
         let resultado = self.aplicar_sem_registro(id, log);
         anotar_fim("aplicar", id, inicio, &resultado);
+        // Plano de refino, E5: ajuste que esquenta liga a guarda térmica pelos próximos 30 minutos.
+        if let Ok(r) = &resultado {
+            if r.success {
+                crate::plataforma::guarda_termica::depois_de_aplicar(id, &r.name);
+            }
+        }
         resultado
     }
 
@@ -465,6 +479,14 @@ impl WindowsOptimizer {
         log: &mut ChangeLog,
     ) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id).ok_or_else(|| format!("Unknown optimization: {}", id))?;
+
+        if catalog::desligado_remotamente(id) && !log.is_applied(id) {
+            return Err(format!(
+                "`{}` está desligado pela equipe do Otimiza por enquanto: em parte dos PCs ele não se comportou bem. \
+                 Se estiver aplicado, ainda dá para desfazer.",
+                spec.name
+            ));
+        }
 
         if catalog::retirado(id) && !log.is_applied(id) {
             return Err(format!(
@@ -1626,6 +1648,14 @@ impl WindowsOptimizer {
             } => {
                 let mut nao_confirmado: Option<String> = None;
 
+                // Plano de refino E6: gravar ali criaria a chave de um serviço que não existe (a imagem modificada o
+                // removeu). Não ajuda nada e deixaria "aplicado" um ajuste que não vale.
+                if let Some(servico) = servico_removido(hive, path) {
+                    detalhe.status = ActionStatus::Unsupported;
+                    detalhe.unsupported_reason = Some(format!("O serviço {} não existe neste Windows.", servico));
+                    return Ok(None);
+                }
+
                 // O antes, lido antes de escrever.
                 let antes = registry::read(hive, path, name);
                 detalhe.before_value = antes.as_ref().ok().map(descrever_valor);
@@ -2479,6 +2509,21 @@ fn explicar_governanca(detalhe: &mut ActionResult) {
     }
 }
 
+/// **Pura.** O serviço dono de uma chave `HKLM\SYSTEM\CurrentControlSet\Services\<serviço>\...`.
+pub(crate) fn servico_da_chave<'a>(hive: &str, path: &'a str) -> Option<&'a str> {
+    if !hive.eq_ignore_ascii_case("HKLM") {
+        return None;
+    }
+    const PREFIXO: &str = r"SYSTEM\CurrentControlSet\Services\";
+    let resto = path.get(..PREFIXO.len()).filter(|p| p.eq_ignore_ascii_case(PREFIXO)).map(|_| &path[PREFIXO.len()..])?;
+    resto.split('\\').next().filter(|s| !s.is_empty())
+}
+
+/// O serviço da chave, quando ele SABIDAMENTE não existe neste Windows. Ilegível não conta: só o que o produto sabe.
+fn servico_removido<'a>(hive: &str, path: &'a str) -> Option<&'a str> {
+    servico_da_chave(hive, path).filter(|s| services::exists(s) == Some(false))
+}
+
 /// Para ler no atendimento, não o `{:?}` do enum; caminho e valores viajam nos campos do `ActionResult`.
 pub fn nome_da_acao(action: &Action) -> String {
     match action {
@@ -2680,6 +2725,9 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
             fps_depois: a.fps.as_ref().map(|c| c.media_candidato),
             low_antes: a.low_1pct.as_ref().map(|c| c.media_base),
             low_depois: a.low_1pct.as_ref().map(|c| c.media_candidato),
+            trancos_antes: a.trancos.as_ref().map(|c| c.media_base),
+            trancos_depois: a.trancos.as_ref().map(|c| c.media_candidato),
+            piora_forte: a.piora_forte,
             vigiado: v,
             veredito: a.veredito,
             quando: agora,
@@ -2705,6 +2753,9 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
             fps_depois: a.fps.as_ref().map(|c| c.media_candidato),
             low_antes: a.low_1pct.as_ref().map(|c| c.media_base),
             low_depois: a.low_1pct.as_ref().map(|c| c.media_candidato),
+            trancos_antes: a.trancos.as_ref().map(|c| c.media_base),
+            trancos_depois: a.trancos.as_ref().map(|c| c.media_candidato),
+            piora_forte: a.piora_forte,
             vigiado: g.como_vigiado(),
             veredito: a.veredito,
             quando: agora,
@@ -2869,6 +2920,11 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 previous_hz,
             } => display::aplicar_hz(device, *previous_hz).map(|_| ()),
 
+            ChangeRecord::ModoDeTela {
+                dispositivo,
+                anterior,
+            } => crate::plataforma::hz::restaurar_modo(dispositivo, anterior),
+
             ChangeRecord::BootLimits { removed } => {
                 let mut failures = Vec::new();
 
@@ -2926,6 +2982,9 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
             }
             ChangeRecord::RedeOffload { parametro, anterior } => {
                 pacote::definir_offload(parametro, anterior)
+            }
+            ChangeRecord::PropriedadeDaPlaca { placa, palavra, anterior } => {
+                pacote::definir_propriedade(placa, palavra, anterior)
             }
             ChangeRecord::RedeAdaptador { recurso, placas } => {
                 let falhas: Vec<String> = placas
@@ -3063,6 +3122,19 @@ mod tests {
     const MOUSE_PATH: &str = r"Control Panel\Mouse";
 
     use ActionState::{Desconhecido, NotApplicable, Pending, Satisfied};
+
+    #[test]
+    fn a_chave_de_servico_diz_de_quem_e() {
+        assert_eq!(
+            servico_da_chave("HKLM", r"SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"),
+            Some("LanmanServer")
+        );
+        assert_eq!(servico_da_chave("HKLM", r"SYSTEM\CurrentControlSet\Services\Tcpip"), Some("Tcpip"));
+        assert_eq!(servico_da_chave("hklm", r"system\currentcontrolset\services\mouclass\Parameters"), Some("mouclass"));
+        assert_eq!(servico_da_chave("HKCU", r"SYSTEM\CurrentControlSet\Services\X"), None);
+        assert_eq!(servico_da_chave("HKLM", r"SOFTWARE\Microsoft\Windows"), None);
+        assert_eq!(servico_da_chave("HKLM", r"SYSTEM\CurrentControlSet\Services\"), None);
+    }
 
     /// `mouse_precision_off`: HKCU, instantâneo e reversível. Escreve no registro e mexe no mouse até desfazer.
     /// `cargo test --lib resultado_padronizado -- --ignored --nocapture`

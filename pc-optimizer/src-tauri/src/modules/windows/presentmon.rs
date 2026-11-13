@@ -2,8 +2,15 @@
 // início do Present: não sabia se o quadro chegou à tela, se era gerado, nem cobria Vulkan e OpenGL. Aqui cada
 // quadro vem com o tempo até o próximo, o tempo na tela, o tipo (do jogo ou gerado), o modo de apresentação e quanto
 // CPU e GPU trabalharam nele. Quadro gerado nunca entra no FPS do jogo.
+//
+// O medidor preferido; `frames.rs` continua sendo o de reserva por ETW e o dono do formato `MedicaoCrua`
+// (`medir_como_antes` entrega neste formato para quem já o consome). Média e percentis saem de `core::estatistica`,
+// a mesma conta de `frames::percentis`: o P99 do PresentMon e o do canal antigo não podem divergir por arredondamento
+// de posição.
 
 use serde::{Deserialize, Serialize};
+
+use crate::core::estatistica::media;
 
 /// Com o nome da versão testada: outra versão pode mudar coluna, e a leitura procura pelo cabeçalho.
 pub const VERSAO: &str = "2.6.0";
@@ -35,6 +42,9 @@ pub struct Quadro {
     /// `None`: o quadro nunca chegou à tela (descartado).
     pub na_tela_ms: Option<f64>,
     pub ate_a_tela_ms: Option<f64>,
+    /// Coluna `ClickToPhotonLatency`: do clique do mouse até o quadro que mostra o efeito dele chegar à tela. Só nos
+    /// quadros que têm um clique (o resto vem "NA").
+    pub clique_ms: Option<f64>,
 }
 
 fn numero(campo: Option<&&str>) -> Option<f64> {
@@ -73,6 +83,7 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
     let c_gpu = coluna("GPUBusy");
     let c_tela = coluna("DisplayedTime");
     let c_latencia = coluna("DisplayLatency");
+    let c_clique = coluna("ClickToPhotonLatency");
 
     let mut quadros = Vec::new();
     for linha in linhas {
@@ -103,6 +114,9 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
             gpu_ocupada_ms: c_gpu.and_then(|c| numero(campos.get(c))),
             na_tela_ms: c_tela.and_then(|c| numero(campos.get(c))),
             ate_a_tela_ms: c_latencia.and_then(|c| numero(campos.get(c))),
+            clique_ms: c_clique
+                .and_then(|c| numero(campos.get(c)))
+                .filter(|v| *v > 0.0 && *v < 1000.0),
         });
     }
     Ok(quadros)
@@ -110,6 +124,7 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
 
 /// Por onde o quadro chega à tela. A tela escolhe a frase por aqui, nunca comparando o texto do PresentMon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Apresentacao {
     /// "Hardware: Independent Flip", "Hardware: Legacy Flip", "Hardware Composed: Independent Flip": direto na tela.
     Direta,
@@ -157,6 +172,7 @@ pub fn classificar_modo(modo: &str) -> Apresentacao {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum GargaloProvavel {
     /// A GPU trabalhou quase o quadro inteiro.
     Gpu,
@@ -202,15 +218,22 @@ pub struct Resumo {
     pub ate_a_tela_media_ms: Option<f64>,
     /// Tecnologias de geração que se identificaram (ex.: "AMD AFMF").
     pub geradores: Vec<String>,
+    /// Mediana do clique até a tela (ms), medida pelo PresentMon nos quadros com clique. `None` com menos de
+    /// `MINIMO_DE_CLIQUES` cliques, ou em medição antiga.
+    #[serde(default)]
+    pub clique_ate_a_tela_ms: Option<f64>,
+    #[serde(default)]
+    pub cliques_medidos: usize,
     /// Onde caíram os trancos, no relógio QPC, para o cruzamento com o disco. Fica fora da tela.
     #[serde(skip, default)]
     pub trancos_qpc: Vec<i64>,
 }
 
-/// Percentil por posição mais próxima em lista já ordenada.
+/// Posição mais próxima, pela conta única de `core::estatistica::percentil` (a mesma de `frames::percentis`). A cópia
+/// local fazia a mesma conta; duas cópias é o caminho para o P99 do Mapa e o da medição automática divergirem. Só é
+/// chamada com 20 quadros ou mais, então o `None` de lista vazia não acontece aqui.
 fn percentil(ordenados: &[f64], p: f64) -> f64 {
-    let i = ((p / 100.0) * ordenados.len() as f64).ceil() as usize;
-    ordenados[i.clamp(1, ordenados.len()) - 1]
+    crate::core::estatistica::percentil(ordenados, p).unwrap_or(0.0)
 }
 
 /// Média da fração pior (1% → 0.01) de uma lista ordenada, em FPS.
@@ -220,9 +243,8 @@ fn media_dos_piores(ordenados: &[f64], fracao: f64) -> f64 {
     1000.0 / (piores.iter().sum::<f64>() / n as f64)
 }
 
-fn media(v: &[f64]) -> Option<f64> {
-    (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
-}
+/// Cliques que a mediana do clique até a tela precisa: com dois ou três, um tranco no meio decide o número.
+pub const MINIMO_DE_CLIQUES: usize = 10;
 
 /// Da cadeia de apresentação com mais quadros (o jogo; um lançador ou sobreposição tem a sua). Pura.
 pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
@@ -280,6 +302,10 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         .collect();
     geradores.sort();
     geradores.dedup();
+
+    // Clique de qualquer cadeia do processo: o efeito pode aparecer na cadeia principal ou numa sobreposição.
+    let mut cliques: Vec<f64> = quadros.iter().filter_map(|q| q.clique_ms).collect();
+    cliques.sort_by(|a, b| a.total_cmp(b));
 
     let mut modos: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for q in &do_jogo {
@@ -348,6 +374,9 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
                 .filter_map(|q| q.ate_a_tela_ms)
                 .collect::<Vec<_>>(),
         ),
+        clique_ate_a_tela_ms: (cliques.len() >= MINIMO_DE_CLIQUES)
+            .then(|| percentil(&cliques, 50.0)),
+        cliques_medidos: cliques.len(),
         geradores,
         trancos_qpc,
     })
@@ -650,6 +679,30 @@ mod tests {
         assert_eq!(q[0].modo, "Hardware: Legacy Flip");
         assert_eq!(q[1].intervalo_ms, Some(272.2641));
         assert_eq!(q[0].na_tela_ms, Some(272.2096));
+    }
+
+    #[test]
+    fn o_clique_ate_a_tela_e_a_mediana_e_so_com_cliques_bastantes() {
+        // 40 quadros; o último campo (ClickToPhotonLatency) só tem número onde houve clique.
+        let com_cliques = |n: usize| {
+            let linhas: Vec<String> = (0..40)
+                .map(|i| {
+                    let l = linha("Application", i as f64 * 10.0, 10.0, 4.0, 8.0, Some(10.0));
+                    if i < n {
+                        format!("{},{:.4}", l.strip_suffix(",NA").unwrap(), 20.0 + i as f64)
+                    } else {
+                        l
+                    }
+                })
+                .collect();
+            resumir(&ler_csv(&csv(&linhas)).unwrap()).unwrap()
+        };
+        let r = com_cliques(11);
+        assert_eq!(r.cliques_medidos, 11);
+        assert_eq!(r.clique_ate_a_tela_ms, Some(25.0));
+        let poucos = com_cliques(3);
+        assert_eq!(poucos.cliques_medidos, 3);
+        assert_eq!(poucos.clique_ate_a_tela_ms, None, "três cliques não dão número");
     }
 
     #[test]

@@ -10,6 +10,9 @@
 // do cliente; apagar jogaria dado fora sem desfazer nada no Windows.
 //
 // Nunca diz "nada a fazer" sobre o que não conseguiu ler: histórico ou backup ilegível é falha, com o motivo.
+//
+// Não confundir com `restore.rs`, que lista e cria pontos de restauração do Windows; este não cria nem usa ponto
+// de restauração.
 
 use serde::Serialize;
 
@@ -17,6 +20,7 @@ use crate::modules::changelog::ChangeLog;
 use crate::modules::optimizer::OptimizationOutcome;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Parte {
     /// Modo jogo automático, modo jogo ligado e modo dinâmico do motor de energia.
     Automaticos,
@@ -31,6 +35,7 @@ pub enum Parte {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "estado", content = "motivo")]
 pub enum Desfecho {
     Voltou,
@@ -39,6 +44,7 @@ pub enum Desfecho {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResultadoDaParte {
     pub parte: Parte,
     pub desfecho: Desfecho,
@@ -47,6 +53,7 @@ pub struct ResultadoDaParte {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Relatorio {
     pub partes: Vec<ResultadoDaParte>,
     /// Item a item do histórico, como o "Desfazer tudo" sempre mostrou.
@@ -235,6 +242,22 @@ where
                     match crate::plataforma::energia_jogo::definir(false) {
                         Ok(_) => feito.push("Energia de jogo desligada; o processador voltou ao ajuste de antes.".to_string()),
                         Err(e) => falhas.push(format!("energia de jogo: {}", e)),
+                    }
+                }
+                // Banda de fundo: desliga e remove as políticas "Otimiza-" e o limite do Windows Update.
+                {
+                    let banda = crate::plataforma::banda::ler();
+                    if banda.ligado || banda.aplicado.is_some() {
+                        match crate::plataforma::banda::definir(false) {
+                            Ok(_) => feito.push("Banda de fundo desligada; os programas e o Windows Update voltaram sem limite.".to_string()),
+                            Err(e) => falhas.push(format!("banda de fundo: {}", e)),
+                        }
+                    }
+                }
+                if crate::plataforma::wifi_varredura::ler().ligado {
+                    match crate::plataforma::wifi_varredura::definir(false) {
+                        Ok(_) => feito.push("Wi-Fi sem varredura desligado; a busca de redes voltou ao normal.".to_string()),
+                        Err(e) => falhas.push(format!("Wi-Fi sem varredura: {}", e)),
                     }
                 }
             }

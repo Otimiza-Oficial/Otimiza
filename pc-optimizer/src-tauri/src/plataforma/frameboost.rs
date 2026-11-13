@@ -13,12 +13,14 @@ use super::RecursoAvaliado;
 use crate::modules::windows::geracao::{self, Situacao};
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Estimativa {
     pub multiplicador: u8,
     pub faixa: Faixa,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ativo {
     pub recurso: Recurso,
     pub multiplicador: u8,
@@ -67,6 +69,7 @@ pub struct Ativo {
 
 /// O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando).
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct UltimaSessao {
     pub jogo: String,
     pub minutos: f64,
@@ -78,6 +81,8 @@ pub struct UltimaSessao {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PainelFrameboost"))]
 pub struct Painel {
     pub jogo: Option<String>,
     /// O que o automático escolhe: o do jogo, depois o do driver, depois o do Otimiza.
@@ -474,6 +479,16 @@ fn monitor_do_jogo(pid: u32) -> Option<(i32, i32)> {
     }
 }
 
+/// O FPS alvo do automático ligado agora (FB3): a base trava numa fração dele, não dos Hz.
+#[cfg(target_os = "windows")]
+static ALVO: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
+
+/// O alvo do automático ligado por último (FB8 guarda junto da escolha).
+#[cfg(target_os = "windows")]
+pub fn alvo_ligado() -> Option<u32> {
+    ALVO.lock().ok().and_then(|a| *a)
+}
+
 /// Trava o FPS base do jogo aberto para o Frame Boost do Otimiza (só ele: o do driver não tem o ritmo do Otimiza).
 #[cfg(target_os = "windows")]
 pub fn travar_base(log: &mut crate::modules::changelog::ChangeLog) {
@@ -484,8 +499,9 @@ pub fn travar_base(log: &mut crate::modules::changelog::ChangeLog) {
     let Some(j) = super::sessao::atual().filter(|_| gerando) else {
         return;
     };
+    let alvo = ALVO.lock().ok().and_then(|a| *a);
     let nota = match hz_do_jogo(j.pid) {
-        Some(hz) => super::base_do_jogo::travar(&j.executavel, hz, log)
+        Some(hz) => super::base_do_jogo::travar(&j.executavel, geracao::ritmo::mira_do_automatico(hz, false, alvo), log)
             .unwrap_or_else(|e| format!("Não consegui travar o FPS base: {}", e)),
         None => "Não consegui ler os Hz do monitor do jogo para travar o FPS base.".to_string(),
     };
@@ -549,7 +565,10 @@ pub fn ligar(
     multiplicador: u8,
     sem_limite: bool,
     escala: Option<geracao::escala::Nivel>,
+    alvo_fps: Option<u32>,
 ) -> Result<Painel, String> {
+    // Plano de refino 1.2: a licença conferida também aqui, não só no comando (desligar nunca confere).
+    crate::modules::licenca::exigir()?;
     let jogo =
         super::sessao::atual().ok_or("Abra o jogo primeiro: o Frame Boost liga no jogo aberto.")?;
     let recomendado = jogo
@@ -624,7 +643,11 @@ pub fn ligar(
                 // Placa já quase cheia com o jogo: começa leve, em vez de esperar a guarda ver o jogo perder FPS.
                 leve: comecar_leve(uso_da_placa_pct()),
                 escala,
+                alvo_fps: alvo_fps.filter(|_| automatico),
             })?;
+            if let Ok(mut a) = ALVO.lock() {
+                *a = alvo_fps.filter(|_| automatico);
+            }
             // O contador do jogo nunca vê os quadros gerados: o FPS na tela aparece no canto do jogo, pelo Otimiza.
             if let Err(e) = super::overlay::com_frame_boost(app, jogo.pid, jogo.nome.clone()) {
                 crate::utils::Logger::warn(&format!("FPS na tela com o Frame Boost: {}", e));

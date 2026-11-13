@@ -88,6 +88,7 @@ const SEM_APPDATA: &str = "Sem a pasta de dados do usuário (APPDATA), o Otimiza
 
 /// O custo de observar, medido na própria investigação. Percentual de UM núcleo, média da janela.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Custo {
     pub otimiza_pct_de_um_nucleo: Option<f64>,
     pub presentmon_pct_de_um_nucleo: Option<f64>,
@@ -257,6 +258,7 @@ pub fn capturar(pid_do_jogo: u32, segundos: u32) -> Result<Captura, String> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResultadoDaInvestigacao {
     pub jogo: String,
     pub investigacao: Investigacao,
@@ -411,6 +413,7 @@ pub fn investigar_em(
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResultadoDoTeste {
     pub processo: String,
     pub julgamento: Julgamento,
@@ -884,6 +887,7 @@ mod tests {
             gpu_ocupada_ms: Some(4.0),
             na_tela_ms: ms,
             ate_a_tela_ms: None,
+            clique_ms: None,
         }
     }
 

@@ -75,6 +75,7 @@ pub enum Action {
 
 /// Desligar efeito visual muda pouco num PC forte e muito num de 4 GB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Boost {
     LowRam,
     MechanicalDisk,
@@ -138,6 +139,7 @@ pub const FORA_DO_LOTE: &[&str] = &["windowed_game_optimizations"];
 // modo Expert, nunca em lote). `toda_classe_aponta_para_um_item_do_catalogo` pega id errado.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Condicao {
     GameDvrLigado,
     /// `AutoGameModeEnabled = 0`: alguém (ou outro otimizador) desligou o Modo de Jogo, que o Windows traz ligado.
@@ -201,36 +203,25 @@ pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("foreground_priority", Condicao::SoSePedir),
     ("mmcss_games", Condicao::SoSePedir),
     ("disable_power_throttling", Condicao::SoSePedir),
-    ("disable_sysmain", Condicao::SoSePedir),
     ("disable_memory_compression", Condicao::SoSePedir),
-    ("disable_xbox_services", Condicao::SoSePedir),
     ("notifications_off", Condicao::SoSePedir),
     ("maps_auto_update_off", Condicao::SoSePedir),
     ("remote_assistance_off", Condicao::SoSePedir),
-    ("disable_telemetry", Condicao::SoSePedir),
     ("telemetry_policy", Condicao::SoSePedir),
     ("start_menu_web_search_off", Condicao::SoSePedir),
     ("disable_transparency", Condicao::SoSePedir),
     ("disable_startup_delay", Condicao::SoSePedir),
     ("disable_hibernation", Condicao::SoSePedir),
     ("background_apps_off", Condicao::SoSePedir),
-    ("disable_search_indexing", Condicao::SoSePedir),
     ("disable_widgets", Condicao::SoSePedir),
     ("store_auto_download_off", Condicao::SoSePedir),
-    ("error_reporting_off", Condicao::SoSePedir),
     ("edge_background_off", Condicao::SoSePedir),
     // O resto dos dois pacotes, novo no catálogo.
     ("fila_de_entrada_curta", Condicao::SoSePedir),
     ("windows_responde_rapido", Condicao::SoSePedir),
     ("prefetch_desligado", Condicao::SoSePedir),
     ("privacidade_do_pacote", Condicao::SoSePedir),
-    ("servicos_bluetooth_fora", Condicao::SoSePedir),
-    ("servicos_impressora_fora", Condicao::SoSePedir),
-    ("servicos_hyperv_fora", Condicao::SoSePedir),
-    ("servicos_pouco_usados", Condicao::SoSePedir),
-    ("servicos_de_empresa_fora", Condicao::SoSePedir),
     ("placa_no_clock_maximo", Condicao::SoSePedir),
-    ("tick_do_pacote", Condicao::SoSePedir),
     ("tcp_do_pacote", Condicao::SoSePedir),
     ("compartilhamento_do_pacote", Condicao::SoSePedir),
     ("bufferbloat_do_pacote", Condicao::SoSePedir),
@@ -260,10 +251,85 @@ pub const RETIRADOS: &[&str] = &[
     "disable_reserved_storage",
     "delivery_optimization_off",
     "stop_sponsored_apps",
+    // Em 10/11/2026, regra do dono: o Otimiza não deixa serviço do Windows parado. Serviço parado é o que as ISOs
+    // modificadas e os "otimizadores" deixam (compatibilidade, diagnóstico, SysMain, telemetria), e é de onde vem
+    // muito travamento e recurso quebrado que ninguém liga à causa. Ficam só para o desfazer de quem já aplicou;
+    // `o_otimiza_nao_para_servico_do_windows` reprova o build se um item vivo voltar a parar serviço.
+    "disable_telemetry",
+    "disable_xbox_services",
+    "disable_sysmain",
+    "servicos_bluetooth_fora",
+    "servicos_impressora_fora",
+    "servicos_hyperv_fora",
+    "servicos_pouco_usados",
+    "servicos_de_empresa_fora",
+    "disable_search_indexing",
+    "error_reporting_off",
+    // Plano de refino, E7: o relógio do boot pelo `bcdedit` (tick fixo, tick da plataforma, sincronismo antigo) é das
+    // dicas que mais deixam o PC menos regular, e só aparece depois de reiniciar, longe da causa.
+    // `nenhum_item_vivo_mexe_no_relogio_do_boot` reprova o build se voltar.
+    "tick_do_pacote",
 ];
 
 pub fn retirado(id: &str) -> bool {
-    RETIRADOS.contains(&id)
+    RETIRADOS.contains(&id) || desligado_remotamente(id)
+}
+
+// O INTERRUPTOR REMOTO (Plano de refino, E8). Um ajuste que começa a dar problema em parte dos PCs sai de todo cliente
+// sem versão nova: a equipe põe o id em `ajustes_desligados` no `convite.json` publicado, o Otimiza baixa na abertura e
+// guarda em `ajustes-desligados.json`. Desligado vale como aposentado: sai do lote, dos níveis e da lista, e quem já
+// aplicou continua desfazendo. Só ids que existem no catálogo entram.
+static DESLIGADOS_REMOTOS: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+
+pub fn desligado_remotamente(id: &str) -> bool {
+    DESLIGADOS_REMOTOS
+        .read()
+        .map(|l| l.iter().any(|x| x == id))
+        .unwrap_or(false)
+}
+
+/// **Pura.** Só os ids do catálogo, sem repetição, no máximo 50.
+pub fn filtrar_desligados(ids: &[String]) -> Vec<String> {
+    let mut saida: Vec<String> = Vec::new();
+    for id in ids {
+        let id = id.trim();
+        if find(id).is_some() && !saida.iter().any(|x| x == id) {
+            saida.push(id.to_string());
+        }
+        if saida.len() == 50 {
+            break;
+        }
+    }
+    saida
+}
+
+fn arquivo_dos_desligados() -> Option<std::path::PathBuf> {
+    std::env::var("APPDATA")
+        .ok()
+        .map(|a| std::path::PathBuf::from(a).join("pc-optimizer").join("ajustes-desligados.json"))
+}
+
+/// Troca a lista (memória e disco). Vazia religa tudo.
+pub fn definir_desligados(ids: &[String]) {
+    let lista = filtrar_desligados(ids);
+    if let (Some(a), Ok(json)) = (arquivo_dos_desligados(), serde_json::to_string(&lista)) {
+        let _ = std::fs::create_dir_all(a.parent().unwrap_or(&a));
+        let _ = std::fs::write(a, json);
+    }
+    if let Ok(mut l) = DESLIGADOS_REMOTOS.write() {
+        *l = lista;
+    }
+}
+
+/// Na abertura, antes de a rede responder: a última lista conhecida.
+pub fn carregar_desligados_do_disco() {
+    let lista: Vec<String> = arquivo_dos_desligados()
+        .and_then(|a| std::fs::read_to_string(a).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    if let Ok(mut l) = DESLIGADOS_REMOTOS.write() {
+        *l = filtrar_desligados(&lista);
+    }
 }
 
 /// As quatro exclusões juntas: não volta, troca segurança, `FORA_DO_LOTE` e, desde a 2.1.0 (FPS de um cliente
@@ -313,6 +379,7 @@ impl OptimizationSpec {
                 Classe::Condicional(c) => Some(c.quando().to_string()),
                 _ => None,
             },
+            cuidado: super::riscos::cuidado(self.id),
             recommended,
             state,
             detail,
@@ -2435,6 +2502,55 @@ mod tests_1_6 {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    /// Regra do dono (10/11/2026): o Otimiza não deixa serviço do Windows parado. Item que para serviço só existe
+    /// aposentado, para o desfazer de quem aplicou antes.
+    #[test]
+    fn o_otimiza_nao_para_servico_do_windows() {
+        let vivos_que_param: Vec<String> = CATALOG
+            .iter()
+            .filter(|spec| !retirado(spec.id))
+            .filter_map(|spec| {
+                let servicos: Vec<&str> = spec
+                    .actions
+                    .iter()
+                    .filter_map(|a| match a {
+                        Action::DisableService { name } => Some(*name),
+                        _ => None,
+                    })
+                    .collect();
+                (!servicos.is_empty()).then(|| format!("{} ({})", spec.id, servicos.join(", ")))
+            })
+            .collect();
+        assert!(
+            vivos_que_param.is_empty(),
+            "estes itens param serviço do Windows e não estão em RETIRADOS: {:?}",
+            vivos_que_param
+        );
+    }
+
+    #[test]
+    fn a_lista_remota_so_aceita_id_do_catalogo() {
+        let l = filtrar_desligados(&[
+            "plano_otimiza".to_string(),
+            " plano_otimiza ".to_string(),
+            "nao_existe".to_string(),
+            "foreground_priority".to_string(),
+        ]);
+        assert_eq!(l, vec!["plano_otimiza".to_string(), "foreground_priority".to_string()]);
+    }
+
+    /// Plano de refino, E7: nenhum ajuste vivo mexe no relógio do Windows pelo `bcdedit`.
+    #[test]
+    fn nenhum_item_vivo_mexe_no_relogio_do_boot() {
+        let vivos: Vec<&str> = CATALOG
+            .iter()
+            .filter(|spec| !retirado(spec.id))
+            .filter(|spec| spec.actions.iter().any(|a| matches!(a, Action::BootValor { .. })))
+            .map(|spec| spec.id)
+            .collect();
+        assert!(vivos.is_empty(), "mexem no relógio do boot e não estão em RETIRADOS: {:?}", vivos);
+    }
 
     #[test]
     fn catalog_ids_are_unique() {

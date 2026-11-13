@@ -1,23 +1,26 @@
 {
   "name": "pc-optimizer",
   "private": true,
-  "version": "3.6.0",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
     "tauri": "tauri",
-    "fumaca": "npm run build && node scripts/clicar-todas-as-areas.mjs"
+    "nova": "tauri dev",
+    "nova:web": "vite --config vite.nova.config.ts",
+    "nova:build": "svelte-check --workspace ui --tsconfig ./tsconfig.json && vite build --config vite.nova.config.ts",
+    "build:app": "npm run nova:build",
+    "fumaca:nova": "npm run nova:build && node scripts/fumaca-nova.mjs",
+    "testes:ui": "node --test ui/testes/queda.test.ts ui/testes/temporadas.test.ts ui/testes/partida.test.ts ui/testes/invoke-solto.test.ts ui/testes/chave.test.ts ui/testes/contexto.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
-    "three": "^0.170.0"
+    "@tauri-apps/plugin-opener": "^2"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
     "@tauri-apps/cli": "^2",
-    "@types/three": "^0.170.0",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.8",
     "typescript": "~5.6.2",
     "vite": "^6.0.3"
   }

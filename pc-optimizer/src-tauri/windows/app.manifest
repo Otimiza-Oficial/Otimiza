@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- O manifesto do Otimiza, no executável do cliente E nos de teste (ver build.rs). É o mesmo que o tauri-build
+     embutia (`windows-app-manifest.xml` do tauri-build 2.6): só pede o comctl32 6, que o código do Tauri importa
+     (`TaskDialogIndirect`). Sem ele o Windows recusa abrir o binário com STATUS_ENTRYPOINT_NOT_FOUND. -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0"
+        processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*" />
+    </dependentAssembly>
+  </dependency>
+</assembly>

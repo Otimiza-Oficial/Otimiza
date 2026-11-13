@@ -8,6 +8,7 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Pesado {
     /// Nome do executável, sem `.exe` (o que a pessoa reconhece: brave, DiscordCanary).
     pub nome: String,
@@ -18,6 +19,7 @@ pub struct Pesado {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Memoria {
     pub total_gb: f64,
     pub livre_gb: f64,

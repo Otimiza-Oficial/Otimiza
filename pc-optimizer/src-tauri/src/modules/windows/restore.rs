@@ -1,6 +1,9 @@
 // Pontos de restauração, a rede de baixo do histórico. A Proteção do Sistema vem desligada em muitas máquinas e o
 // Windows recusa mais de um ponto a cada 24 h, os dois em silêncio: por isso os pontos são contados antes e
 // depois, em vez de confiar no comando.
+//
+// Não confundir com `restaurar.rs` ("Restaurar meu PC"), que desfaz tudo o que o Otimiza mudou pelo histórico e
+// pelas peças com estado próprio. Este só cuida dos pontos de restauração do Windows.
 
 use super::shell;
 use serde::{Deserialize, Serialize};
@@ -42,6 +45,7 @@ fn mensagem_de_servicos_desativados(nomes: &[&str]) -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct RestorePoint {
     pub sequence: u32,
     pub description: String,
@@ -49,6 +53,7 @@ pub struct RestorePoint {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct RestoreStatus {
     pub available: bool,
     pub message: String,

@@ -39,3 +39,9 @@ npm-debug.log*
 
 # Rascunho da execucao por subagentes. Nao e codigo do produto.
 .superpowers/
+
+# Cópias de trabalho dos agentes do Claude Code (uma por tarefa em paralelo).
+.claude/worktrees/
+.cargo-target-ferramentas/
+pc-optimizer/prints-nova/
+pc-optimizer/ui/testes/dados-reais/

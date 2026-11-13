@@ -73,6 +73,7 @@ const PREFIXOS_PROTEGIDOS: &[&str] = &[
 ];
 
 #[derive(Debug, Clone)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Candidato {
     pub pid: u32,
     pub nome: String,

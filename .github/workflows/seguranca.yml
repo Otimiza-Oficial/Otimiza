@@ -1,0 +1,56 @@
+# Segurança (Plano de refino, 1.6)
+#
+# Roda em todo push e pull request, num Linux barato, separado da publicação de versão:
+#   - gitleaks: nenhum segredo (chave privada, token do bot, Mercado Pago) entra num commit. As privadas do Otimiza já
+#     vazaram duas vezes por arquivo versionado; esta trava é para não haver terceira.
+#   - cargo audit: falha conhecida nas dependências do Rust (banco RustSec).
+#   - npm audit: falha alta nas dependências que vão para o instalador (sem as de desenvolvimento).
+#
+# Falhou: o painel mostra qual passo. Sem `continue-on-error`, de propósito, como na esteira de versão.
+
+name: Segurança
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  segredos:
+    name: Segredos no código
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código (histórico inteiro)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Instalar o gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz gitleaks
+      - name: Procurar segredos
+        run: ./gitleaks detect --source . --redact --no-banner
+
+  dependencias:
+    name: Dependências com falha conhecida
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Instalar o cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Auditar o Rust
+        working-directory: pc-optimizer/src-tauri
+        run: cargo audit
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Auditar a interface
+        working-directory: pc-optimizer
+        run: npm audit --omit=dev --audit-level=high

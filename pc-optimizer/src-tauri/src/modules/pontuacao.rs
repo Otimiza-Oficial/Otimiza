@@ -13,6 +13,7 @@ pub const UM_POR_CENTO_PARA_NOTA_CHEIA: f64 = 70.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Nota {
     Calculada {
         nota: u32,

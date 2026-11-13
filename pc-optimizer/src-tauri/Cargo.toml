@@ -1,6 +1,6 @@
 [package]
 name = "pc-optimizer"
-version = "3.6.0"
+version = "4.0.0"
 description = "Console de desempenho para Windows"
 authors = ["Otimiza"]
 edition = "2021"
@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -66,6 +66,9 @@ windows-sys = { version = "0.59", features = [
     # Descobrir qual janela está em primeiro plano e quanto do monitor ela
     # cobre — metade da detecção de jogo sem lista de nomes.
     "Win32_UI_WindowsAndMessaging",
+    # Entrada bruta (Raw Input) numa janela só de mensagens, só nos segundos em que a pessoa pede a medida da taxa do
+    # mouse (`plataforma::mouse_taxa`). Não é gancho (SetWindowsHookEx): é a mesma entrada que os jogos leem.
+    "Win32_UI_Input",
     # Ler e mudar o modo de vídeo: resolução e taxa de atualização do monitor.
     # É onde moram `DEVMODEW` e `EnumDisplaySettingsExW`.
     "Win32_Graphics_Gdi",
@@ -95,6 +98,19 @@ windows-sys = { version = "0.59", features = [
     # "quantos núcleos, de qual classe de eficiência": em Intel híbrida, é o
     # que separa núcleo P de núcleo E sem lista de modelos.
     "Win32_System_SystemInformation",
+    # Otimiza Rede (`plataforma::wifi`, `plataforma::rota`). A API nativa do Wi-Fi (wlanapi): sinal, banda, canal,
+    # redes vizinhas e a varredura em segundo plano. Campos, não o texto traduzido do `netsh`.
+    "Win32_NetworkManagement_WiFi",
+    # IP Helper: por qual placa sai a rota (cabo ou Wi-Fi) e o eco ICMP com TTL crescente da rota salto a salto.
+    "Win32_NetworkManagement_IpHelper",
+    # `SOCKADDR_IN6` do eco ICMP em IPv6 (`Icmp6SendEcho2`).
+    "Win32_Networking_WinSock",
+    # `PIO_APC_ROUTINE`, que aparece na assinatura de `IcmpSendEcho2`/`Icmp6SendEcho2` (passado nulo: chamada síncrona).
+    "Win32_System_IO",
+    # `GetAdaptersAddresses` (tipo e velocidade da placa por onde sai a rota) só existe com os tipos do NDIS ligados.
+    "Win32_NetworkManagement_Ndis",
+    # `EnumDeviceDrivers`: nome aproximado do driver no Caçador de DPC (`dpc.rs`) quando o evento de imagem não chega.
+    "Win32_System_ProcessStatus",
 ] }
 
 # O gerador de quadros do Otimiza fala COM Direct3D 11, DXGI e DirectComposition.
@@ -143,6 +159,14 @@ webview2-com = "0.38"
 #
 # Rodar com:  cargo run --example gerar_chave -- ...
 [dev-dependencies]
+# Tipos da interface nova (`ui/src/lib/tipos.ts`) gerados a partir dos comandos, pelo teste `contrato::tests`. Só em
+# teste: os tipos ganham `cfg_attr(test, derive(specta::Type))`, e o executável do cliente não carrega nada disto.
+# Versões fixas: são candidatas a lançamento, e o tauri-specta exige exatamente esta do specta.
+specta = { version = "=2.0.0-rc.26", features = ["derive"] }
+specta-typescript = "=0.0.13"
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
+# O runtime de mentira do Tauri (`tauri::test::MockRuntime`), para o teste do contrato não abrir janela nenhuma.
+tauri = { version = "2", features = ["tray-icon", "image-png", "test"] }
 # Só para sortear a chave privada, uma vez na vida. Fica em dev-dependencies
 # porque o produto não precisa de aleatoriedade — conferir assinatura é
 # determinístico.

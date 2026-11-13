@@ -19,6 +19,8 @@ pub const INTERVALO_ENTRE_PARTIDAS_S: u64 = 2 * SEGUNDOS_ENTRE_MEDICOES + 5 * 60
 pub const PARTIDAS_NA_FAIXA: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FaixaDasPartidas"))]
 pub struct Faixa {
     pub partidas: usize,
     pub mediana_fps: f64,
@@ -27,6 +29,8 @@ pub struct Faixa {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RelatorioDaPartida"))]
 pub struct Relatorio {
     pub jogo: String,
     pub inicio: u64,
@@ -55,6 +59,22 @@ pub struct Relatorio {
     pub ja_freava: bool,
     /// As partidas anteriores deste jogo, só janelas comparáveis. `None` com menos de duas.
     pub anteriores: Option<Faixa>,
+    /// A rede nas mesmas janelas (`plataforma::rede_partida`), posta pelo comando. `None`: sem ping nas janelas.
+    pub rede: Option<crate::plataforma::rede_partida::RedeDaPartida>,
+    /// Cada janela medida, na ordem (Plano de refino 2.3.3: o gráfico da partida com número medido, não ilustração).
+    pub pontos: Vec<PontoDaPartida>,
+}
+
+/// Uma janela de 20 s da partida, como a medição gravou.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct PontoDaPartida {
+    pub quando: u64,
+    pub fps: f64,
+    /// Só com amostra suficiente (`confiavel`): 1% pior de janela curta é ruído.
+    pub low_1pct: Option<f64>,
+    /// Sem gerador de quadros na janela (entra na conta da partida).
+    pub comparavel: bool,
 }
 
 /// **Pura.** As partidas de um jogo, cada uma com as suas janelas, em ordem.
@@ -115,6 +135,7 @@ pub fn tests_resumo() -> Option<crate::modules::windows::presentmon::Resumo> {
             gpu_ocupada_ms: Some(9.5),
             na_tela_ms: Some(1.0),
             ate_a_tela_ms: Some(12.0),
+            clique_ms: None,
         })
         .collect();
     resumir(&q).ok()
@@ -237,6 +258,16 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
         janelas_com_freio_lido: lidos.len(),
         ja_freava,
         anteriores: faixa,
+        rede: None,
+        pontos: esta
+            .iter()
+            .map(|m| PontoDaPartida {
+                quando: m.quando,
+                fps: m.fps,
+                low_1pct: m.confiavel.then_some(m.low_1pct),
+                comparavel: medicoes::comparavel(m),
+            })
+            .collect(),
     })
 }
 

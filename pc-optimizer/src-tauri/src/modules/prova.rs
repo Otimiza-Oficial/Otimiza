@@ -311,6 +311,7 @@ mod tests {
                 gpu_ocupada_ms: None,
                 na_tela_ms: Some(5.555),
                 ate_a_tela_ms: None,
+                clique_ms: None,
             })
             .collect();
         resumir(&quadros).expect("resumo")

@@ -12,6 +12,8 @@ use super::ritmo::Retangulo;
 pub const MINIMO_PX: i32 = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "NivelDeEscala"))]
 pub enum Nivel {
     UltraQualidade,
     Qualidade,
@@ -59,6 +61,8 @@ pub fn resolucao_de_render(nivel: Nivel, largura: i32, altura: i32) -> (i32, i32
 
 /// Um nível com a resolução em que o jogo deve rodar nele, para a tela oferecer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "OpcaoEscala"))]
 pub struct Opcao {
     pub nivel: Nivel,
     pub largura: i32,

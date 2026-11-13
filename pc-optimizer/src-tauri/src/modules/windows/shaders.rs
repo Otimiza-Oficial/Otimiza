@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ShaderCache {
     pub id: String,
     pub name: String,
@@ -19,6 +20,7 @@ pub struct ShaderCache {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ShaderReport {
     pub caches: Vec<ShaderCache>,
     pub total_bytes: u64,
@@ -293,6 +295,7 @@ pub fn analyze() -> ShaderReport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct CleanOutcome {
     pub freed_mb: f64,
     pub message: String,

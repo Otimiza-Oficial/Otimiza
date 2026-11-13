@@ -3,11 +3,15 @@
 // efetivo derivado, GPU somada por motor como no Gerenciador de Tarefas, VRAM, RAM, commit, paginação e disco.
 // Temperatura e potência do processador exigem driver de kernel, que o Otimiza não instala: ficam UNKNOWN,
 // nunca zero.
+//
+// Não confundir com `modules::telemetry`, que é o contrato que a tela recebe (cada número com origem e qualidade):
+// este módulo só COLETA; a `Amostra` vira `Metric` no monitor.
 
 use serde::{Deserialize, Serialize};
 
 /// `None` = o contador não existe ou não respondeu nesta máquina, e a tela diz isso.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Amostra {
     pub instante_ms: u64,
     pub cpu_total_pct: Option<f64>,
@@ -36,6 +40,7 @@ pub struct Amostra {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ProcessoNaAmostra {
     pub nome: String,
     pub cpu: f64,
@@ -115,6 +120,8 @@ pub fn so_nucleos(instancias: &[(String, f64)]) -> Vec<f64> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PlacaTelemetria"))]
 pub struct Placa {
     pub nome: String,
     pub luid: String,

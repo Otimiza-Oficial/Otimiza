@@ -95,6 +95,8 @@ pub struct EventosDaPartida {
 
 /// Coisa que aconteceu num instante da medição. Coincidência no tempo não é causa: a tela mostra junto, não conclui.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EventoMedicoes"))]
 pub struct Evento {
     /// Segundos desde o começo da janela medida.
     pub segundo: f64,
@@ -102,6 +104,7 @@ pub struct Evento {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum TipoDeEvento {
     /// Quadro muito acima da mediana; `com_disco`: o disco estava ocupado em volta dele (mesma regra da contagem).
     Tranco { com_disco: bool },
@@ -193,6 +196,8 @@ pub const FORMATO_DA_MEDICAO: u32 = 1;
 
 /// De onde vieram os quadros: o PresentMon separa quadro do jogo de quadro gerado; o canal antigo não.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FonteMedicoes"))]
 pub enum Fonte {
     PresentMon,
     CanalAntigo,
@@ -223,6 +228,7 @@ impl Fonte {
 /// O que dá para ver. AFMF e XeFG se identificam ao PresentMon; DLSS FG, FSR FG e Smooth Motion ainda não: com eles o
 /// FPS medido inclui quadro gerado, e a tela diz isso.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum GeracaoNaPartida {
     NenhumaVisivel,
     OtimizaFg,
@@ -441,6 +447,7 @@ mod tests {
                 gpu_ocupada_ms: Some(9.5),
                 na_tela_ms: Some(1.0),
                 ate_a_tela_ms: Some(12.0),
+                clique_ms: None,
             })
             .collect();
         MedicaoAutomatica {

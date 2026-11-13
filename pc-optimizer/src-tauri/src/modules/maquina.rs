@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Fonte {
     PlacaMae,
     Windows,
@@ -28,6 +29,8 @@ impl Fonte {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "IdentidadeMaquina"))]
 pub struct Identidade {
     pub id: String,
     pub fonte: Fonte,

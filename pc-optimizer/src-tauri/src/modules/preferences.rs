@@ -6,6 +6,7 @@ use std::path::PathBuf;
 const INTERVALOS_VALIDOS: [u32; 3] = [1, 2, 5];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(default)]
 pub struct Preferences {
     pub restore_point_before_batch: bool,
@@ -20,6 +21,12 @@ pub struct Preferences {
 
     /// LIGADO por padrão, ao contrário do modo jogo: medir só escuta os eventos do Windows e não muda nada.
     pub medir_quadros_sozinho: bool,
+
+    /// DESLIGADO por padrão: mostrar no Discord o jogo aberto é a pessoa que decide.
+    pub discord_presenca: bool,
+
+    /// DESLIGADO por padrão: mandar números (anônimos) para a comunidade é a pessoa que decide.
+    pub comunidade: bool,
 }
 
 impl Default for Preferences {
@@ -30,6 +37,8 @@ impl Default for Preferences {
             auto_game_mode: false,
             show_unavailable: true,
             medir_quadros_sozinho: true,
+            discord_presenca: false,
+            comunidade: false,
         }
     }
 }

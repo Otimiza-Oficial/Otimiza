@@ -6,6 +6,7 @@ use crate::modules::changelog::ChangeRecord;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ScheduledTask {
     pub name: String,
     pub path: String,

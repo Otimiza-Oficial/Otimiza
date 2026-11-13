@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum FindingSeverity {
     Critical,
     Important,
@@ -14,6 +15,7 @@ pub enum FindingSeverity {
 
 /// Para o produto não fingir que conserta o que só se resolve trocando peça ou na BIOS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum FixLocation {
     Software,
     Bios,
@@ -22,6 +24,7 @@ pub enum FixLocation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Origem {
     Memoria,
     Firmware,
@@ -41,6 +44,8 @@ pub enum Origem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CausaAchados"))]
 pub enum Causa {
     Memoria,
     Armazenamento,
@@ -53,6 +58,7 @@ pub enum Causa {
 
 /// O cliente abre o Otimiza com o jogo FECHADO: quem persiste (marca d'água, log) vence a foto do instante.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Confianca {
     Declarado,
     Medido,
@@ -63,6 +69,7 @@ pub enum Confianca {
 
 /// `None` na maioria: memória, disco e BIOS não são coisas que um programa conserte.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Acao {
     pub comando: String,
     pub argumento: Option<String>,
@@ -72,6 +79,8 @@ pub struct Acao {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AchadoAchados"))]
 pub struct Achado {
     pub id: String,
     pub origem: Origem,
@@ -88,6 +97,7 @@ pub struct Achado {
 
 /// "Não medimos" nunca vira "está tudo bem": silêncio é indistinguível de aprovação.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Lacuna {
     pub origem: Origem,
     pub o_que: String,

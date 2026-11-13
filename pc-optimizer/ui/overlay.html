@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FPS do Otimiza</title>
+    <!-- O FPS por cima do jogo (interface nova): fundo transparente, o número e o Oti. Não chama o backend, não recebe
+         clique: o Rust chama `window.fps(leitura)` duas vezes por segundo (`plataforma::overlay`). -->
+    <style>
+      @font-face {
+        font-family: "Geist";
+        src: url("/geist-variavel.woff2") format("woff2");
+        font-weight: 100 900;
+      }
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      body { font-family: "Geist", "Segoe UI", sans-serif; color: #fff; -webkit-font-smoothing: antialiased; }
+      .cartao { box-sizing: border-box; height: 100%; padding: 8px 12px; border-radius: 14px; background: rgba(6, 6, 8, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+      .linha { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+      .fps { font-size: 26px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; }
+      .un { font-size: 11px; color: rgba(255, 255, 255, 0.6); letter-spacing: 0.04em; }
+      .boost { margin-left: auto; font-size: 10px; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.35); }
+      .mini { font-size: 11.5px; color: rgba(255, 255, 255, 0.72); }
+      .mini b { color: #fff; font-weight: 500; }
+      .nota { font-size: 10.5px; color: rgba(255, 255, 255, 0.6); line-height: 1.25; }
+      /* Mínimo: igual ao cl_drawfps do FiveM ("46fps" cinza-claro, ~15 px, sem contorno). O Oti só aparece no alerta. */
+      .compacto { padding: 0 0 0 6px; border: none; border-radius: 0; background: transparent; justify-content: flex-start; }
+      .compacto .linha { gap: 0; margin-top: 7px; }
+      .compacto .fps, .compacto .un { font-family: "Segoe UI", Arial, sans-serif; font-size: 15px; font-weight: 400; letter-spacing: 0.01em; color: #ececec; }
+      .compacto .oti { width: 15px; height: 15px; margin-left: 6px; }
+      .compacto .oti:not(.alerta) { display: none; }
+
+      .oti { width: 22px; height: 22px; flex: none; margin-right: 2px; }
+      .oti .corpo { transition: fill 0.25s; }
+      /* Âmbar e pulsando quando o 1% pior cai: a pessoa vê de canto de olho, sem texto para ler no meio do tiroteio. */
+      .oti.alerta .corpo { fill: #f0a020; }
+      .oti.alerta { animation: pulso 0.9s ease-in-out infinite; filter: drop-shadow(0 0 4px rgba(240, 160, 32, 0.9)); }
+      @keyframes pulso { 50% { transform: scale(1.18); } }
+    </style>
+    <script type="module" src="/src/overlay.ts"></script>
+  </head>
+  <body>
+    <div class="cartao" id="cartao"><div class="linha"><span class="fps">—</span><span class="un">FPS</span></div></div>
+  </body>
+</html>

@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use super::planoenergia::e_guid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FabricanteMotorenergia"))]
 pub enum Fabricante {
     Intel,
     Amd,
@@ -17,6 +19,8 @@ pub enum Fabricante {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ArquiteturaMotorenergia"))]
 pub enum Arquitetura {
     /// Sem Speed Shift (HWP): o Windows escolhe cada estado de desempenho.
     IntelLegada,
@@ -36,6 +40,7 @@ pub enum Arquitetura {
 
 /// Quem escolhe o estado de desempenho quando nada é forçado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Controle {
     /// Intel Speed Shift: o processador escolhe, guiado pelo EPP.
     HardwareHwp,
@@ -46,6 +51,8 @@ pub enum Controle {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FormatoMotorenergia"))]
 pub enum Formato {
     Desktop,
     Notebook,
@@ -53,6 +60,7 @@ pub enum Formato {
 
 /// Números, não nomes: iguais em qualquer idioma e versão do Windows.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Cpuid {
     pub fabricante_bruto: String,
     pub familia: u32,
@@ -130,6 +138,8 @@ pub fn controle(c: &Cpuid, arquitetura: Arquitetura) -> Controle {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TopologiaMotorenergia"))]
 pub struct Topologia {
     pub nucleos_fisicos: u32,
     pub processadores_logicos: u32,
@@ -165,6 +175,7 @@ impl Topologia {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Impressao {
     pub cpu: String,
     pub fabricante: Fabricante,
@@ -182,6 +193,7 @@ pub struct Impressao {
 
 /// Um ajuste de energia como ESTE Windows o descreve.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Configuracao {
     pub subgrupo: String,
     pub subgrupo_alias: Option<String>,
@@ -419,6 +431,7 @@ pub fn epp_para_percentual(bruto: u32) -> u32 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Estacionamento {
     /// O que o plano base traz.
     Windows,
@@ -429,12 +442,15 @@ pub enum Estacionamento {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "BoostMotorenergia"))]
 pub enum Boost {
     Windows,
     Agressivo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Autonomia {
     Windows,
     /// Deixar o processador escolher os estados (HWP / CPPC).
@@ -442,6 +458,7 @@ pub enum Autonomia {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Resposta {
     Windows,
     /// Sobe cedo e direto; desce em degraus, sem pressa.
@@ -449,6 +466,7 @@ pub enum Resposta {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum PoliticaDeDispositivo {
     Windows,
     /// Economia desligada NA TOMADA. Só entra como variação testada.
@@ -456,6 +474,7 @@ pub enum PoliticaDeDispositivo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Parametros {
     /// EPP na escala do processador (0–255). `None` mantém o do plano base.
     pub epp_bruto: Option<u32>,
@@ -484,6 +503,8 @@ impl Parametros {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "MotivoMotorenergia"))]
 pub enum Motivo {
     EppDoCandidato,
     EppNucleosDeEficienciaPreservado,
@@ -508,6 +529,7 @@ pub enum Motivo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum MotivoIgnorado {
     /// Este Windows não expõe o ajuste.
     NaoExiste,
@@ -518,6 +540,8 @@ pub enum MotivoIgnorado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "MudancaMotorenergia"))]
 pub struct Mudanca {
     pub alias: String,
     pub subgrupo: String,
@@ -529,12 +553,15 @@ pub struct Mudanca {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ignorado {
     pub alias: String,
     pub motivo: MotivoIgnorado,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CandidatoMotorenergia"))]
 pub struct Candidato {
     pub id: String,
     pub papel: Papel,
@@ -545,6 +572,7 @@ pub struct Candidato {
 
 /// O papel do candidato na bateria de testes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Papel {
     PadraoWindows,
     /// No notebook: "PLUGGED COMPETITIVE".
@@ -1304,6 +1332,8 @@ impl ResultadoDoCandidato {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "NotaMotorenergia"))]
 pub struct Nota {
     /// 100 = igual ao padrão do Windows.
     pub total: f64,
@@ -1391,6 +1421,8 @@ pub fn pontuar(r: &ResultadoDoCandidato, base: &ResultadoDoCandidato) -> Nota {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AchadoMotorenergia"))]
 pub enum Achado {
     /// O firmware limita a CPU (térmico) — nenhum plano resolve isso.
     FirmwareLimitaPorTemperatura,
@@ -1423,6 +1455,8 @@ pub enum Achado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EscolhaMotorenergia"))]
 pub struct Escolha {
     pub notas: Vec<(String, Nota)>,
     /// `None` = fica o padrão do Windows.

@@ -11,6 +11,8 @@ use super::vram::{Analise as Vram, Estado};
 
 /// Espelha `windows::configjogo::Perfil` em vez de importar: a decisão precisa ser testável em qualquer sistema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PerfilOrquestrador"))]
 pub enum Perfil {
     SemTeto,
     Equilibrado,
@@ -19,7 +21,7 @@ pub enum Perfil {
 
 impl Perfil {
     /// O plano devolve o nome que o comando de aplicar espera, sem tradução na tela; o teste
-    /// `o_plano_fala_a_lingua_de_quem_aplica` (`commands.rs`) confere os três.
+    /// `o_plano_fala_a_lingua_de_quem_aplica` (`commands/mod.rs`) confere os três.
     pub fn nome(self) -> &'static str {
         match self {
             Perfil::SemTeto => "sem_teto",
@@ -34,6 +36,7 @@ impl Perfil {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Decisao {
     SemEvidencia,
     NaoResolveAqui,
@@ -41,6 +44,7 @@ pub enum Decisao {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Plano {
     pub decisao: Decisao,
     pub porque: Vec<String>,

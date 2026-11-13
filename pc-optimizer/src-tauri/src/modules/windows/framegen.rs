@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use super::bottleneck::Limite;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FabricanteFramegen"))]
 pub enum Fabricante {
     Nvidia,
     Amd,
@@ -16,6 +18,7 @@ pub enum Fabricante {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Arquitetura {
     /// Blackwell. DLSS 4 com geração múltipla (até 4x) e Smooth Motion.
     Rtx50,
@@ -35,6 +38,8 @@ pub enum Arquitetura {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PlacaFramegen"))]
 pub struct Placa {
     pub nome: String,
     pub fabricante: Fabricante,
@@ -146,6 +151,8 @@ pub enum Tecnologia {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TipoFramegen"))]
 pub enum Tipo {
     /// O jogo gera. Os quadros gerados saem pela mesma entrega do jogo.
     Nativa,
@@ -312,6 +319,7 @@ pub fn catalogo(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum BaseDaEstimativa {
     /// Quadros medidos vezes o multiplicador que a pessoa escolheu.
     MedidoVezesMultiplicador,
@@ -328,6 +336,7 @@ pub enum BaseDaEstimativa {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum MotivoDesconhecido {
     /// Medir atraso de ponta a ponta exige sensor na tela (ou Reflex
     /// Analyzer). Software sozinho não vê.
@@ -338,6 +347,7 @@ pub enum MotivoDesconhecido {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "origem")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Valor {
     Medido { valor: f64 },
     Estimado { valor: f64, base: BaseDaEstimativa },
@@ -481,6 +491,7 @@ fn ritmo_irregular(r: &Ritmo) -> bool {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Prontidao {
     NaoRecomendada,
     Marginal,
@@ -751,6 +762,8 @@ pub fn montar_rodada(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PerfilFramegen"))]
 pub enum Perfil {
     /// Resposta acima de tudo. Quadro exibido não vale ponto nenhum.
     Competitivo,
@@ -885,6 +898,8 @@ pub fn avaliar_artefatos(respostas: &[(Artefato, Intensidade)]) -> NotaDeArtefat
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DecisaoFramegen"))]
 pub enum Decisao {
     Manter,
     Desligar,
@@ -1165,6 +1180,8 @@ pub fn ajuste_de_tela(fps_exibido: Option<f64>, hz: u32, multiplicador: u8) -> A
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TelaFramegen"))]
 pub struct Tela {
     pub largura: u32,
     pub altura: u32,

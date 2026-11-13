@@ -8,6 +8,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "OrigemMetricas"))]
 pub enum Origem {
     Medido,
     Estimado,
@@ -15,6 +17,8 @@ pub enum Origem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ValorMetricas"))]
 pub struct Valor {
     pub valor: Option<f64>,
     pub origem: Origem,
@@ -119,6 +123,8 @@ pub fn numero_principal(m: &Metricas, frame_boost_ligado: bool) -> Valor {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FaixaMetricas"))]
 pub struct Faixa {
     pub minimo: f64,
     pub maximo: f64,

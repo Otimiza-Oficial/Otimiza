@@ -11,6 +11,8 @@ use crate::modules::regressao::{comparar, Desfecho, Veredito};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "fase")]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FaseExperimento"))]
 pub enum Fase {
     FaltaOAntes,
     ProntoParaAplicar {
@@ -25,6 +27,8 @@ pub enum Fase {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "decisao")]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DecisaoExperimento"))]
 pub enum Decisao {
     Esperar {
         falta: String,
@@ -45,6 +49,7 @@ pub enum Decisao {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Experimento {
     pub grupo: Grupo,
     pub letra: char,

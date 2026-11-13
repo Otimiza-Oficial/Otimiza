@@ -28,6 +28,7 @@ pub struct Entrada {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Limitacao {
     /// O monitor está abaixo do que aceita: é FPS visível de graça, o Otimiza ajusta (Sistema → Monitor).
     MonitorAbaixoDoMaximo {
@@ -55,6 +56,8 @@ pub enum Limitacao {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PerfilPerfil"))]
 pub struct Perfil {
     /// Da mais importante para a menos.
     pub limitacoes: Vec<Limitacao>,

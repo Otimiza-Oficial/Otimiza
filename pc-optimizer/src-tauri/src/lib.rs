@@ -1,6 +1,19 @@
+/// O aplicativo, guardado na abertura. Comando que recebe `AppHandle` como argumento não entra no contrato tipado
+/// (`contrato.rs` monta com o `MockRuntime`); os que precisam dele e da interface nova o pegam aqui.
+static APLICATIVO: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+pub(crate) fn aplicativo() -> Result<tauri::AppHandle, String> {
+    APLICATIVO
+        .get()
+        .cloned()
+        .ok_or_else(|| "O Otimiza ainda está abrindo: tente de novo em um segundo.".to_string())
+}
+
 mod ci_coverage;
 
 mod commands;
+mod contrato;
+mod dados_reais;
 mod core;
 mod modules;
 mod plataforma;
@@ -195,6 +208,7 @@ pub fn run() {
             commands::set_startup_enabled,
             commands::list_optimizations,
             commands::estado_do_historico,
+            commands::historico_de_mudancas,
             commands::convite_do_discord,
             commands::apply_optimization,
             commands::vistoriar_mudancas,
@@ -217,6 +231,45 @@ pub fn run() {
             commands::revert_optimization,
             commands::optimize_now,
             commands::restaurar_tudo,
+            commands::tela_diagnostico,
+            commands::tela_troca_pendente,
+            commands::tela_trocar_hz,
+            commands::tela_confirmar_troca,
+            commands::tela_voltar_troca,
+            commands::rede_rota,
+            commands::rede_rota_do_jogo,
+            commands::rede_fila,
+            commands::fivem_servidores_ping,
+            commands::rede_provar_placa,
+            commands::rede_quem_usa,
+            commands::rede_prioridade_estado,
+            commands::rede_prioridade_ligar,
+            commands::rede_prioridade_desligar,
+            commands::rede_historico,
+            commands::rede_wifi,
+            commands::rede_varredura_wifi,
+            commands::rede_varredura_wifi_ligar,
+            commands::rede_varredura_wifi_desligar,
+            commands::dpc_capturar,
+            commands::dpc_cancelar,
+            commands::mouse_taxa,
+            commands::energia_calibrar,
+            commands::energia_calibrar_cancelar,
+            commands::energia_aplicar_calibrado,
+            commands::energia_salvar_calibrado_para_o_jogo,
+            commands::cs2_painel,
+            commands::cs2_ligar,
+            commands::cs2_desligar,
+            commands::bandeja_humor,
+            commands::discord_disponivel,
+            commands::comunidade_participar,
+            commands::comunidade_parecidos,
+            commands::nuvem_guardar,
+            commands::nuvem_restaurar,
+            commands::oti_perguntar,
+            commands::banda_painel,
+            commands::banda_ligar,
+            commands::banda_desligar,
             commands::checar_essenciais,
             commands::religar_essenciais,
             commands::ajustes_do_driver_nvidia,
@@ -263,6 +316,7 @@ pub fn run() {
             commands::capa_do_jogo,
             commands::capa_larga_do_jogo,
             commands::jogos_instalados,
+            commands::jogar,
             commands::fundos_listar,
             commands::limpeza_medir,
             commands::limpeza_executar,
@@ -279,6 +333,8 @@ pub fn run() {
             commands::frame_boost_ligar,
             commands::jogo_liso_medir,
             commands::jogo_liso_aplicar,
+            commands::jogo_liso_depois_da_partida,
+            commands::escala_nitidez,
             commands::memoria_para_o_jogo,
             commands::memoria_fechar,
             commands::energia_de_jogo,
@@ -323,12 +379,26 @@ pub fn run() {
             commands::aplicar_ajuste_intel,
             commands::relatorio_de_suporte,
             commands::versao_mais_nova,
+            commands::versao_do_app,
         ])
         .setup(|app| {
+            // Para os comandos que precisam do aplicativo sem recebê-lo como argumento (ver `aplicativo`).
+            let _ = APLICATIVO.set(app.handle().clone());
+
             // `otimiza.log` começa dizendo em que máquina: é o arquivo que o cliente manda. Em thread própria (PowerShell e
             // `powercfg`), fora do orçamento da abertura.
             #[cfg(target_os = "windows")]
             modules::windows::cabecalho::anotar_em_segundo_plano();
+
+            // Guarda térmica: só lê, e só com jogo aberto (`plataforma::guarda_termica`).
+            #[cfg(target_os = "windows")]
+            plataforma::guarda_termica::vigiar(app.handle().clone());
+            // Recebe o estado da partida do CS2, quando a integração está ligada (`plataforma::cs2`).
+            #[cfg(target_os = "windows")]
+            plataforma::cs2::maquina::escutar();
+            // "Jogando <jogo> · com o Otimiza" no Discord, se a pessoa ligar (`plataforma::discord`).
+            #[cfg(target_os = "windows")]
+            plataforma::discord::maquina::vigiar();
 
             #[cfg(debug_assertions)]
             {
@@ -368,6 +438,8 @@ pub fn run() {
                     use tauri::Emitter;
 
                     let mut pid: Option<u32> = None;
+                    // O jogo aberto agora, desde quando, e se veio do "Jogar": para o cartão da partida ao fechar.
+                    let mut em_jogo: Option<(String, String, Option<String>, std::time::Instant, bool)> = None;
                     // Sem a trava do modo seguro: aqui só se LÊ qual jogo está aberto, nada age sozinho.
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
@@ -428,6 +500,43 @@ pub fn run() {
                             let _ = tokio::task::spawn_blocking(move || plataforma::overlay::ao_abrir(&h, &j)).await;
                         }
                         let _ = handle.emit("jogo:sessao", &mudou);
+                        // A partida (Plano "Partida de respeito"): ao fechar, a tela monta o cartão; ao abrir pelo
+                        // "Jogar", a receita lembrada liga sozinha.
+                        if let Some((jogo, executavel, caminho, desde, pelo_jogar)) = em_jogo.take() {
+                            // FB8: o Frame Boost que a guarda aprovou nesta partida fica lembrado para o próximo "Jogar".
+                            // R5: a marca de prioridade do jogo sai junto com ele.
+                            let fechado = executavel.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                plataforma::fb_por_jogo::ao_fechar_o_jogo(&fechado);
+                                plataforma::prioridade_jogo::limpar();
+                            })
+                            .await;
+                            let _ = handle.emit(
+                                "partida:terminou",
+                                plataforma::partida::Terminada {
+                                    jogo,
+                                    executavel,
+                                    caminho,
+                                    segundos: desde.elapsed().as_secs(),
+                                    pelo_jogar,
+                                },
+                            );
+                        }
+                        if let Some(j) = mudou.as_ref() {
+                            let marcar = j.executavel.clone();
+                            tauri::async_runtime::spawn_blocking(move || plataforma::prioridade_jogo::ao_abrir(&marcar));
+                            let pelo_jogar = plataforma::partida::tomar_se_for(&j.nome, &j.executavel);
+                            let caminho = modules::windows::frames::caminho_do_processo(&j.executavel);
+                            em_jogo = Some((j.nome.clone(), j.executavel.clone(), caminho, std::time::Instant::now(), pelo_jogar));
+                            if pelo_jogar {
+                                let h = handle.clone();
+                                let (nome, exe) = (j.nome.clone(), j.executavel.clone());
+                                tauri::async_runtime::spawn(async move {
+                                    let preparada = preparar_partida(&h, nome, &exe).await;
+                                    let _ = h.emit("partida:preparada", preparada);
+                                });
+                            }
+                        }
                         // Fechado durante o jogo, ficou só na bandeja: com o jogo fechado, sai de vez.
                         let escondida = handle
                             .get_webview_window("main")
@@ -632,6 +741,40 @@ pub fn run() {
                 }
             });
 
+            // Interruptor remoto (Plano de refino, E8): a última lista de ajustes desligados vale já, e a nova chega da rede.
+            #[cfg(windows)]
+            {
+                modules::windows::catalog::carregar_desligados_do_disco();
+                tauri::async_runtime::spawn(modules::convite::atualizar_ajustes_desligados());
+            }
+
+            // Vigia de estabilidade (Plano de refino, E2 e E3): o PC estável que desligou sozinho, deu tela azul ou
+            // perdeu o driver de vídeo depois de um ajuste do Otimiza tem esse ajuste desfeito, e a tela avisa.
+            #[cfg(windows)]
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Emitter;
+                    // Depois de a abertura assentar: ler o registro de eventos custa um PowerShell.
+                    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+                    if utils::diagnostico::modo_seguro() {
+                        return;
+                    }
+                    let relatos = {
+                        let estado = handle.state::<commands::AppState>();
+                        let mut log = estado.changes.lock().await;
+                        modules::windows::estabilidade::conferir(&mut log)
+                    };
+                    for r in relatos {
+                        utils::Logger::warn(&format!(
+                            "estabilidade: {} Desfeitos: {:?}. Falhas: {:?}",
+                            r.frase, r.desfeitos, r.falhas
+                        ));
+                        let _ = handle.emit("estabilidade:aviso", &r);
+                    }
+                });
+            }
+
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
                 if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::windows::motorenergia_maquina::recuperar_teste_interrompido).await {
@@ -657,6 +800,13 @@ pub fn run() {
                 }
             });
 
+            // Banda de fundo: o vigia dela devolve o que ficou e acompanha o jogo (thread própria, dorme 4 s por volta).
+            #[cfg(target_os = "windows")]
+            std::thread::spawn(crate::plataforma::banda::vigiar);
+            // R5: resto de marca de prioridade de uma sessão que caiu com o jogo aberto.
+            #[cfg(target_os = "windows")]
+            std::thread::spawn(crate::plataforma::prioridade_jogo::limpar);
+
             // Energia de jogo: devolve o que ficou de uma sessão que caiu e depois acompanha o jogo abrir e fechar. Duas
             // olhadas sem jogo antes de devolver: a troca de processo da tela de carregamento não derruba o ajuste.
             #[cfg(target_os = "windows")]
@@ -680,13 +830,17 @@ pub fn run() {
                         continue;
                     }
                     visto = jogo.clone();
-                    let frase = tokio::task::spawn_blocking(move || {
-                        crate::plataforma::energia_jogo::passo(jogo.as_deref())
+                    // O Wi-Fi sem varredura anda junto: mesmo vigia, mesmas duas olhadas. Não há o que devolver na
+                    // abertura: o pedido morre com o cliente da wlanapi, que fecha com o processo.
+                    let frases = tokio::task::spawn_blocking(move || {
+                        [
+                            crate::plataforma::energia_jogo::passo(jogo.as_deref()),
+                            crate::plataforma::wifi_varredura::passo(jogo.as_deref()),
+                        ]
                     })
                     .await
-                    .ok()
-                    .flatten();
-                    if let Some(f) = frase {
+                    .unwrap_or_default();
+                    for f in frases.into_iter().flatten() {
                         utils::Logger::info(&f);
                     }
                 }
@@ -790,6 +944,13 @@ pub fn run() {
                         if !acompanhamento.observar(jogo.as_ref().map(|j| j.pid), agora) {
                             continue;
                         }
+                        // No CS2 com a integração ligada: só mede com a rodada valendo e a pessoa viva (o menu a 400 FPS
+                        // e o espectador não são a partida). Sem marcar a tentativa: a próxima olhada tenta de novo.
+                        if jogo.as_ref().is_some_and(|j| j.executavel.to_ascii_lowercase().ends_with("cs2.exe"))
+                            && plataforma::cs2::vale_medir_agora() == Some(false)
+                        {
+                            continue;
+                        }
                         acompanhamento.tentado(agora);
 
                         let Some(jogo) = jogo else { continue };
@@ -872,6 +1033,10 @@ pub fn run() {
 
                         // PresentMon primeiro (separa quadro do jogo de gerado e sabe se chegou à tela); o canal antigo
                         // fica de reserva, e o log diz qual mediu.
+                        // A rede na mesma janela (Plano de refino, R7): o cartão diz se foi a rede ou o PC.
+                        let ecos_da_rede = tokio::task::spawn_blocking(|| {
+                            plataforma::fila::ecos(std::time::Duration::from_secs(medicoes::SEGUNDOS_DE_MEDICAO))
+                        });
                         let medido = tokio::task::spawn_blocking(move || {
                             match modules::windows::presentmon::medir_como_antes(
                                 jogo.pid,
@@ -955,6 +1120,9 @@ pub fn run() {
                                     ),
                                     _ => None,
                                 };
+                                if let Ok(ecos) = ecos_da_rede.await {
+                                    plataforma::rede_partida::guardar(&m.process, agora, &ecos);
+                                }
                                 let registro = MedicaoAutomatica {
                                     jogo: m.process,
                                     quando: agora,
@@ -989,6 +1157,14 @@ pub fn run() {
                                             executavel, m.fps, m.low_1pct
                                         ));
                                         let _ = handle.emit("prova:automatica", ());
+
+                                        // Comunidade (só se a pessoa participa; falha calada): a partida confiável.
+                                        if m.detalhe_confiavel {
+                                            let jogo = plataforma::historico::id_do_jogo(&executavel).1;
+                                            tauri::async_runtime::spawn(plataforma::comunidade::enviar(serde_json::json!({
+                                                "jogo": jogo, "fps": m.fps, "low": m.low_1pct
+                                            })));
+                                        }
 
                                         let decididos = {
                                             let estado = handle.state::<commands::AppState>();
@@ -1030,13 +1206,21 @@ pub fn run() {
             // Com um jogo aberto, fechar esconde na bandeja: o contador e o Frame Boost continuam no jogo.
             #[cfg(target_os = "windows")]
             if let tauri::WindowEvent::CloseRequested { api, .. } = evento {
+                utils::Logger::info(&format!("fechando: a janela {} pediu para fechar", janela.label()));
                 plataforma::bandeja::ao_pedir_fechar(janela, api);
+            }
+            if let tauri::WindowEvent::Destroyed = evento {
+                utils::Logger::info(&format!("fechando: a janela {} foi destruída", janela.label()));
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { code, .. } = &event {
+                utils::Logger::info(&format!("fechando: saída pedida (código {:?})", code));
+            }
             if let tauri::RunEvent::Exit = event {
+                utils::Logger::info("fechando: o laço da janela terminou, gravando a sessão");
                 utils::diagnostico::fechar_sessao();
             }
 
@@ -1047,8 +1231,10 @@ pub fn run() {
                 // A escala ligada prende o mouse e encolhe a janela do jogo: o fim do gerador devolve os dois (e o
                 // cursor do sistema) antes de o processo acabar. Sem gerador rodando, não faz nada.
                 modules::windows::geracao::desligar();
+                utils::Logger::info("fechando: gerador de quadros desligado");
 
                 let devolvidos = modules::windows::suspend::retomar_tudo().unwrap_or_default();
+                utils::Logger::info("fechando: programas suspensos conferidos");
 
                 if !devolvidos.is_empty() {
                     let nomes: Vec<&str> =
@@ -1129,5 +1315,110 @@ mod tests_da_janela {
 
         assert_eq!(largura, 800.0);
         assert_eq!(altura, 600.0);
+    }
+}
+
+/// O jogo que o "Jogar" abriu apareceu: liga a receita que o Turbo lembra dele, a mesma do toque em "Ligar" no cartão.
+/// Sem receita guardada, não mede nada sozinho (medir leva 10 s com o jogo na frente): a tela oferece o Turbo.
+#[cfg(target_os = "windows")]
+/// Plano de refino 6.4: a primeira partida sem receita já monta a receita. O Turbo mede 10 s depois de uns minutos de
+/// jogo e guarda; nada é ligado agora (mudar a escala no meio da partida seria pior que esperar a próxima).
+#[cfg(target_os = "windows")]
+async fn medir_sem_receita(app: tauri::AppHandle, jogo: String, executavel: String) {
+    use plataforma::turbo;
+    let id = plataforma::historico::id_do_jogo(&executavel).0;
+    let mut passados = 0;
+    for momento in turbo::MEDIR_SEM_RECEITA_S {
+        tokio::time::sleep(std::time::Duration::from_secs(momento - passados)).await;
+        passados = momento;
+        let aberto = plataforma::sessao::atual().is_some_and(|j| j.executavel.eq_ignore_ascii_case(&executavel));
+        // O jogo fechou, ou a pessoa ligou o Turbo na mão (que já mediu e guardou).
+        if !aberto || turbo::perfil(&id).is_some() {
+            return;
+        }
+        if turbo::em_prova() || modules::provaalternada::em_andamento() {
+            continue;
+        }
+        match tokio::task::spawn_blocking(turbo::medir).await {
+            Ok(Ok((receita, fps_antes))) if turbo::vale_guardar(receita.gargalo) => {
+                let explicacao = receita.explicacao.clone();
+                let perfil = turbo::Perfil {
+                    receita,
+                    fps_antes,
+                    medido_em: modules::changelog::now_timestamp(),
+                    prova: None,
+                };
+                if let Err(e) = turbo::lembrar(&id, perfil) {
+                    utils::Logger::warn(&format!("jogar: não guardei a receita medida de {}: {}", id, e));
+                    return;
+                }
+                utils::Logger::info(&format!("jogar: receita de {} medida na partida e guardada", id));
+                let _ = tauri::Emitter::emit(&app, "partida:receita_medida", plataforma::partida::ReceitaMedida { jogo, explicacao });
+                return;
+            }
+            Ok(Ok((receita, _))) => {
+                utils::Logger::info(&format!("jogar: {} sem gargalo na medida ({:?})", id, receita.gargalo))
+            }
+            Ok(Err(e)) => utils::Logger::warn(&format!("jogar: a medida de {} não saiu: {}", id, e)),
+            Err(e) => utils::Logger::warn(&format!("jogar: a medida de {} parou: {}", id, e)),
+        }
+    }
+}
+
+async fn preparar_partida(app: &tauri::AppHandle, jogo: String, executavel: &str) -> plataforma::partida::Preparada {
+    let id = plataforma::historico::id_do_jogo(executavel).0;
+    let sem_receita = plataforma::turbo::perfil(&id).is_none();
+    if sem_receita {
+        // FB8: sem receita do Turbo, o Frame Boost que esta máquina já provou neste jogo volta sozinho.
+        #[cfg(target_os = "windows")]
+        if let Some(escolha) = plataforma::fb_por_jogo::escolha(&id) {
+            if !utils::diagnostico::modo_seguro() && modules::licenca::exigir().is_ok() {
+                let h = app.clone();
+                let e = escolha.clone();
+                let ligado = tokio::task::spawn_blocking(move || {
+                    plataforma::frameboost::ligar(&h, e.multiplicador, false, e.escala, e.alvo_fps).map(|_| ())
+                })
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|r| r);
+                match ligado {
+                    Ok(()) => {
+                        let estado = app.state::<AppState>();
+                        let mut log = estado.changes.lock().await;
+                        plataforma::frameboost::travar_base(&mut log);
+                        drop(log);
+                        let passo = format!(
+                            "{}, como na última partida (o jogo manteve {:.0}% do FPS)",
+                            plataforma::fb_por_jogo::descrever(&escolha),
+                            escolha.manteve_pct
+                        );
+                        utils::Logger::info(&format!("jogar: {} em {}", passo, jogo));
+                        return plataforma::partida::Preparada { jogo, passos: vec![passo], sem_receita: false, recusa: None };
+                    }
+                    Err(e) => utils::Logger::warn(&format!("jogar: o Frame Boost lembrado não ligou em {}: {}", jogo, e)),
+                }
+            }
+        }
+        #[cfg(target_os = "windows")]
+        tauri::async_runtime::spawn(medir_sem_receita(app.clone(), jogo.clone(), executavel.to_string()));
+        return plataforma::partida::Preparada { jogo, passos: Vec::new(), sem_receita, recusa: None };
+    }
+    if utils::diagnostico::modo_seguro() {
+        return plataforma::partida::Preparada {
+            jogo,
+            passos: Vec::new(),
+            sem_receita,
+            recusa: Some("O modo seguro está ligado: o Otimiza não aplica nada sozinho.".to_string()),
+        };
+    }
+    match commands::turbo_ligar(Some(true), app.state::<AppState>()).await {
+        Ok(painel) => {
+            utils::Logger::info(&format!("jogar: receita do Turbo ligada em {} ({} passos)", jogo, painel.passos.len()));
+            plataforma::partida::Preparada { jogo, passos: painel.passos, sem_receita, recusa: None }
+        }
+        Err(e) => {
+            utils::Logger::warn(&format!("jogar: o Turbo não ligou em {}: {}", jogo, e));
+            plataforma::partida::Preparada { jogo, passos: Vec::new(), sem_receita, recusa: Some(e) }
+        }
     }
 }

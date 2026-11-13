@@ -11,6 +11,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LeituraFichabios"))]
 pub struct Leitura {
     pub cpu: Option<String>,
     /// O modelo do chip no CPUID ("Intel64 Family 6 Model 183 Stepping 1" →
@@ -30,6 +32,7 @@ pub struct Leitura {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Defeito {
     /// Intel de mesa da 13ª ou 14ª geração sem o microcódigo 0x12F.
     MicrocodigoIntelAntigo { atual: u32 },
@@ -125,6 +128,7 @@ pub fn defeitos(l: &Leitura) -> Vec<Defeito> {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ficha {
     pub leitura: Leitura,
     pub defeitos: Vec<Defeito>,

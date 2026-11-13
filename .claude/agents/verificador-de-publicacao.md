@@ -35,14 +35,13 @@ O cargo não está no PATH do bash: `& "$env:USERPROFILE\.cargo\bin\cargo.exe"`.
    tem `\r\n` — se não tiver, o clone não reproduz a esteira; pare e diga.
 2. **Pasta de dados vazia:** `$env:APPDATA` apontado para uma pasta temporária
    recém-criada, na mesma sessão dos passos 3 a 5.
-3. **Dependências do frontend:** `npm ci` em `pc-optimizer` do clone. Sem isso,
-   os testes que rodam a tela (`roda_a_tela`) falham por falta do TypeScript e
-   isso NÃO é defeito — não reporte como tal.
-4. `npx tsc --noEmit` em `pc-optimizer` do clone.
-4b. `npm run fumaca` em `pc-optimizer` do clone: monta a página de produção e clica em
-   todas as áreas e sub-abas num Chrome sem janela, com nenhum comando do Windows
-   respondendo. Qualquer exceção não tratada reprova (foi assim que a aba BIOS derrubava o
-   programa na 3.1). Sem Chrome instalado, diga que não rodou; não pule calado.
+3. **Dependências do frontend:** `npm ci` em `pc-optimizer` do clone.
+4. `npx svelte-check --workspace ui --tsconfig ./tsconfig.json --fail-on-warnings` e
+   `npm run testes:ui` em `pc-optimizer` do clone.
+4b. `npm run fumaca:nova` em `pc-optimizer` do clone: monta a página de produção e clica em
+   todas as áreas e abas internas num Chrome sem janela, com nenhum comando do Windows
+   respondendo. Qualquer exceção não tratada ou área vazia reprova (foi assim que a aba BIOS
+   derrubava o programa na 3.1). Sem Chrome nem Edge instalado, diga que não rodou; não pule calado.
 5. `cargo test --lib` em `pc-optimizer\src-tauri` do clone, com
    `$env:CARGO_TARGET_DIR = "C:\Users\User\Desktop\Otimiza\pc-optimizer\src-tauri\target"`
    para reaproveitar a compilação. É a suíte inteira: um superconjunto dos

@@ -19,7 +19,7 @@ pub const MINUTOS_LIVRES: u64 = 10;
 pub const SEGUNDOS_LIVRES: u64 = MINUTOS_LIVRES * 60;
 
 /// O canal de feedbacks do servidor do Otimiza. Só informativo aqui: quem confere é o bot.
-pub const CANAL_ID: &str = "1543436859529629707";
+pub const CANAL_ID: &str = "1563224882731290786";
 
 /// Por quanto tempo um atestado bom vale sem rechecar.
 pub const VALIDADE_DIAS: i64 = 7;
@@ -167,6 +167,8 @@ impl Guardado {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "situacao")]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "SituacaoFeedback"))]
 pub enum Situacao {
     /// Sem licença (o portão de compra cuida) ou sem `api` publicada.
     NaoSeAplica,
@@ -285,10 +287,14 @@ pub enum Resposta {
     SemRede(String),
 }
 
+/// 404 só é "sem feedback" quando é o BOT que diz (`{"erro":"sem_feedback"}`). A hospedagem também responde 404 com
+/// a página dela quando o endereço da API não está no ar (visto em 10/11/2026: o cliente mandava o feedback, o bot
+/// reagia com ✅, e o Otimiza dizia "ainda não achamos a sua mensagem").
 pub fn interpretar(status: u16, corpo: String) -> Resposta {
     match status {
         200 => Resposta::Atestado(corpo.trim().to_string()),
-        404 => Resposta::NaoEncontrado,
+        404 if corpo.contains("sem_feedback") => Resposta::NaoEncontrado,
+        404 => Resposta::SemRede("o servidor de feedback está fora do ar".to_string()),
         outro => Resposta::SemRede(format!("o servidor respondeu {}", outro)),
     }
 }
@@ -315,6 +321,8 @@ async fn perguntar_ao_bot(api: &str, maquina: &str) -> Resposta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoFeedback"))]
 pub struct Estado {
     #[serde(flatten)]
     pub situacao: Situacao,
@@ -500,7 +508,12 @@ mod tests {
             interpretar(200, " abc.def \n".to_string()),
             Resposta::Atestado("abc.def".to_string())
         );
-        assert_eq!(interpretar(404, String::new()), Resposta::NaoEncontrado);
+        assert_eq!(interpretar(404, r#"{"erro":"sem_feedback"}"#.to_string()), Resposta::NaoEncontrado);
+        // A página de "site não encontrado" da hospedagem também é 404: não é "sem feedback".
+        assert!(matches!(
+            interpretar(404, "<!doctype html><title>Square Cloud | This site couldn't be found.</title>".to_string()),
+            Resposta::SemRede(_)
+        ));
         assert!(matches!(
             interpretar(500, String::new()),
             Resposta::SemRede(_)
@@ -584,7 +597,8 @@ mod tests {
 
     #[test]
     fn o_canal_e_o_que_o_dono_pediu() {
-        assert_eq!(CANAL_ID, "1543436859529629707");
+        // O #feedbacks de hoje (o 1543436859529629707 não existe mais, conferido no Discord em 10/11/2026).
+        assert_eq!(CANAL_ID, "1563224882731290786");
         assert_eq!(SEGUNDOS_LIVRES, 600);
     }
 }

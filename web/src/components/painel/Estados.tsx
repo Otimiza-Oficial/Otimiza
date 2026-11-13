@@ -27,7 +27,7 @@ export function EstadoVazio({
 }) {
   return (
     <div className={cn("grid place-items-center px-5 text-center", compacto ? "py-7" : "py-12")}>
-      <span className="grid size-9 place-items-center rounded-[9px] bg-[#f4f4f3]">
+      <span className="grid size-9 place-items-center rounded-[9px] bg-sunken">
         <Icone size={16} strokeWidth={2} aria-hidden="true" />
       </span>
       <p className="mt-3 text-[13px] font-semibold">{titulo}</p>
@@ -50,7 +50,7 @@ export function Checklist({ titulo, itens }: { titulo: string; itens: ItemDaList
   if (feitos === itens.length) return null;
 
   return (
-    <div className="rounded-[8px] bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)]">
+    <div className="rounded-[8px] bg-surface shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(30_60_120/0.04)]">
       <div className="flex items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
         <p className="text-[12.5px] font-semibold">{titulo}</p>
         <p className="tabular text-[11.5px] text-muted">
@@ -65,14 +65,14 @@ export function Checklist({ titulo, itens }: { titulo: string; itens: ItemDaList
               <span
                 className={cn(
                   "mt-px grid size-[18px] shrink-0 place-items-center rounded-full",
-                  item.feito ? "bg-ink text-white" : "text-subtle ring-1 ring-inset ring-[rgb(10_10_10/0.16)]",
+                  item.feito ? "bg-ink text-white" : "text-subtle ring-1 ring-inset ring-[rgb(30_60_120/0.16)]",
                 )}
                 aria-hidden="true"
               >
                 {item.feito ? <Check size={11} strokeWidth={3} /> : <Circle size={8} strokeWidth={0} className="opacity-0" />}
               </span>
               <span className="min-w-0">
-                <span className={cn("block text-[12.5px]", item.feito ? "text-muted line-through decoration-black/20" : "font-medium")}>
+                <span className={cn("block text-[12.5px]", item.feito ? "text-muted line-through decoration-current/30" : "font-medium")}>
                   {item.titulo}
                 </span>
                 {item.detalhe && !item.feito && <span className="mt-0.5 block text-[11.5px] text-subtle">{item.detalhe}</span>}
@@ -83,7 +83,7 @@ export function Checklist({ titulo, itens }: { titulo: string; itens: ItemDaList
           return (
             <li key={item.id}>
               {item.href && !item.feito ? (
-                <Link href={item.href} className="flex items-start gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-[#f9f9f8]">
+                <Link href={item.href} className="flex items-start gap-2.5 px-3.5 py-2.5 transition-colors hover:bg-card">
                   {conteudo}
                 </Link>
               ) : (

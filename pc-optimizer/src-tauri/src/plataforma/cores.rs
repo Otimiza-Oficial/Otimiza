@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 /// Na escala da tela: saturação 0 a 100 (50 é o normal), brilho e contraste -40 a 40, gama 70 a 150 (100 é o normal),
 /// matiz -30 a 30 graus.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ajuste {
     pub saturacao: i32,
     pub brilho: i32,
@@ -51,6 +52,8 @@ impl Ajuste {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CaminhoCores"))]
 pub enum Caminho {
     Amd,
     Nvidia,
@@ -59,6 +62,7 @@ pub enum Caminho {
 
 /// O que cada caminho sabe mudar. A tela desliga o controle que não vale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Suporta {
     pub saturacao: bool,
     pub brilho: bool,
@@ -178,6 +182,7 @@ impl Originais {
 /// O ajuste salvo de cada jogo (pela chave do catálogo) e se ele liga sozinho quando o jogo abre.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Perfis {
     pub por_jogo: BTreeMap<String, Ajuste>,
     pub so_com_jogo: bool,
@@ -221,6 +226,8 @@ fn caminho_dos_originais() -> PathBuf {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoCores"))]
 pub struct Estado {
     pub caminho: Caminho,
     pub suporta: Suporta,

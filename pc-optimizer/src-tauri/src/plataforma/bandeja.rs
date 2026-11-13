@@ -17,6 +17,51 @@ pub fn fechado_com_jogo() -> bool {
     FECHADO_COM_JOGO.load(Ordering::SeqCst)
 }
 
+/// **Pura.** O ícone da bandeja de cada humor do Oti (gerados do próprio desenho: `?icone&humor=…&tamanho=64`). Humor
+/// sem ícone próprio usa o atento.
+pub fn icone_do_humor(humor: &str) -> &'static [u8] {
+    match humor {
+        "jogando" => include_bytes!("../../icons/bandeja/jogando.png"),
+        "preocupado" => include_bytes!("../../icons/bandeja/preocupado.png"),
+        "dormindo" => include_bytes!("../../icons/bandeja/dormindo.png"),
+        "feliz" => include_bytes!("../../icons/bandeja/feliz.png"),
+        "pensando" => include_bytes!("../../icons/bandeja/pensando.png"),
+        _ => include_bytes!("../../icons/bandeja/atento.png"),
+    }
+}
+
+/// **Pura.** A dica ao passar o mouse no ícone.
+pub fn dica_do_humor(humor: &str) -> &'static str {
+    match humor {
+        "jogando" => "Otimiza — de olho no seu jogo",
+        "preocupado" => "Otimiza — tem algo para você ver",
+        "dormindo" => "Otimiza — PC parado",
+        "feliz" => "Otimiza — tudo certo",
+        "pensando" => "Otimiza — medindo",
+        _ => "Otimiza",
+    }
+}
+
+static HUMOR_ATUAL: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Troca o ícone da bandeja pelo humor (só quando muda).
+#[cfg(target_os = "windows")]
+pub fn mostrar_humor(app: &tauri::AppHandle, humor: &str) -> Result<(), String> {
+    if let Ok(mut atual) = HUMOR_ATUAL.lock() {
+        if *atual == humor {
+            return Ok(());
+        }
+        *atual = humor.to_string();
+    }
+    let Some(icone) = app.tray_by_id("otimiza") else {
+        return Ok(());
+    };
+    let imagem = tauri::image::Image::from_bytes(icone_do_humor(humor)).map_err(|e| e.to_string())?;
+    icone.set_icon(Some(imagem)).map_err(|e| e.to_string())?;
+    let _ = icone.set_tooltip(Some(dica_do_humor(humor)));
+    Ok(())
+}
+
 #[cfg(target_os = "windows")]
 fn mostrar(app: &tauri::AppHandle) {
     use tauri::Manager;
@@ -62,8 +107,14 @@ pub fn criar(app: &tauri::App) -> tauri::Result<()> {
                 mostrar(icone.app_handle());
             }
         });
-    if let Some(i) = app.default_window_icon() {
-        b = b.icon(i.clone());
+    // O Oti atento desde a abertura; a tela troca pelo humor (`bandeja_humor`).
+    match tauri::image::Image::from_bytes(icone_do_humor("atento")) {
+        Ok(i) => b = b.icon(i),
+        Err(_) => {
+            if let Some(i) = app.default_window_icon() {
+                b = b.icon(i.clone());
+            }
+        }
     }
     b.build(app)?;
     Ok(())
@@ -118,6 +169,14 @@ pub fn ja_aberto_traz_para_frente() -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn todo_humor_tem_icone_png_e_dica() {
+        for h in ["atento", "falando", "feliz", "pensando", "preocupado", "surpreso", "jogando", "dormindo"] {
+            assert_eq!(&icone_do_humor(h)[1..4], b"PNG", "{h}");
+            assert!(dica_do_humor(h).starts_with("Otimiza"));
+        }
+    }
+
     use super::*;
 
     #[test]

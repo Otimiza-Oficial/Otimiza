@@ -1,6 +1,9 @@
 // Dois programas fazendo a mesma coisa: antivírus varrendo um ao outro, sobreposições no mesmo jogo,
 // otimizadores desfazendo um ao outro. Aqui não se desinstala nada: mostra o conflito pelo nome, e a pessoa
 // escolhe.
+//
+// Não confundir com `conflitos.rs`: aqui são PROGRAMAS de terceiros nesta máquina (lidos do registro e dos
+// processos); lá são dois AJUSTES do próprio Otimiza que se atrapalham (lista fixa, sem ler nada).
 
 use super::{registry, shell};
 use serde::{Deserialize, Serialize};
@@ -384,6 +387,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "toca o Windows desta máquina"]
     fn le_os_programas_instalados_desta_maquina() {
         let programas = programas_instalados()
             .expect("os programas instalados desta máquina precisam ser legíveis");
@@ -397,6 +401,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "toca o Windows desta máquina"]
     fn analisa_conflitos_desta_maquina() {
         let r = analyze();
         println!("{:?} programas examinados", r.programs_scanned);

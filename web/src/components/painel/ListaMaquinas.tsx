@@ -71,7 +71,7 @@ export function ListaMaquinas() {
       </thead>
       <tbody className="divide-y divide-line">
         {(linhas ?? licencas.map((l) => ({ chave: l.chave, dados: null }))).map(({ chave, dados }) => (
-          <tr key={chave} className="transition-colors hover:bg-[#f9f9f8]">
+          <tr key={chave} className="transition-colors hover:bg-card">
             <td className="px-3.5 py-2.5">
               <p className="font-mono text-[12px] font-medium">{dados ? dados.maquina : "—"}</p>
               <p className="truncate text-[11px] text-subtle">

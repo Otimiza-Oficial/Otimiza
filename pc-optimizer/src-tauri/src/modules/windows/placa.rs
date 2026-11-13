@@ -13,6 +13,8 @@ fn largo(texto: &str) -> Vec<u16> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AmostraPlaca"))]
 pub struct Amostra {
     /// Só os motores 3D: somar cópia, vídeo e codec passaria de 100 e não representaria o que o jogo pede.
     pub gpu_pct: Option<f64>,

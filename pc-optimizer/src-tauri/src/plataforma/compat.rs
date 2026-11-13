@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::hardware::{Fabricante, Familia};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Recurso {
     /// A geração do próprio jogo (DLSS, FSR ou XeSS com geração de quadros).
     FrameBoostDoJogo,
@@ -50,6 +51,7 @@ impl Recurso {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum ModoDeTela {
     TelaCheia,
     SemBordas,
@@ -58,6 +60,7 @@ pub enum ModoDeTela {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Api {
     DirectX12,
     DirectX11,
@@ -68,6 +71,7 @@ pub enum Api {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "estado", content = "motivo")]
 pub enum Suporte {
     Suportado,
@@ -85,6 +89,8 @@ impl Suporte {
 
 /// Tudo o que as regras precisam saber. Montado por quem chama (hardware em cache, jogo detectado, anticheat).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ContextoCompat"))]
 pub struct Contexto {
     pub fabricante: Fabricante,
     pub familia: Familia,

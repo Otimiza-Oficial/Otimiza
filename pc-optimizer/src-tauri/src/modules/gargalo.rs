@@ -2,12 +2,15 @@
 // com a qualidade e a idade de cada número. Métrica ausente não é folgada: vai para `nao_verificado`. Hipótese não
 // é causa: flag de firmware ligada agora é causa; placa a 95% de dez segundos atrás é hipótese. Não recomenda
 // ajuste.
+//
+// Os limiares abaixo são os ÚNICOS: `windows::bottleneck` os reexporta em vez de manter cópia.
 
 use serde::{Deserialize, Serialize};
 
 use super::telemetry::{Quality, Telemetry};
 
-/// Os mesmos 92% de `windows::bottleneck`: contador nenhum fica cravado em 100, e 80% ainda tem folga.
+/// Contador nenhum fica cravado em 100, e 80% ainda tem folga (mandaria trocar peça à toa). Vale também para a
+/// medição de `windows::bottleneck`, que reexporta este.
 pub const SATURADO: f64 = 92.0;
 
 /// Para o contraste: um núcleo a 99% com a placa a 35% é outra história que tudo a 95%.
@@ -35,6 +38,7 @@ pub const PERDA_QUE_ATRAPALHA: f64 = 2.0;
 pub const IDADE_DE_CAUSA_MS: u64 = 5_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Classe {
     CpuTodosNucleos,
     CpuUmNucleo,
@@ -63,12 +67,14 @@ impl Classe {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Forca {
     Causa,
     Hipotese,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Achado {
     pub classe: Classe,
     pub forca: Forca,
@@ -77,12 +83,14 @@ pub struct Achado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct NaoVerificado {
     pub classe: String,
     pub falta: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Conclusao {
     SemEvidencia,
     SemCarga,
@@ -91,6 +99,7 @@ pub enum Conclusao {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Diagnostico {
     pub conclusao: Conclusao,
     pub achados: Vec<Achado>,

@@ -35,6 +35,7 @@ use gpu::Gpu;
 use ritmo::{Apresentacao, Contadores, Fase, Intervalo, Retangulo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Situacao {
     Parado,
     ProcurandoJanela,
@@ -45,6 +46,8 @@ pub enum Situacao {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoGeracao"))]
 pub struct Estado {
     pub situacao: Situacao,
     pub processo: String,
@@ -355,6 +358,8 @@ pub fn estado() -> Estado {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConfiguracaoGeracao"))]
 pub struct Configuracao {
     pub processo: String,
     pub multiplicador: u8,
@@ -374,6 +379,10 @@ pub struct Configuracao {
     /// Escala: a sobreposição cobre o monitor e amplia a janela do jogo (FSR 1). Com `multiplicador` 1, só escala.
     #[serde(default)]
     pub escala: Option<escala::Nivel>,
+    /// FPS alvo do automático (Plano de refino, FB3): a tela chega nele em vez dos Hz. Menos quadros gerados, menos
+    /// placa gasta com a geração e mais FPS real sobrando para o jogo. `None`: os Hz do monitor.
+    #[serde(default)]
+    pub alvo_fps: Option<u32>,
 }
 
 impl Configuracao {
@@ -451,11 +460,26 @@ pub fn ligar(config: Configuracao) -> Result<Estado, String> {
     Ok(estado())
 }
 
+/// Quanto o desligar espera a linha do gerador terminar (ela devolve a janela do jogo e o cursor). Plano de refino,
+/// E12: uma linha presa na placa de vídeo não pode travar o fechamento do Otimiza nem o botão "Desligar".
+pub const PRAZO_PARA_PARAR: Duration = Duration::from_secs(5);
+
 pub fn desligar() {
     let em = EM_EXECUCAO.lock().ok().and_then(|mut g| g.take());
     if let Some((parar, linha)) = em {
         parar.store(true, Ordering::SeqCst);
-        let _ = linha.join();
+        let inicio = Instant::now();
+        while !linha.is_finished() && inicio.elapsed() < PRAZO_PARA_PARAR {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        if linha.is_finished() {
+            let _ = linha.join();
+        } else {
+            crate::utils::Logger::warn(&format!(
+                "gerador: a linha não terminou em {} s; sigo sem esperar",
+                PRAZO_PARA_PARAR.as_secs()
+            ));
+        }
     }
     publicar(|e| {
         e.situacao = Situacao::Parado;
@@ -1968,7 +1992,7 @@ fn sessao(
                                 let m = ritmo::quadros_no_automatico(
                                     &mut acumulado_do_automatico,
                                     intervalo.estimado.unwrap_or(0.0),
-                                    if config.sem_limite { hz * 2 } else { hz },
+                                    ritmo::mira_do_automatico(hz, config.sem_limite, config.alvo_fps),
                                     multiplicador,
                                 );
                                 ultimo_do_automatico = m;
@@ -2133,6 +2157,8 @@ mod tests {
             escala: std::env::var("OTIMIZA_FG_ESCALA")
                 .ok()
                 .and_then(|v| serde_json::from_value(serde_json::Value::String(v)).ok()),
+            // OTIMIZA_FG_ALVO=120: o automático mira 120 em vez dos Hz.
+            alvo_fps: std::env::var("OTIMIZA_FG_ALVO").ok().and_then(|v| v.parse().ok()),
         })
         .unwrap();
         println!("inicio: {:?}", e);

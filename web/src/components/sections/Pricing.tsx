@@ -6,7 +6,7 @@ import { StarBorder } from "@/components/reactbits/StarBorder";
 import { ButtonLink } from "@/components/ui/Button";
 import { Section, SectionHeading } from "@/components/ui/Section";
 import { cn } from "@/lib/cn";
-import { formatarReais, links, PRECO_ADICIONAL_BRL, PRECO_BRL } from "@/lib/site";
+import { formatarReais, links, PRECO_ADICIONAL_BRL, PRECO_BRL, VERSAO_EXIBIDA } from "@/lib/site";
 
 /*
  * O Otimiza não tem plano mensal nem anual — é um produto, um preço. Por isso
@@ -21,7 +21,7 @@ const OPCOES = [
     resumo: "Instale e veja o que está travando o seu PC antes de decidir qualquer coisa.",
     preco: 0,
     nota: "Sem cadastro",
-    cta: { texto: "Baixar grátis", href: links.baixar, icone: "download" as const },
+    cta: { texto: `Baixar o Otimiza ${VERSAO_EXIBIDA}`, href: links.baixar, icone: "download" as const },
     inclui: [
       "Diagnóstico completo antes de pagar",
       "O principal problema do seu PC, medido na hora",
@@ -61,7 +61,7 @@ const OPCOES = [
 function Moldura({ destaque, children }: { destaque?: boolean; children: React.ReactNode }) {
   if (!destaque) return <>{children}</>;
   return (
-    <StarBorder className="w-full shadow-[0_30px_60px_-30px_rgb(0_0_0/0.6)]" cor="rgb(255 255 255 / 0.95)" espessura={1.5}>
+    <StarBorder className="w-full bg-[linear-gradient(135deg,#ffd9b0,#a9b8f2_45%,#7f97ea)]" cor="rgb(255 255 255 / 0.95)" espessura={1.5}>
       {children}
     </StarBorder>
   );
@@ -87,21 +87,21 @@ export function Pricing() {
                 className={cn(
                   "flex w-full flex-col rounded-[var(--radius-card)] p-6 sm:p-7",
                   o.destaque
-                    ? "grain relative overflow-hidden bg-[#0b0b0b] text-white shadow-[0_0_0_1px_#000,0_30px_60px_-30px_rgb(0_0_0/0.6)]"
-                    : "bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.08),0_1px_2px_rgb(0_0_0/0.04)]",
+                    ? "relative overflow-hidden bg-noite bg-[radial-gradient(120%_70%_at_80%_0%,#2a3a78,transparent_70%)] text-white shadow-[0_30px_60px_-30px_rgb(14_22_48/0.7)]"
+                    : "card",
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <p className={cn("eyebrow", o.destaque && "text-[#a3a3a3]")}>{o.rotulo}</p>
+                  <p className={cn("eyebrow", o.destaque && "text-[#b7c2e4]")}>{o.rotulo}</p>
                   {o.destaque && (
-                    <span className="rounded-md bg-white px-2 py-1 text-[10.5px] font-semibold text-fg">
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[10.5px] font-semibold text-[#13254d]">
                       O programa completo
                     </span>
                   )}
                 </div>
 
                 <h3 className="font-display mt-6 text-[24px] font-semibold tracking-[-0.04em]">{o.nome}</h3>
-                <p className={cn("mt-2 text-[14px] leading-[1.55]", o.destaque ? "text-[#b5b5b5]" : "text-muted")}>
+                <p className={cn("mt-2 text-[14px] leading-[1.55]", o.destaque ? "text-[#b7c2e4]" : "text-muted")}>
                   {o.resumo}
                 </p>
 
@@ -120,7 +120,7 @@ export function Pricing() {
                     )}
                   </span>
                 </p>
-                <p className={cn("mt-2 text-[12.5px]", o.destaque ? "text-[#a3a3a3]" : "text-subtle")}>{o.nota}</p>
+                <p className={cn("mt-2 text-[12.5px]", o.destaque ? "text-[#b7c2e4]" : "text-subtle")}>{o.nota}</p>
 
                 <ButtonLink
                   href={o.cta.href}
@@ -142,7 +142,7 @@ export function Pricing() {
                     {o.inclui.map((item) => (
                       <li key={item} className="flex items-start gap-2.5 text-[13.5px] leading-[1.45]">
                         <Check size={15} strokeWidth={2.5} className="mt-0.5 shrink-0" aria-hidden="true" />
-                        <span className={o.destaque ? "text-[#e5e5e5]" : "text-[#2b2b2b]"}>{item}</span>
+                        <span className={o.destaque ? "text-[#e9eefc]" : "text-fg"}>{item}</span>
                       </li>
                     ))}
                   </ul>
@@ -160,11 +160,11 @@ export function Pricing() {
             <BrandLogo brand="pix" size={15} decorative />
             Pix
           </span>
-          <span className="hidden text-line-strong sm:inline">·</span>
+          <span aria-hidden="true" className="hidden text-subtle sm:inline">·</span>
           <span>Cartão de crédito</span>
-          <span className="hidden text-line-strong sm:inline">·</span>
+          <span aria-hidden="true" className="hidden text-subtle sm:inline">·</span>
           <span>Boleto</span>
-          <span className="hidden text-line-strong sm:inline">·</span>
+          <span aria-hidden="true" className="hidden text-subtle sm:inline">·</span>
           <span className="flex items-center gap-2">
             Processado pelo
             <span className="flex items-center gap-1.5 font-medium text-fg">

@@ -13,6 +13,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ModoDaSobreposicao"))]
 pub enum Modo {
     #[default]
     Desligado,
@@ -21,6 +23,8 @@ pub enum Modo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CantoDaSobreposicao"))]
 pub enum Canto {
     #[default]
     SuperiorEsquerdo,
@@ -30,6 +34,8 @@ pub enum Canto {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConfigDaSobreposicao"))]
 #[serde(default)]
 pub struct Config {
     pub modo: Modo,
@@ -60,6 +66,7 @@ impl Default for Config {
 
 /// O que a janela mostra.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Leitura {
     pub modo: Modo,
     /// "FPS" (do jogo) ou "FPS na tela" (com o Frame Boost).
@@ -320,6 +327,8 @@ pub fn pode_mostrar(
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoDaSobreposicao"))]
 pub struct Estado {
     pub config: Config,
     pub ligado: bool,

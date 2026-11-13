@@ -11,6 +11,7 @@ use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Suspenso {
     pub pid: u32,
     pub nome: String,
@@ -20,6 +21,8 @@ pub struct Suspenso {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RegistroSuspend"))]
 pub struct Registro {
     pub suspensos: Vec<Suspenso>,
     /// `serde(default)`: registro de versão anterior não tem o campo e vale como "há muito tempo", sem travar a leitura.

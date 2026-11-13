@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Mira {
     pub estilo: String,
     pub cor: String,
@@ -109,6 +110,8 @@ pub fn no_endereco(m: &Mira) -> String {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoMira"))]
 pub struct Estado {
     pub ligada: bool,
     pub jogo: Option<String>,

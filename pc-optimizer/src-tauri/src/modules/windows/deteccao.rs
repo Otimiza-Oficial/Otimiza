@@ -264,6 +264,20 @@ pub fn procurar() -> Option<JogoDetectado> {
 
 /// Sem isto, vídeo em tela cheia abriria um `powershell.exe` a cada seis segundos, para sempre.
 const SEGUNDOS_DE_FOLGA: u64 = 60;
+/// O jogo CONFIRMADO também não é medido a cada volta (Plano de refino, E9). A consulta ao WMI da placa custa mais de um
+/// segundo de processador no `WmiPrvSE`, e três laços chamam a detecção: com o jogo aberto, ela rodava a cada 4 s a
+/// partida inteira, o tipo de pico que dá tranco. O fechamento não depende disto: a sessão vê o processo sumir.
+const SEGUNDOS_DE_FOLGA_DO_JOGO: u64 = 300;
+
+/// **Pura.** O uso de 3D medido antes ainda vale para este processo? "Não é jogo" vale 60 s; jogo confirmado, 5 min.
+pub fn reaproveita(mesmo_processo: bool, segundos_desde: u64, valor: Option<f64>) -> bool {
+    if !mesmo_processo {
+        return false;
+    }
+    let passou = valor.is_some_and(|v| v >= USO_3D_MINIMO);
+    let folga = if passou { SEGUNDOS_DE_FOLGA_DO_JOGO } else { SEGUNDOS_DE_FOLGA };
+    segundos_desde < folga
+}
 
 fn uso_3d_com_folga(pid: u32) -> Option<f64> {
     use std::sync::Mutex;
@@ -276,12 +290,7 @@ fn uso_3d_com_folga(pid: u32) -> Option<f64> {
     };
 
     if let Some((anterior, quando, valor)) = *guarda {
-        // Só reaproveita "não é jogo" do MESMO processo: quem passou continua medido, para o modo desligar quando fechar.
-        let ainda_vale = anterior == pid
-            && quando.elapsed().as_secs() < SEGUNDOS_DE_FOLGA
-            && valor.map(|v| v < USO_3D_MINIMO).unwrap_or(true);
-
-        if ainda_vale {
+        if reaproveita(anterior == pid, quando.elapsed().as_secs(), valor) {
             return valor;
         }
     }
@@ -318,6 +327,23 @@ fn dados_do_processo(pid: u32) -> Option<(String, Option<PathBuf>, u64)> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn jogo_confirmado_nao_e_medido_a_cada_volta() {
+        let jogo = Some(USO_3D_MINIMO + 20.0);
+        let parado = Some(0.0);
+        // Jogo confirmado: vale 5 minutos para o mesmo processo.
+        assert!(reaproveita(true, 4, jogo));
+        assert!(reaproveita(true, 299, jogo));
+        assert!(!reaproveita(true, 300, jogo));
+        // "Não é jogo" (ou sem contador): 60 s.
+        assert!(reaproveita(true, 59, parado));
+        assert!(!reaproveita(true, 60, parado));
+        assert!(reaproveita(true, 10, None));
+        // Outro processo: mede de novo.
+        assert!(!reaproveita(false, 1, jogo));
+    }
+
     use super::*;
 
     fn jogo_tipico() -> Observacao {

@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PoolAjustado {
     pub nome: String,
     pub aumento: u64,
@@ -16,9 +17,10 @@ pub struct PoolAjustado {
 }
 
 /// `tag = "status"` para a tela decidir por campo, nunca pela prosa; a guarda
-/// `a_tela_nao_decide_cor_comparando_texto_do_backend` (`commands.rs`) cobra isso.
+/// `a_tela_nao_decide_cor_comparando_texto_do_backend` (`commands/mod.rs`) cobra isso.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "status")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum PoolSizesIncrease {
     Vazio,
     Configurado {
@@ -31,6 +33,7 @@ pub enum PoolSizesIncrease {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct CitizenFxReport {
     pub existe: bool,
     pub caminho: Option<PathBuf>,

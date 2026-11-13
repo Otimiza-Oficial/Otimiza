@@ -133,14 +133,14 @@ export function Busca({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
   let grupoAtual = "";
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[rgb(10_10_10/0.35)] px-4 pt-[12vh]" onClick={aoFechar}>
+    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[rgb(14_22_48/0.45)] px-4 pt-[12vh]" onClick={aoFechar}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Pesquisar na Otimiza"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={aoTeclar}
-        className="w-full max-w-[520px] animate-[surgir_140ms_ease-out] overflow-hidden rounded-[10px] bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.1),0_24px_48px_-16px_rgb(10_10_10/0.35)]"
+        className="w-full max-w-[520px] animate-[surgir_140ms_ease-out] overflow-hidden rounded-[10px] bg-surface shadow-[0_0_0_1px_var(--color-line-strong),0_24px_48px_-16px_rgb(30_60_120/0.35)]"
       >
         <div className="flex items-center gap-2.5 border-b border-line px-3.5">
           <Search size={14} strokeWidth={2} className="shrink-0 text-subtle" aria-hidden="true" />
@@ -154,7 +154,7 @@ export function Busca({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
             placeholder="Pesquisar seções, ações e licenças"
             className="h-11 w-full bg-transparent text-[13px] outline-none placeholder:text-subtle"
           />
-          <kbd className="rounded-[4px] bg-[#f1f1f0] px-1.5 py-0.5 font-mono text-[10px] text-subtle">Esc</kbd>
+          <kbd className="rounded-[4px] bg-sunken px-1.5 py-0.5 font-mono text-[10px] text-subtle">Esc</kbd>
         </div>
 
         <ul className="max-h-[320px] overflow-y-auto p-1.5">
@@ -174,7 +174,7 @@ export function Busca({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => v
                   onClick={r.executar}
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-[6px] px-2.5 py-2 text-left text-[12.5px]",
-                    i === indice ? "bg-[#f1f1f0]" : "hover:bg-[#f6f6f5]",
+                    i === indice ? "bg-sunken" : "hover:bg-card",
                   )}
                 >
                   {r.icone}

@@ -16,9 +16,18 @@ const RENOVAR_COM_DIAS: i64 = 23;
 
 const TIPO: &str = "licenca-online";
 
-/// O endereço da API do bot, fixado na compilação (o mesmo do `NEXT_PUBLIC_OTIMIZA_API` do site).
+/// A API pública do Otimiza (a mesma do site). Plano de refino 1.2, etapa A: toda versão renova o atestado e obedece
+/// revogação, mesmo a compilada sem a variável da esteira.
+pub const API_PADRAO: &str = "https://otimiza-api.squareweb.app";
+
+/// O endereço da API do bot: o fixado na compilação (o mesmo do `NEXT_PUBLIC_OTIMIZA_API` do site) ou o padrão.
 pub fn endereco() -> Option<&'static str> {
-    endereco_de(option_env!("OTIMIZA_API_LICENCA"))
+    endereco_de(option_env!("OTIMIZA_API_LICENCA")).or(Some(API_PADRAO))
+}
+
+/// A compilação saiu da esteira (com a variável): a barra mostra "compilação local" quando não.
+pub fn compilacao_oficial() -> bool {
+    endereco_de(option_env!("OTIMIZA_API_LICENCA")).is_some()
 }
 
 /// **Pura**: só `https://` liga (a chave do cliente não viaja em texto aberto).
@@ -28,6 +37,7 @@ pub fn endereco_de(bruto: Option<&str>) -> Option<&str> {
 
 /// `{"tipo":"licenca-online","maquina","licenca","emitido","valido_ate"}`, assinado como a licença.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Atestado {
     pub tipo: String,
     pub maquina: String,
@@ -147,6 +157,8 @@ pub fn precisa_renovar(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RevogacaoDaLicenca"))]
 pub struct Revogacao {
     pub licenca: String,
     pub motivo: String,

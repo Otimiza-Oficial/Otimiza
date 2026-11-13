@@ -18,12 +18,14 @@ pub const SEGUNDOS_POR_FASE: u64 = 10;
 pub const RODADAS: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Escolha {
     SoDesempenho,
     TodosOsNucleos,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResultadoCpuSet {
     pub executavel: String,
     pub quando: u64,

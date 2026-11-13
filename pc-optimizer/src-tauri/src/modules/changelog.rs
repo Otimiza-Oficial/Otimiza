@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum PreviousValue {
     Absent,
     /// Reverter apaga o valor E a chave criada.
@@ -135,10 +136,22 @@ pub enum ChangeRecord {
         parametro: String,
         anterior: String,
     },
+    /// Propriedade avançada da placa de rede que o teste com prova manteve (`plataforma::placa_prova`, R2).
+    PropriedadeDaPlaca {
+        placa: String,
+        palavra: String,
+        anterior: String,
+    },
     /// As placas de rede em que o recurso estava ligado: o desfazer liga de novo só nelas.
     RedeAdaptador {
         recurso: String,
         placas: Vec<String>,
+    },
+    /// O modo de vídeo INTEIRO lido antes da troca de taxa (`plataforma::hz`): o desfazer devolve resolução, cor,
+    /// taxa, orientação e posição como estavam, não "a taxa de antes na resolução de agora" (`RefreshRate`).
+    ModoDeTela {
+        dispositivo: String,
+        anterior: crate::plataforma::hz::ModoDeVideo,
     },
 }
 
@@ -277,6 +290,19 @@ impl ChangeRecord {
             ChangeRecord::RedeAdaptador { recurso, placas } => {
                 format!("rede · {} desligado em {}", recurso, placas.join(", "))
             }
+            ChangeRecord::PropriedadeDaPlaca { placa, palavra, anterior } => {
+                format!("placa de rede {} · {} (antes: {})", placa, palavra, anterior)
+            }
+            ChangeRecord::ModoDeTela {
+                dispositivo,
+                anterior,
+            } => {
+                let curto = dispositivo.rsplit('\\').next().unwrap_or(dispositivo);
+                format!(
+                    "monitor · {} (antes: {}x{} a {} Hz)",
+                    curto, anterior.largura, anterior.altura, anterior.hz
+                )
+            }
             ChangeRecord::LimiteNvidia {
                 executavel,
                 fps,
@@ -335,6 +361,7 @@ pub struct AppliedOptimization {
 
 /// Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "estado")]
 pub enum LeituraDoHistorico {
     #[default]

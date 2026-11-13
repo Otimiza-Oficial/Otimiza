@@ -6,6 +6,7 @@ use super::shell;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum EstadoDoRbar {
     Ligado,
     DesligadoESuportado,
@@ -14,6 +15,7 @@ pub enum EstadoDoRbar {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct RelatorioDoRbar {
     pub estado: EstadoDoRbar,
     pub modelo: String,

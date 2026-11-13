@@ -24,6 +24,8 @@ pub const LIMITE_DE_EVENTOS: usize = 2000;
 const CORRIGIDOS_DEMAIS: usize = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EventoEventoshw"))]
 pub struct Evento {
     pub quando: String,
     pub provedor: String,

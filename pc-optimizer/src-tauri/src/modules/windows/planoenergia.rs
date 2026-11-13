@@ -58,6 +58,8 @@ const SUB_SUSPENSAO: &str = "238c9fa8-0aad-41ed-83f4-97be242c8f20";
 const STANDBYIDLE: &str = "29f6c1db-86da-48c5-9fdb-f2b67b1f44da";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FabricanteDaCpu"))]
 pub enum FabricanteDaCpu {
     Intel,
     Amd,
@@ -65,6 +67,8 @@ pub enum FabricanteDaCpu {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "MaquinaDeEnergia"))]
 pub struct Maquina {
     pub notebook: bool,
     pub tem_bateria: bool,
@@ -140,6 +144,8 @@ pub fn detectar() -> Maquina {
 
 /// Tomada e bateria usam lados opostos do plano: sem isto, "mínimo = 5%" não quer dizer nada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AlimentacaoDeEnergia"))]
 pub enum Alimentacao {
     Tomada,
     Bateria,
@@ -205,6 +211,8 @@ fn chassi_e_bateria() -> (Option<u32>, bool) {
 
 /// Por padrão só `Segura` e `Recomendada`. `Avancada` existe para o relatório dizer que não foi aplicada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ClasseDoAjuste"))]
 pub enum Classe {
     Segura,
     Recomendada,
@@ -212,6 +220,7 @@ pub enum Classe {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum StatusDoAjuste {
     Aplicado,
     JaEstavaBom,
@@ -224,6 +233,7 @@ pub enum StatusDoAjuste {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResultadoDoAjuste {
     pub nome: String,
     pub subgrupo: String,
@@ -245,6 +255,7 @@ pub struct ResultadoDoAjuste {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum DesfechoDoPlano {
     Sucesso,
     EmParte,
@@ -252,6 +263,8 @@ pub enum DesfechoDoPlano {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RelatorioDoPlano"))]
 pub struct RelatorioDoPlano {
     pub maquina: Maquina,
     pub simulacao: bool,
@@ -269,6 +282,7 @@ pub struct RelatorioDoPlano {
 
 /// `None` é NÃO MEXER, diferente de "mexer para o padrão": protege a autonomia do notebook na bateria.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Alvo {
     pub ac: Option<u32>,
     pub dc: Option<u32>,
@@ -616,6 +630,8 @@ pub fn onde_esta_o_plano() -> EstadoDoPlano {
 
 /// LEITURA PURA.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VistoriaDoPlano"))]
 #[serde(tag = "estado")]
 pub enum Vistoria {
     NaoExiste,
@@ -711,6 +727,8 @@ pub fn suportado(subgrupo: &str, ajuste: &str) -> bool {
 
 /// Três estados: com o processador autônomo o "estado mínimo" é quase decorativo e governa o EPP. Só LÊ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "GovernoDoProcessador"))]
 pub enum GovernoDoProcessador {
     OProcessador,
     OWindows,
@@ -1171,6 +1189,8 @@ pub fn desfazer(guid_anterior: &str) -> Result<(), String> {
 
 /// Nada escreve: responde "por que não funcionou no seu PC?" com causas conferidas.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DiagnosticoDeEnergia"))]
 pub struct Diagnostico {
     pub maquina: Maquina,
     /// O PROCESSO elevado, não o usuário no grupo Administradores.

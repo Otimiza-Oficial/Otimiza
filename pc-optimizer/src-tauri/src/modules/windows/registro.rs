@@ -2,10 +2,14 @@
 // reinício e COMO SE DESFAZ (a auditoria da 2.9 achou ajustes sem efeito espalhados que ninguém via juntos). Não
 // executa nada. `todo_modulo_que_escreve_esta_no_registro` reprova o build quando um módulo novo escreve sem
 // registro.
+//
+// Não confundir com `registry.rs`, que é o acesso ao registro do Windows (ler e escrever valores). O nome deste
+// ("registro" no sentido de inventário) é o que a trava e a revisão citam; por isso não foi renomeado.
 
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Risco {
     /// Não muda o que a pessoa vê, e volta inteiro.
     Baixo,
@@ -16,6 +20,7 @@ pub enum Risco {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Escopo {
     /// Configuração do Windows.
     Windows,
@@ -28,6 +33,7 @@ pub enum Escopo {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Alteracao {
     pub id: &'static str,
     pub titulo: &'static str,
@@ -281,6 +287,39 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         desfazer: "Não precisa: só acrescenta um ponto de volta.",
     },
     Alteracao {
+        id: "prioridade_na_rede",
+        titulo: "Tráfego do jogo marcado como prioridade (experimento)",
+        modulo: "prioridade_jogo",
+        o_que_muda: "Só ligado pela pessoa, como administrador, e só com o jogo aberto: uma política QoS do Windows marca os pacotes do executável do jogo com DSCP 46. Roteador com QoS que respeita a marca passa o jogo na frente; o resto ignora. Nada além da marca muda.",
+        risco: Risco::Baixo,
+        escopo: Escopo::Jogo,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "A política some quando o jogo fecha, ao desligar o interruptor, na abertura seguinte do Otimiza e ao reiniciar o Windows (fica só na memória dele, ActiveStore).",
+    },
+    Alteracao {
+        id: "placa_prova",
+        titulo: "Placa de rede com prova",
+        modulo: "placa_prova",
+        o_que_muda: "Só ligado pela pessoa, como administrador e com o jogo fechado: na placa física por onde sai a internet, testa desligar a moderação de interrupção, a Ethernet de economia (EEE) e o controle de fluxo, um por vez, medindo 20 s de ping antes e depois. Fica só o que baixou a variação do ping sem aumentar perda nem ping; o resto volta na hora. A placa reinicia a cada troca (a internet cai alguns segundos).",
+        risco: Risco::Medio,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "O que ficou está no histórico, um por propriedade: o desfazer devolve o valor lido antes do teste. O que não melhorou já volta sozinho durante o teste, e a placa que não volta a responder é desfeita na hora.",
+    },
+    Alteracao {
+        id: "banda_de_fundo",
+        titulo: "Banda dos programas de fundo durante o jogo",
+        modulo: "banda",
+        o_que_muda: "Só ligado pela pessoa, como administrador, e só com o jogo aberto: OneDrive, Google Drive, Dropbox, torrents e lançadores (Epic, Battle.net, EA, Ubisoft) passam a ENVIAR no máximo 2 Mb/s (política QoS \"Otimiza-\" do Windows, que some ao reiniciar), e o Windows Update baixa em segundo plano a até 256 KB/s (política DOMaxBackgroundDownloadBandwidth). O download de outros programas não é limitado. Voz, transmissão, navegador, Steam, anticheat e o jogo não são tocados. Com VPN em túnel, as políticas de programa não são criadas (não pegariam nada).",
+        risco: Risco::Baixo,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "Volta sozinho quando o jogo fecha, ao desligar, no \"Restaurar meu PC\" e na abertura seguinte do Otimiza: remove só as políticas com o prefixo \"Otimiza-\" e devolve o limite do Update ao valor lido antes (apaga se não havia). Reiniciar o Windows também remove as políticas.",
+    },
+    Alteracao {
         id: "teste_da_travada",
         titulo: "Teste da causa da travada",
         modulo: "investigacao",
@@ -300,6 +339,7 @@ pub static NAO_ALTERAM_O_WINDOWS: &[(&str, &str)] = &[
     ("afinidade", "põe o processo do jogo em alguns núcleos; a alteração está registrada como auto_cpu_set, que é o único caminho que a usa com medição"),
     ("restaurar", "só DESFAZ: chama o desfazer de cada peça registrada (histórico, motor de energia, núcleos, modos automáticos) e grava o resultado para o desinstalador em dados do Otimiza"),
     ("suspend", "só RETOMA programa que versão antiga suspendeu; o produto não congela mais nada"),
+    ("estabilidade", "só DESFAZ: lê as quedas no registro de eventos e chama o desfazer do histórico para o ajuste que deixou o PC instável; o arquivo é a memória do próprio Otimiza"),
     ("governador", "muda prioridade em memória e volta quando o jogo fecha (registrado como modo jogo)"),
     ("jogos", "cache da biblioteca de jogos, em dados do Otimiza"),
     ("pressao", "janela de pressão de memória, em dados do Otimiza"),

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct AjusteCaro {
     pub chave: String,
     pub valor: String,
@@ -19,6 +20,7 @@ pub struct AjusteCaro {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ConfigJogoFinding {
     pub id: String,
     pub title: String,
@@ -29,6 +31,7 @@ pub struct ConfigJogoFinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ConfigJogoReport {
     pub arquivo: Option<PathBuf>,
     pub jogo: String,
@@ -238,6 +241,8 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 
 /// Ordem pelo custo real, não pelo menu: o MSAA primeiro em todos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PerfilConfigjogo"))]
 pub enum Perfil {
     /// Preço visual zero, e costuma ser o maior ganho.
     SemTeto,

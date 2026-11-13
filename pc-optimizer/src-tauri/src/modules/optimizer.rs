@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CategoriaDoAjuste"))]
 pub enum Category {
     System,
     Gaming,
@@ -13,6 +15,8 @@ pub enum Category {
 
 /// Conservador de propósito: prometer menos e entregar o medido.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "GanhoEsperado"))]
 pub enum ExpectedGain {
     Measurable,
     Situational,
@@ -26,6 +30,7 @@ pub enum ExpectedGain {
 /// catálogo não tinha como dizer que um ajuste pode piorar. O botão grande só aplica o que não pode custar
 /// quadro (ver `catalog::entra_no_lote`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "risco")]
 pub enum RiscoDeFps {
     Nenhum,
@@ -39,6 +44,7 @@ pub enum RiscoDeFps {
 
 /// Quatro coisas diferentes: tratá-las como uma só entregou "otimização" que derrubou FPS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum OQuePodeCustar {
     FpsMedio,
     /// Pode cair com a média intacta, e é o que a pessoa SENTE.
@@ -77,6 +83,7 @@ impl RiscoDeFps {
 /// `a_tela_nao_decide_cor_comparando_texto_do_backend` impede, e um texto fixo rotularia errado o ajuste que
 /// ataca o engasgo.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "risco")]
 pub enum RiscoNaTela {
     Nenhum,
@@ -102,6 +109,8 @@ impl From<&RiscoDeFps> for RiscoNaTela {
 
 /// `AlreadyOptimal`: quando já está assim, o produto diz isso em vez de fingir que otimizou.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoDoAjuste"))]
 pub enum OptimizationState {
     Applied,
     AlreadyOptimal,
@@ -113,6 +122,7 @@ pub enum OptimizationState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct OptimizationInfo {
     pub id: String,
     pub name: String,
@@ -135,6 +145,10 @@ pub struct OptimizationInfo {
     pub expert: bool,
     #[serde(default)]
     pub condicao: Option<String>,
+    /// O que pode dar errado e onde (`windows::riscos`, Plano de refino E4). Só nos que mexem em FPS ou estabilidade:
+    /// o de gosto ("o Windows fica sem animações") não precisa de aviso.
+    #[serde(default)]
+    pub cuidado: Option<String>,
     pub state: OptimizationState,
     pub detail: Option<String>,
 }
@@ -142,6 +156,7 @@ pub struct OptimizationInfo {
 /// O desfecho de UMA ação, para reproduzir a falha à distância: antes, pedido, depois, saída do comando e duração.
 /// `Option` onde o dado pode não existir: `0` de código de saída afirmaria que um comando deu certo.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ActionResult {
     pub name: String,
     pub status: ActionStatus,
@@ -158,6 +173,7 @@ pub struct ActionResult {
 
 /// Vocabulário do protocolo de compatibilidade, o mesmo das notas de laboratório, para os relatórios se agruparem.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum ActionStatus {
     /// Escrito E CONFERIDO relendo do Windows.
     #[default]
@@ -193,6 +209,7 @@ impl ActionStatus {
 
 /// `Default` é o estado neutro dos campos novos em cada ponto de construção, não um resultado de verdade.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct OptimizationOutcome {
     pub id: String,
     pub name: String,
@@ -238,6 +255,7 @@ impl OptimizationOutcome {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BatchStep {
     pub index: usize,
     pub total: usize,

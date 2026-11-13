@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Flags {
     /// Barra superior nova, com Início, Jogos, Boost, Lab e Ajustes.
     pub novo_shell: bool,
@@ -22,6 +23,8 @@ pub struct Flags {
     /// Vibração digital da NVIDIA pelo NVAPI (números fora do cabeçalho público). Provada numa GTX 1650 (driver 617.14): ligada,
     /// e se o driver não responder à leitura o Otimiza cai sozinho para a rampa de gama.
     pub vibracao_nvidia: bool,
+    /// R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão.
+    pub prioridade_na_rede: bool,
 }
 
 impl Default for Flags {
@@ -36,6 +39,7 @@ impl Default for Flags {
             overlay: true,
             smooth_motion_drs: false,
             vibracao_nvidia: true,
+            prioridade_na_rede: false,
         }
     }
 }

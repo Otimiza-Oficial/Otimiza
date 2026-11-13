@@ -94,6 +94,8 @@ pub fn sem_linha(conteudo: &str) -> String {
 /// O que o Otimiza lembra: se a pessoa quer o contador dele no lugar do do FiveM e o valor de antes, para devolver.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoContadorFivem"))]
 pub struct Estado {
     pub ligado: bool,
     /// O `cl_drawFPS` que estava no arquivo antes da primeira troca (`None` = a linha não existia).

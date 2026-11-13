@@ -157,9 +157,14 @@ jobs:
         working-directory: pc-optimizer
         run: npm ci
 
-      - name: Conferir tipos do frontend
+      # A interface (`ui/`) confere contra `ui/src/lib/tipos.ts`, gerado do Rust: campo trocado no Rust quebra aqui.
+      - name: Conferir tipos da interface nova
         working-directory: pc-optimizer
-        run: npx tsc --noEmit
+        run: npx svelte-check --workspace ui --tsconfig ./tsconfig.json --fail-on-warnings
+
+      - name: Testes da interface
+        working-directory: pc-optimizer
+        run: npm run testes:ui
 
       # Os testes rodam antes de empacotar: versão que não passa não vira
       # instalador. E rodam SEPARADOS POR ÁREA de propósito — o log detalhado só
@@ -175,15 +180,15 @@ jobs:
 
       - name: Testes — licença e comandos
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- commands:: modules::licenca:: modules::maquina:: plataforma::"
+        run: "cargo test --lib -- commands:: contrato:: dados_reais:: modules::licenca:: modules::maquina:: plataforma::"
 
       - name: Testes — medição
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::benchmark:: modules::jitter::"
+        run: "cargo test --lib -- modules::benchmark:: modules::jitter:: modules::windows::dpc::"
 
       - name: Testes — catálogo e serviços
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::catalog:: modules::windows::power:: modules::windows::planoenergia:: modules::windows::cabecalho:: modules::windows::labcompat:: modules::windows::services:: modules::windows::startup:: modules::windows::essenciais::"
+        run: "cargo test --lib -- modules::windows::catalog:: modules::windows::power:: modules::windows::planoenergia:: modules::windows::cabecalho:: modules::windows::labcompat:: modules::windows::services:: modules::windows::startup:: modules::windows::essenciais:: modules::windows::riscos:: modules::windows::banda_por_programa::"
 
       - name: Testes — registro
         working-directory: pc-optimizer/src-tauri
@@ -210,7 +215,7 @@ jobs:
       # quebra aqui é quebra na primeira impressão do produto.
       - name: Testes — veredito da máquina
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao:: modules::windows::display:: modules::windows::placa:: modules::windows::gpupref:: modules::windows::configjogo:: modules::windows::configmotor:: modules::windows::crashes:: modules::windows::vrr:: modules::windows::rbar:: modules::windows::nvdriver:: modules::windows::amddriver:: modules::windows::inteldriver::"
+        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao:: modules::windows::display:: modules::windows::placa:: modules::windows::gpupref:: modules::windows::configjogo:: modules::windows::configmotor:: modules::windows::crashes:: modules::windows::vrr:: modules::windows::rbar:: modules::windows::nvdriver:: modules::windows::amddriver:: modules::windows::inteldriver:: modules::windows::estabilidade::"
 
       - name: Testes — conflitos, tarefas e programas de fábrica
         working-directory: pc-optimizer/src-tauri
@@ -277,6 +282,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # O atestado online da licença (modules/licenca_online.rs). Vazia (a variável do repositório não criada), o
+          # programa não fala com servidor nenhum; só `https://` liga. Não é segredo: é o endereço público da API do bot.
+          OTIMIZA_API_LICENCA: ${{ vars.OTIMIZA_API_LICENCA }}
+          # ID público da aplicação do Discord (o mesmo CLIENT_ID do bot): liga o "Jogando … com o Otimiza".
+          OTIMIZA_DISCORD_APP_ID: ${{ vars.OTIMIZA_DISCORD_APP_ID }}
         with:
           projectPath: pc-optimizer
           tagName: ${{ github.ref_name }}

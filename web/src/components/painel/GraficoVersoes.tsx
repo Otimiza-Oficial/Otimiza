@@ -87,17 +87,17 @@ export function GraficoVersoes({ periodoEmMeses = 12 }: { periodoEmMeses?: numbe
             x2={L - MARGEM.dir}
             y1={y(maximo * f)}
             y2={y(maximo * f)}
-            stroke="rgb(10 10 10 / 0.07)"
+            stroke="var(--color-line)"
             strokeWidth="1"
           />
         ))}
 
-        <path d={area} fill="rgb(10 10 10 / 0.05)" />
-        <path d={linha} fill="none" stroke="#0a0a0a" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={area} fill="rgb(91 134 229 / 0.14)" />
+        <path d={linha} fill="none" stroke="var(--color-ceu-500)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
 
         {pontos.map((p, i) => (
           <g key={p.chave}>
-            {p.total > 0 && <circle cx={x(i)} cy={y(p.total)} r={ativo === i ? 3.5 : 2.5} fill="#0a0a0a" />}
+            {p.total > 0 && <circle cx={x(i)} cy={y(p.total)} r={ativo === i ? 3.5 : 2.5} fill="var(--color-ceu-500)" />}
             {/* faixa invisível: é ela que captura o ponteiro */}
             <rect
               x={x(i) - passo / 2}
@@ -107,7 +107,7 @@ export function GraficoVersoes({ periodoEmMeses = 12 }: { periodoEmMeses?: numbe
               fill="transparent"
               onMouseEnter={() => setAtivo(i)}
             />
-            <text x={x(i)} y={A - 6} textAnchor="middle" className="fill-[#8a8a8a] text-[9px]">
+            <text x={x(i)} y={A - 6} textAnchor="middle" className="fill-subtle text-[9px]">
               {p.rotulo}
             </text>
           </g>
@@ -119,7 +119,7 @@ export function GraficoVersoes({ periodoEmMeses = 12 }: { periodoEmMeses?: numbe
             x2={x(ativo)}
             y1={MARGEM.topo}
             y2={A - MARGEM.baixo}
-            stroke="rgb(10 10 10 / 0.18)"
+            stroke="var(--color-line-strong)"
             strokeWidth="1"
             strokeDasharray="3 3"
           />
@@ -129,7 +129,7 @@ export function GraficoVersoes({ periodoEmMeses = 12 }: { periodoEmMeses?: numbe
       {ativo !== null && (
         <div
           className={cn(
-            "pointer-events-none absolute top-1 rounded-[6px] bg-[#0a0a0a] px-2 py-1.5 text-[11px] text-white",
+            "pointer-events-none absolute top-1 rounded-[6px] bg-noite px-2 py-1.5 text-[11px] text-white",
             ativo > pontos.length / 2 ? "-translate-x-full" : "",
           )}
           style={{ left: `${(x(ativo) / L) * 100}%` }}

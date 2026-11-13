@@ -10,6 +10,8 @@ use serde::Serialize;
 use crate::modules::windows::presentmon::{Apresentacao, GargaloProvavel};
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PlanoJogoLiso"))]
 pub struct Plano {
     /// FPS que o jogo entrega (mediana medida agora).
     pub fps_agora: f64,
@@ -29,6 +31,8 @@ pub struct Plano {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TelaJogoLiso"))]
 pub struct Tela {
     pub apresentacao: Apresentacao,
     /// O texto do PresentMon, ex. "Composed: Copy with GPU GDI".
@@ -200,6 +204,51 @@ pub fn teto_gravado(executavel: &str) -> Option<u32> {
             ChangeRecord::LimiteNvidia { fps, .. } => Some(*fps),
             _ => None,
         })
+}
+
+/// O teto gravado depois da partida (cartão da partida, "Deixar liso"): o que vai para a tela.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct LisoGravado {
+    pub teto: Option<u32>,
+    pub motivo: String,
+}
+
+/// A taxa do monitor principal, da ficha de hardware (o jogo já fechou: não há processo para perguntar).
+pub fn hz_principal() -> u32 {
+    let p = super::hardware::perfil();
+    p.telas
+        .iter()
+        .find(|t| t.principal)
+        .or(p.telas.first())
+        .map(|t| t.hz_atual)
+        .unwrap_or(0)
+}
+
+/// Plano de Partida de respeito, fase 3: o teto calculado pelo FPS e pelos trancos da partida que acabou, gravado no
+/// perfil do jogo no driver para a próxima abertura. Partida já lisa não ganha teto (`planejar` decide).
+#[cfg(target_os = "windows")]
+pub fn gravar_depois_da_partida(
+    executavel: &str,
+    caminho: Option<&str>,
+    fps: f64,
+    trancos_por_minuto: f64,
+    log: &mut crate::modules::changelog::ChangeLog,
+) -> Result<LisoGravado, String> {
+    crate::modules::licenca::exigir()?;
+    let plano = planejar(fps, hz_principal(), trancos_por_minuto);
+    let Some(teto) = plano.teto else {
+        return Ok(LisoGravado { teto: None, motivo: plano.motivo });
+    };
+    crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(executavel, caminho, teto, log)?;
+    crate::utils::Logger::info(&format!(
+        "jogo liso depois da partida: teto de {} fps no perfil de {} ({:.0} fps, {:.1} trancos/min)",
+        teto, executavel, fps, trancos_por_minuto
+    ));
+    Ok(LisoGravado {
+        teto: Some(teto),
+        motivo: format!("{} Vale na próxima vez que o jogo abrir.", plano.motivo),
+    })
 }
 
 /// Aplica o teto do plano pelo driver (guardando o anterior, no `ChangeLog`), para a PRÓXIMA abertura do jogo. O

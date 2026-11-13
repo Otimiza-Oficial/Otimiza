@@ -39,6 +39,7 @@ const MAQUINAS_DA_CHAVE_ANTERIOR: &[&str] = &[
 
 /// O que a assinatura garante é que ninguém mudou nada, não sigilo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Dados {
     /// É o que faz a chave não valer em outro PC.
     pub maquina: String,
@@ -243,6 +244,7 @@ fn decodificar_publica(texto: &str) -> Result<VerifyingKey, Recusa> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Guardada {
     pub chave: String,
     /// O último atestado online (`licenca_online`). Ausente nos arquivos de antes dele: `default`.
@@ -315,6 +317,8 @@ pub enum Leitura {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoDaLicenca"))]
 pub struct Estado {
     pub ativa: bool,
     pub maquina: String,

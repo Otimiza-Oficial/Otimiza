@@ -11,6 +11,7 @@ use std::sync::OnceLock;
 
 /// TRÊS casos: sem placa NVIDIA (permanente) e DLL que não responde (pede driver novo) têm conselhos opostos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Nvapi {
     Disponivel,
     SemPlacaNvidia,
@@ -201,6 +202,7 @@ pub fn id_no_historico(opcao: &str) -> String {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct AjusteNaTela {
     pub id: &'static str,
     pub titulo: &'static str,
@@ -212,6 +214,7 @@ pub struct AjusteNaTela {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct LimiteNaTela {
     pub executavel: String,
     pub fps: u32,
@@ -219,6 +222,7 @@ pub struct LimiteNaTela {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PainelDoDriver {
     pub estado: Nvapi,
     pub nota: String,

@@ -26,6 +26,7 @@ pub struct BaseMedida {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BaseTravada {
     pub fps: u32,
     /// Quadros por real que fecham o monitor (60 em 180 Hz → 3).

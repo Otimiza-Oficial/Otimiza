@@ -2,6 +2,10 @@
 // medidas de cada lado, compara FPS médio e 1% low pela regra de `modules::repeticoes`. Piorou com os intervalos
 // separados E pelo menos 5%: desfaz sozinho e avisa com os números. O teste estatístico impede que uma noite
 // pesada vire piora; o piso de 5% impede desfazer por uma diferença real, porém irrelevante.
+//
+// Liso também é regra (Plano de refino, E1): FPS igual com o jogo cheio de tranco é piora. Os trancos por minuto e o
+// P99 do tempo de quadro entram na mesma comparação, como "mais é pior". E a piora FORTE não espera três partidas: uma
+// partida bem fora de tudo o que as de antes mostraram já desfaz.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -13,8 +17,19 @@ pub const MINIMO_POR_LADO: usize = 3;
 /// Os mais próximos do ajuste.
 pub const MAXIMO_POR_LADO: usize = 6;
 pub const PIORA_MINIMA_PCT: f64 = 5.0;
+/// Trancos: a contagem varia muito de uma partida para outra, e de 0,2 para 0,4 por minuto ninguém sente.
+pub const PIORA_MINIMA_TRANCOS_PCT: f64 = 25.0;
+pub const PIORA_MINIMA_TRANCOS_POR_MIN: f64 = 2.0;
+/// P99 do tempo de quadro: 10% a mais na cauda é o tranco que se sente sem o FPS médio mudar.
+pub const PIORA_MINIMA_P99_PCT: f64 = 10.0;
+/// Piora forte numa partida só: FPS abaixo de 75% do PIOR "antes", ou trancos acima do dobro do PIOR "antes" e com
+/// pelo menos 10 por minuto a mais. Fora da faixa de tudo o que o jogo já fez nesta máquina, não é noite pesada.
+pub const PIORA_FORTE_FPS_FRACAO: f64 = 0.75;
+pub const PIORA_FORTE_TRANCOS_VEZES: f64 = 2.0;
+pub const PIORA_FORTE_TRANCOS_A_MAIS: f64 = 10.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Vigiado {
     pub id: String,
     pub nome: String,
@@ -24,6 +39,7 @@ pub struct Vigiado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Veredito {
     Aguardando {
         antes: usize,
@@ -45,6 +61,7 @@ pub fn tinha_antes(v: &Vigiado, todas: &[MedicaoAutomatica]) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Lados {
     pub media_base: f64,
     pub media_candidato: f64,
@@ -52,10 +69,18 @@ pub struct Lados {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AvaliacaoPortao"))]
 pub struct Avaliacao {
     pub veredito: Veredito,
     pub fps: Option<Lados>,
     pub low_1pct: Option<Lados>,
+    /// Trancos por minuto (só medições confiáveis). Aqui mais é pior.
+    pub trancos: Option<Lados>,
+    /// P99 do tempo de quadro em ms (medições que o têm). Mais é pior.
+    pub p99_ms: Option<Lados>,
+    /// Desfeito por uma partida só, bem fora da faixa de antes, sem esperar as três.
+    pub piora_forte: bool,
 }
 
 fn lados(id: &str, antes: &[f64], depois: &[f64]) -> Option<Lados> {
@@ -87,16 +112,41 @@ pub fn avaliar(v: &Vigiado, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
     decidir(&antes, &depois)
 }
 
+/// **Pura.** Uma partida de depois bem fora de tudo o que as de antes mostraram: FPS abaixo de 75% do pior FPS de
+/// antes, ou trancos acima do dobro do pior de antes e com 10 por minuto a mais. Só medições confiáveis contam.
+pub fn piora_forte(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> bool {
+    let a: Vec<&&MedicaoAutomatica> = antes.iter().filter(|m| m.confiavel).collect();
+    if a.len() < MINIMO_POR_LADO {
+        return false;
+    }
+    let pior_fps = a.iter().map(|m| m.fps).fold(f64::INFINITY, f64::min);
+    let pior_trancos = a.iter().map(|m| m.engasgos_por_minuto).fold(0.0, f64::max);
+    depois.iter().filter(|m| m.confiavel).any(|m| {
+        let fps_caiu = pior_fps.is_finite() && m.fps < pior_fps * PIORA_FORTE_FPS_FRACAO;
+        let trancos_dispararam = m.engasgos_por_minuto > pior_trancos * PIORA_FORTE_TRANCOS_VEZES
+            && m.engasgos_por_minuto >= pior_trancos + PIORA_FORTE_TRANCOS_A_MAIS;
+        fps_caiu || trancos_dispararam
+    })
+}
+
 /// Serve ao ajuste de jogo (antes/depois de uma data) e ao governador (partidas sem/com ele).
 fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avaliacao {
     if antes.len() < MINIMO_POR_LADO || depois.len() < MINIMO_POR_LADO {
+        let forte = !depois.is_empty() && piora_forte(antes, depois);
         return Avaliacao {
-            veredito: Veredito::Aguardando {
-                antes: antes.len(),
-                depois: depois.len(),
+            veredito: if forte {
+                Veredito::Desfazer
+            } else {
+                Veredito::Aguardando {
+                    antes: antes.len(),
+                    depois: depois.len(),
+                }
             },
             fps: None,
             low_1pct: None,
+            trancos: None,
+            p99_ms: None,
+            piora_forte: forte,
         };
     }
 
@@ -117,6 +167,24 @@ fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avali
         .map(|m| m.low_1pct)
         .collect();
     let low = lados("fps.low_1pct", &a1, &d1);
+    let trancos = lados(
+        "frames.stutters_per_min",
+        &antes.iter().filter(|m| m.confiavel).map(|m| m.engasgos_por_minuto).collect::<Vec<_>>(),
+        &depois.iter().filter(|m| m.confiavel).map(|m| m.engasgos_por_minuto).collect::<Vec<_>>(),
+    );
+    let p99 = lados(
+        "frames.p99_ms",
+        &antes.iter().filter_map(|m| m.frametime_p99_ms).collect::<Vec<_>>(),
+        &depois.iter().filter_map(|m| m.frametime_p99_ms).collect::<Vec<_>>(),
+    );
+    // "Mais é pior": subiu de verdade e passou dos pisos.
+    let subiu = |c: &Option<Lados>, pct_min: f64, abs_min: f64| {
+        c.as_ref().is_some_and(|c| {
+            matches!(c.diferenca, Diferenca::Real { delta, pct: Some(p), .. } if delta > 0.0 && p >= pct_min && delta >= abs_min)
+        })
+    };
+    let ritmo_piorou = subiu(&trancos, PIORA_MINIMA_TRANCOS_PCT, PIORA_MINIMA_TRANCOS_POR_MIN)
+        || subiu(&p99, PIORA_MINIMA_P99_PCT, 0.0);
 
     let piorou = |c: &Option<Lados>| {
         c.as_ref().is_some_and(|c| matches!(c.diferenca, Diferenca::Real { delta, pct: Some(p), .. } if delta < 0.0 && -p >= PIORA_MINIMA_PCT))
@@ -126,7 +194,8 @@ fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avali
             .is_some_and(|c| matches!(c.diferenca, Diferenca::Real { delta, .. } if delta > 0.0))
     };
 
-    let veredito = if piorou(&fps) || piorou(&low) {
+    let forte = piora_forte(antes, depois);
+    let veredito = if piorou(&fps) || piorou(&low) || ritmo_piorou || forte {
         Veredito::Desfazer
     } else if melhorou(&fps) || melhorou(&low) {
         Veredito::Melhorou
@@ -137,6 +206,9 @@ fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avali
         veredito,
         fps,
         low_1pct: low,
+        trancos,
+        p99_ms: p99,
+        piora_forte: forte,
     }
 }
 
@@ -163,6 +235,7 @@ pub fn marcar(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct GovernadorNoJogo {
     pub processo: String,
     pub nome: String,
@@ -343,6 +416,8 @@ pub fn observar_governador(
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoPortao"))]
 pub struct Estado {
     pub vigiados: Vec<Vigiado>,
     pub decididos: Vec<Decidido>,
@@ -351,6 +426,7 @@ pub struct Estado {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Decidido {
     pub vigiado: Vigiado,
     pub veredito: Veredito,
@@ -359,6 +435,14 @@ pub struct Decidido {
     pub fps_depois: Option<f64>,
     pub low_antes: Option<f64>,
     pub low_depois: Option<f64>,
+    /// Trancos por minuto dos dois lados (`None` em decisão antiga ou sem medição de ritmo).
+    #[serde(default)]
+    pub trancos_antes: Option<f64>,
+    #[serde(default)]
+    pub trancos_depois: Option<f64>,
+    /// Desfeito por uma partida só, bem fora da faixa de antes.
+    #[serde(default)]
+    pub piora_forte: bool,
     pub erro: Option<String>,
 }
 
@@ -461,6 +545,77 @@ mod testes {
             processo: "x-win64".into(),
             aplicado_em: 1000,
         }
+    }
+
+    fn com_trancos(mut x: MedicaoAutomatica, trancos: f64, p99: Option<f64>) -> MedicaoAutomatica {
+        x.engasgos_por_minuto = trancos;
+        x.frametime_p99_ms = p99;
+        x
+    }
+
+    #[test]
+    fn fps_igual_com_o_jogo_cheio_de_tranco_desfaz() {
+        let j = "X-Win64-Shipping.exe";
+        let mut ms = Vec::new();
+        for (i, (t, p)) in [(3.0, 20.0), (4.0, 21.0), (3.5, 20.5), (4.5, 21.5)].iter().enumerate() {
+            ms.push(com_trancos(m(j, 100 + i as u64, 100.0 + i as f64, 60.0), *t, Some(*p)));
+        }
+        for (i, (t, p)) in [(10.0, 31.0), (11.0, 32.0), (9.5, 30.0), (12.0, 33.0)].iter().enumerate() {
+            ms.push(com_trancos(m(j, 2000 + i as u64, 100.0 + i as f64, 60.0), *t, Some(*p)));
+        }
+        let a = avaliar(&vig(), &ms);
+        assert_eq!(a.veredito, Veredito::Desfazer, "{:?}", a);
+        assert!(!a.piora_forte);
+    }
+
+    #[test]
+    fn trancos_que_sobem_pouco_nao_desfazem() {
+        let j = "X-Win64-Shipping.exe";
+        let mut ms = Vec::new();
+        for (i, t) in [0.2, 0.3, 0.2, 0.3].iter().enumerate() {
+            ms.push(com_trancos(m(j, 100 + i as u64, 100.0, 60.0), *t, None));
+        }
+        for (i, t) in [0.6, 0.7, 0.6, 0.7].iter().enumerate() {
+            ms.push(com_trancos(m(j, 2000 + i as u64, 100.0, 60.0), *t, None));
+        }
+        assert_ne!(avaliar(&vig(), &ms).veredito, Veredito::Desfazer);
+    }
+
+    #[test]
+    fn piora_forte_desfaz_na_primeira_partida() {
+        let j = "X-Win64-Shipping.exe";
+        let mut ms: Vec<MedicaoAutomatica> = [95.0, 100.0, 105.0]
+            .iter()
+            .enumerate()
+            .map(|(i, f)| com_trancos(m(j, 100 + i as u64, *f, 60.0), 3.0, None))
+            .collect();
+        // Uma partida só depois, com o FPS a 60% do pior de antes.
+        ms.push(com_trancos(m(j, 2000, 57.0, 30.0), 3.0, None));
+        let a = avaliar(&vig(), &ms);
+        assert_eq!(a.veredito, Veredito::Desfazer);
+        assert!(a.piora_forte);
+
+        // Trancos que disparam numa partida só.
+        let mut ms2: Vec<MedicaoAutomatica> = [100.0, 101.0, 99.0]
+            .iter()
+            .enumerate()
+            .map(|(i, f)| com_trancos(m(j, 100 + i as u64, *f, 60.0), 4.0, None))
+            .collect();
+        ms2.push(com_trancos(m(j, 2000, 100.0, 60.0), 25.0, None));
+        assert!(avaliar(&vig(), &ms2).piora_forte);
+    }
+
+    #[test]
+    fn partida_ruim_mas_dentro_da_faixa_espera() {
+        let j = "X-Win64-Shipping.exe";
+        let mut ms: Vec<MedicaoAutomatica> = [80.0, 100.0, 110.0]
+            .iter()
+            .enumerate()
+            .map(|(i, f)| com_trancos(m(j, 100 + i as u64, *f, 60.0), 5.0, None))
+            .collect();
+        ms.push(com_trancos(m(j, 2000, 78.0, 50.0), 9.0, None));
+        let a = avaliar(&vig(), &ms);
+        assert!(matches!(a.veredito, Veredito::Aguardando { .. }), "{:?}", a.veredito);
     }
 
     #[test]
@@ -684,6 +839,9 @@ mod testes {
             fps_depois: Some(120.0),
             low_antes: None,
             low_depois: None,
+            trancos_antes: None,
+            trancos_depois: None,
+            piora_forte: false,
             erro: None,
         };
         let reprovado = estado_com(Some(d(Veredito::Desfazer)));

@@ -22,7 +22,7 @@ import { useCodigoDaMaquina, useLicencas } from "@/lib/armazem";
 import { cn } from "@/lib/cn";
 import { codigoValido, conferir } from "@/lib/licenca";
 import { PASSOS, useGuarda, useLicencaAtiva, useOnboarding, type PassoOnboarding } from "@/lib/sessao";
-import { links, site } from "@/lib/site";
+import { links, VERSAO_EXIBIDA } from "@/lib/site";
 
 const TITULOS: Record<PassoOnboarding, { rotulo: string; titulo: string; texto: string }> = {
   maquina: {
@@ -135,7 +135,7 @@ function Progresso({ indice, total, feitos }: { indice: number; total: number; f
       </div>
       <div className="mt-2 flex gap-1" role="progressbar" aria-valuenow={indice + 1} aria-valuemin={1} aria-valuemax={total}>
         {Array.from({ length: total }, (_, i) => (
-          <span key={i} className={cn("h-[3px] flex-1 rounded-full", i <= indice ? "bg-ink" : "bg-[#e6e6e4]")} />
+          <span key={i} className={cn("h-[3px] flex-1 rounded-full", i <= indice ? "bg-ink" : "bg-line-strong")} />
         ))}
       </div>
     </div>
@@ -209,10 +209,10 @@ function PassoInstalar() {
     <div className="space-y-3">
       <ButtonLink href={links.baixar} size="md" className="w-full">
         <Download size={15} strokeWidth={2.25} aria-hidden="true" />
-        Baixar o Otimiza {site.versao}
+        Baixar o Otimiza {VERSAO_EXIBIDA}
       </ButtonLink>
 
-      <div className="rounded-[9px] bg-[#f6f6f5] p-3.5">
+      <div className="rounded-[9px] bg-card p-3.5">
         <p className="flex items-center gap-2 text-[12.5px] font-semibold">
           <ShieldAlert size={14} strokeWidth={2} aria-hidden="true" />
           “O Windows protegeu o seu PC”
@@ -249,7 +249,7 @@ function PassoAtivar() {
           "Clique em Ativar. Pronto — é para sempre, neste computador.",
         ].map((t, i) => (
           <li key={t} className="flex gap-3 text-[13px] leading-[1.5]">
-            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[#f1f1f0] font-mono text-[10.5px] font-semibold">
+            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sunken font-mono text-[10.5px] font-semibold">
               {i + 1}
             </span>
             {t}
@@ -292,11 +292,11 @@ function Previa({ passo }: { passo: PassoOnboarding }) {
     maquina: (
       <QuadroDoApp titulo="Ativar o Otimiza">
         <p className="text-[11px] font-medium text-muted">Código desta máquina</p>
-        <p className="tabular mt-1 rounded-[7px] bg-[#f4f4f3] px-3 py-2 font-mono text-[12.5px]">
+        <p className="tabular mt-1 rounded-[7px] bg-sunken px-3 py-2 font-mono text-[12.5px]">
           {codigoValido(codigo) ? codigo : "OTZ-XXXX-XXXX-XXXX"}
         </p>
         <p className="mt-3 text-[11px] font-medium text-muted">A sua chave</p>
-        <div className="mt-1 flex items-center gap-2 rounded-[7px] px-3 py-2 shadow-[0_0_0_1px_rgb(10_10_10/0.14)]">
+        <div className="mt-1 flex items-center gap-2 rounded-[7px] px-3 py-2 shadow-[0_0_0_1px_var(--color-line-strong)]">
           <KeyRound size={13} strokeWidth={2} className="shrink-0 text-subtle" aria-hidden="true" />
           <span className="truncate font-mono text-[12px] tracking-[0.12em]">●●●●●●●●●●●●</span>
         </div>
@@ -309,11 +309,11 @@ function Previa({ passo }: { passo: PassoOnboarding }) {
             <Download size={18} strokeWidth={2} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-[13px] font-semibold">Versão {site.versao}</p>
+            <p className="text-[13px] font-semibold">Versão {VERSAO_EXIBIDA}</p>
             <p className="text-[11.5px] text-muted">5,8 MB · Windows 10 e 11, 64 bits</p>
           </div>
         </div>
-        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#ececeb]">
+        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-line-strong">
           <span className="block h-full w-2/3 rounded-full bg-ink" />
         </div>
       </QuadroDoApp>
@@ -336,7 +336,7 @@ function Previa({ passo }: { passo: PassoOnboarding }) {
     suporte: (
       <QuadroDoApp titulo="#suporte">
         <div className="flex items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-[9px] bg-[#f3f3f2]">
+          <span className="grid size-9 place-items-center rounded-[9px] bg-sunken">
             <BrandLogo brand="discord" size={17} decorative />
           </span>
           <div>
@@ -360,7 +360,7 @@ function Previa({ passo }: { passo: PassoOnboarding }) {
     <div className="relative flex h-full flex-col justify-center px-10 py-12 xl:px-14">
       <div
         aria-hidden="true"
-        className="absolute inset-0 [background-image:linear-gradient(rgba(10,10,10,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(10,10,10,.045)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_45%,#000,transparent)]"
+        className="absolute inset-0 [background-image:linear-gradient(rgb(255_255_255/.35)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/.35)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_45%,#000,transparent)]"
       />
       <div className="relative max-w-[420px]">
         <p className="flex items-center gap-2 text-[12px] font-medium text-muted">
@@ -375,7 +375,7 @@ function Previa({ passo }: { passo: PassoOnboarding }) {
 
 function QuadroDoApp({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <div className="rounded-[12px] bg-white p-4 shadow-[0_0_0_1px_rgb(10_10_10/0.08),0_16px_30px_-20px_rgb(10_10_10/0.4)]">
+    <div className="rounded-[12px] bg-surface p-4 shadow-[0_0_0_1px_var(--color-line),0_16px_30px_-20px_rgb(30_60_120/0.4)]">
       <div className="flex items-center gap-2 border-b border-line pb-3">
         <OtimizaLogo mark={15} />
         <span className="text-[12px] font-semibold">{titulo}</span>

@@ -3,5 +3,7 @@
   "discord": "https://discord.gg/ultimus",
   "_leia_feedback": "api e canal_feedback ligam o pedido de feedback da 3.3 (docs/app/FEEDBACK.md): depois de 10 minutos de uso, as correcoes pausam ate o bot de vendas atestar um feedback desta maquina. Sem api o pedido fica desligado. A 3.2 ignora estes campos.",
   "api": "https://otimiza-api.squareweb.app",
-  "canal_feedback": "https://discord.com/channels/1509219981513199737/1543436859529629707"
+  "canal_feedback": "https://discord.com/channels/1509219981513199737/1563224882731290786",
+  "_leia_desligados": "Ajustes que a equipe desliga para todos sem versao nova (id do catalogo, ex.: \"plano_otimiza\"). O Otimiza baixa na abertura: o ajuste some do Otimizar agora e da lista, e quem ja aplicou ainda desfaz. Vazio religa.",
+  "ajustes_desligados": []
 }

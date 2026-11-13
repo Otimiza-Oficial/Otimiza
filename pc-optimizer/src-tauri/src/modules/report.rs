@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ReportSaved {
     pub path: String,
     pub is_pdf: bool,

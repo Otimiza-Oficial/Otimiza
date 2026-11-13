@@ -59,6 +59,7 @@ const BURACO_MAXIMO_S: f64 = 1.0;
 const MINIMO_DE_TRAVADAS: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum LadoDoTeste {
     Normal,
     Acalmado,
@@ -72,6 +73,7 @@ pub struct Janela {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResumoDaJanela {
     pub lado: LadoDoTeste,
     pub travadas: usize,
@@ -82,6 +84,8 @@ pub struct ResumoDaJanela {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DecisaoTestedatravada"))]
 pub enum Decisao {
     /// Redução ≥ 30%, IC abaixo de 1 e FPS guardado.
     Manter,
@@ -96,6 +100,8 @@ pub enum Decisao {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "JulgamentoTestedatravada"))]
 pub struct Julgamento {
     pub janelas: Vec<ResumoDaJanela>,
     pub travadas_normal: usize,
@@ -385,6 +391,8 @@ pub fn julgar(janelas: &[ResumoDaJanela], processo: &str, olhada: usize) -> Julg
 
 /// Um teste guardado: a memória de efetividade da travada, com os negativos.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RegistroTestedatravada"))]
 pub struct Registro {
     pub quando: u64,
     /// `gamemode::chave_do_processo` do jogo.

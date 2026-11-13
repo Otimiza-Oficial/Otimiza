@@ -13,6 +13,7 @@ const ENABLED_MARK: u8 = 0x02;
 const DISABLED_MARK: u8 = 0x03;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct StartupEntry {
     pub name: String,
     pub command: String,
@@ -23,6 +24,8 @@ pub struct StartupEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ClasseDaInicializacao"))]
 pub enum Classe {
     Essencial,
     Util,

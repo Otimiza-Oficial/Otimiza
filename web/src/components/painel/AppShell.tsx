@@ -37,21 +37,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (sessao.carregando) return <TelaDeEspera />;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-[#f6f6f6]">
+    <div className="flex min-h-dvh flex-col bg-card">
       <TopBar aoAbrirMenu={() => setMenu(true)} aoAbrirBusca={() => setBusca(true)} />
 
       <div className="flex min-h-0 flex-1">
         {/* Lateral fixa no desktop */}
-        <aside className="sticky top-[34px] hidden h-[calc(100dvh-34px)] w-[212px] shrink-0 overflow-y-auto border-r border-line bg-white lg:block">
+        <aside className="sticky top-[34px] hidden h-[calc(100dvh-34px)] w-[212px] shrink-0 overflow-y-auto border-r border-line bg-surface lg:block">
           <Sidebar />
         </aside>
 
         {/* Gaveta no celular */}
         {menu && (
           <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setMenu(false)}>
-            <div className="absolute inset-0 bg-[rgb(10_10_10/0.35)]" />
+            <div className="absolute inset-0 bg-[rgb(14_22_48/0.45)]" />
             <div
-              className="absolute inset-y-0 left-0 w-[232px] animate-[deslizar_160ms_ease-out] bg-white"
+              className="absolute inset-y-0 left-0 w-[232px] animate-[deslizar_160ms_ease-out] bg-surface"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex h-[34px] items-center justify-between px-3">
@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   type="button"
                   onClick={() => setMenu(false)}
                   aria-label="Fechar as seções"
-                  className="grid size-7 place-items-center rounded-[5px] text-muted hover:bg-[#f4f4f3]"
+                  className="grid size-7 place-items-center rounded-[5px] text-muted hover:bg-sunken"
                 >
                   <X size={15} strokeWidth={2} aria-hidden="true" />
                 </button>
@@ -97,7 +97,7 @@ export function CabecalhoPagina({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-0.5 pb-3.5">
       <div className="flex items-center gap-2.5">
-        {icone && <span className="grid size-[26px] place-items-center rounded-[6px] bg-white text-fg shadow-[0_0_0_1px_rgb(10_10_10/0.08)]">{icone}</span>}
+        {icone && <span className="grid size-[26px] place-items-center rounded-[6px] bg-surface text-fg shadow-[0_0_0_1px_var(--color-line)]">{icone}</span>}
         <div>
           <h1 className="font-display text-[17px] leading-tight font-semibold tracking-[-0.03em]">{titulo}</h1>
           {texto && <p className="mt-0.5 text-[12px] text-muted">{texto}</p>}
@@ -123,8 +123,8 @@ export function Cartao({
       className={cn(
         "rounded-[8px]",
         escuro
-          ? "bg-[#050505] text-white"
-          : "bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)]",
+          ? "bg-noite text-white"
+          : "bg-surface shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(30_60_120/0.04)]",
         className,
       )}
     >

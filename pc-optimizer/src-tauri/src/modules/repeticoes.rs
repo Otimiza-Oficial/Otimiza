@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub const REPETICOES_MINIMAS: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ResumoDasRepeticoes"))]
 pub struct Resumo {
     pub id: String,
     /// Vai junto SEMPRE: margem sem o número de repetições esconde se veio de três ou de trinta.
@@ -89,6 +91,8 @@ fn t_95(graus: usize) -> f64 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DiferencaMedida"))]
 pub enum Diferenca {
     /// NÃO é "não houve diferença": é não ter medido o suficiente.
     SemRepeticoes {

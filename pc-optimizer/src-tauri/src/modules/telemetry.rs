@@ -3,6 +3,10 @@
 // mediu). MEASURED: lido agora. ESTIMATED: derivado ou por caminho que não distingue zero de falha, não fecha
 // veredito sozinho. UNKNOWN: sem valor, com o motivo. Uma coleta nasce com todo o `CATALOG` em UNKNOWN, para
 // métrica sem provedor aparecer declarada em vez de sumir.
+//
+// Não confundir com `core::telemetria`: aquele é o COLETOR (contadores PDH, `Amostra` com `Option<f64>`); este é o
+// CONTRATO que a tela recebe (`Telemetry`/`Metric` com origem e qualidade, tipado em `ui/src/lib/tipos.ts`). Juntar
+// os dois mudaria o JSON do painel; por isso ficam separados (conferido em 05/11/2026).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -13,6 +17,7 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub const SEM_PROVEDOR: &str = "sem provedor de medição nesta versão";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Quality {
     Measured,
@@ -22,6 +27,7 @@ pub enum Quality {
 
 /// Tipo, não texto: milissegundo comparado com segundo não dá erro, dá conclusão errada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(rename_all = "snake_case")]
 pub enum Unit {
     Percent,
@@ -40,6 +46,7 @@ pub enum Unit {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Metric {
     /// `None` sempre que UNKNOWN: é o campo que impede o zero inventado.
     pub value: Option<f64>,
@@ -147,6 +154,7 @@ impl Metric {
 
 /// No contrato, e não recalculado pela tela, para painel e backend não discordarem.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Summary {
     pub measured: usize,
     pub estimated: usize,
@@ -155,6 +163,7 @@ pub struct Summary {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Telemetry {
     pub schema_version: u32,
     pub collected_at: u64,

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct FiveMFolder {
     pub id: String,
     pub name: String,
@@ -19,6 +20,7 @@ pub struct FiveMFolder {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct FiveMReport {
     pub installed: bool,
     pub running: bool,
@@ -293,6 +295,8 @@ pub fn analyze() -> FiveMReport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CleanOutcomeFivem"))]
 pub struct CleanOutcome {
     pub freed_mb: f64,
     pub message: String,

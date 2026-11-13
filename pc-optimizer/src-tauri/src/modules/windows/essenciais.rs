@@ -71,6 +71,7 @@ pub const ESSENCIAIS: &[Essencial] = &[
 /// (Windows.Graphics.Capture) é recusada a qualquer programa, com as permissões concedidas: peça removida da imagem.
 /// Dizer isso evita que a culpa de um recurso faltando caia no Otimiza.
 #[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct WindowsModificado {
     /// Como a imagem se chama ("SnyX OS 11 25H2 v1.4.5").
     pub nome: String,
@@ -148,6 +149,7 @@ pub fn windows_modificado() -> Option<WindowsModificado> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Inicio {
     Desativado,
     Ativo,
@@ -157,12 +159,14 @@ pub enum Inicio {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ServicoEssencial {
     pub servico: &'static str,
     pub inicio: Inicio,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Checagem {
     pub servicos: Vec<ServicoEssencial>,
     pub desativados: usize,

@@ -30,6 +30,7 @@ pub fn nota_do_estado(estado: Adlx) -> &'static str {
 
 /// O que o Otimiza sabe mudar no driver da AMD.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Opcao {
     /// Radeon Anti-Lag: menos atraso quando a placa está no limite.
     AntiLag,
@@ -128,6 +129,8 @@ pub fn escolher_placa(tipos: &[i32]) -> Option<usize> {
 
 /// O que o driver respondeu agora. `None` em cada campo: o recurso não existe nesta placa ou neste driver.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AjustesAmddriver"))]
 pub struct Ajustes {
     pub anti_lag: Option<bool>,
     pub afmf: Option<bool>,
@@ -139,6 +142,7 @@ pub struct Ajustes {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Sensores {
     pub uso_pct: Option<f64>,
     pub temperatura_c: Option<f64>,
@@ -150,6 +154,7 @@ pub struct Sensores {
 
 /// Um ajuste de cor do monitor: valor atual e faixa que o driver aceita.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Faixa {
     pub atual: i32,
     pub minimo: i32,

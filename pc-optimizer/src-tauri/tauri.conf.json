@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Otimiza",
-  "version": "3.6.0",
+  "version": "4.0.0",
   "identifier": "com.otimiza.console",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run nova:web",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "npm run build:app",
+    "frontendDist": "../dist-nova"
   },
   "app": {
     "withGlobalTauri": true,
@@ -21,12 +21,35 @@
         "resizable": true,
         "center": true,
         "decorations": false,
-        "transparent": false,
-        "shadow": true
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self' ipc: http://ipc.localhost",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https://cdn.cloudflare.steamstatic.com https://images.rbxcdn.com https://cdn2.unrealengine.com",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'",
+        "frame-ancestors": "'none'"
+      },
+      "devCsp": {
+        "default-src": "'self' ipc: http://ipc.localhost",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob: https://cdn.cloudflare.steamstatic.com https://images.rbxcdn.com https://cdn2.unrealengine.com",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost ws://localhost:1420 ws://localhost:1421 http://localhost:1420",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'self'",
+        "frame-ancestors": "'none'"
+      }
     }
   },
   "bundle": {
@@ -48,6 +71,9 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "wix": {
+        "language": "pt-BR"
+      },
       "webviewInstallMode": {
         "type": "embedBootstrapper"
       },

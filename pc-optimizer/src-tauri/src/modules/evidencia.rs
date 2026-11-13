@@ -9,6 +9,7 @@ use crate::modules::medicoes::{Fonte, GeracaoNaPartida};
 
 /// Por que duas medições não medem só a otimização. A ordem é a de gravidade, e a tela usa o primeiro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Motivo {
     /// Gráfico diferente: parte da diferença é qualidade, não o Otimiza.
     ConfiguracaoDoJogoMudou,
@@ -20,6 +21,7 @@ pub enum Motivo {
 
 /// O que precisa ser igual dos dois lados de uma comparação.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Contexto<'a> {
     pub configuracao_do_jogo: Option<&'a str>,
     pub geracao: Option<GeracaoNaPartida>,

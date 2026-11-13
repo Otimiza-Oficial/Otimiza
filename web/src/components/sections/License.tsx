@@ -1,6 +1,6 @@
 import { Check, KeyRound } from "lucide-react";
 import { OtimizaLogo } from "@/components/brand/OtimizaLogo";
-import { Ilustrativo } from "@/components/features/FeatureCard";
+import { Ilustrativo } from "@/components/ui/Ilustrativo";
 import { Reveal } from "@/components/motion/Reveal";
 import { DecryptedText } from "@/components/reactbits/DecryptedText";
 import { Spotlight } from "@/components/reactbits/Spotlight";
@@ -81,7 +81,7 @@ function AtivacaoMock() {
         </p>
 
         <p className="mt-4 text-[11.5px] font-medium text-muted">A sua chave</p>
-        <div className="mt-1 flex items-center gap-2 rounded-[8px] px-3 py-2 shadow-[0_0_0_1px_rgb(10_10_10/0.14)]">
+        <div className="mt-1 flex items-center gap-2 rounded-[8px] px-3 py-2 shadow-[0_0_0_1px_var(--color-line-strong)]">
           <KeyRound size={14} strokeWidth={2} className="shrink-0 text-subtle" />
           <span className="truncate font-mono text-[12.5px] tracking-[0.12em]">●●●●●●●●●●●●●●●●</span>
         </div>

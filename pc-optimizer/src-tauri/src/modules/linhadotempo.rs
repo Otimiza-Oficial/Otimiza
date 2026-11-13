@@ -12,6 +12,7 @@ use crate::modules::medicoes::{self, Fonte, MedicaoAutomatica};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Marco {
     Partida {
         quando: u64,
@@ -29,6 +30,7 @@ pub enum Marco {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "estado")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Julgamento {
     Caiu {
         queda: Deriva,
@@ -52,6 +54,7 @@ impl Marco {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct LinhaDoJogo {
     pub jogo: String,
     /// Do mais novo para o mais antigo.

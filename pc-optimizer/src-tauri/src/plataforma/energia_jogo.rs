@@ -16,6 +16,8 @@ const EPP: &str = "PERFEPP";
 const MINIMO: &str = "PROCTHROTTLEMIN";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "GuardadoNaEnergiaDeJogo"))]
 pub struct Guardado {
     pub alias: String,
     pub subgrupo: String,
@@ -27,6 +29,8 @@ pub struct Guardado {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AplicadoNaEnergiaDeJogo"))]
 pub struct Aplicado {
     pub plano: String,
     pub jogo: String,
@@ -34,6 +38,8 @@ pub struct Aplicado {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoDaEnergiaDeJogo"))]
 pub struct Estado {
     pub ligado: bool,
     /// Presente só com o jogo aberto e o ajuste escrito: é o caminho de volta.
@@ -42,6 +48,8 @@ pub struct Estado {
 
 /// Para a tela.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PainelDaEnergiaDeJogo"))]
 pub struct Painel {
     pub ligado: bool,
     pub agindo_em: Option<String>,

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use super::catalog::{entra_no_lote, OptimizationSpec, CATALOG, FORA_DO_LOTE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Nivel {
     Seguro,
     Competitivo,
@@ -78,16 +79,13 @@ pub const NO_COMPLETO: &[&str] = &[
     "foreground_priority",
     "mmcss_games",
     "timer_global_win11",
-    // O que roda por trás e disputa disco, rede e processador com o jogo.
-    "disable_telemetry",
+    // O que roda por trás e disputa disco, rede e processador com o jogo. Nenhum serviço parado (ver `RETIRADOS`):
+    // a coleta mínima vai pela política, e o serviço continua rodando.
     "telemetry_policy",
     "edge_background_off",
     "disable_widgets",
     "maps_auto_update_off",
-    "error_reporting_off",
     "servicos_agrupados",
-    // SysMain só em SSD: a exigência do item (`SsdSystemDrive`) o deixa de fora em HD.
-    "disable_sysmain",
     // O Windows sem as esperas de fábrica.
     "start_menu_web_search_off",
     "disable_startup_delay",

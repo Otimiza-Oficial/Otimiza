@@ -9,6 +9,8 @@ const COMMIT_ALTO_PCT: f64 = 85.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ItemProntojogo"))]
 pub enum Item {
     MonitorAbaixo {
         hz_atual: u32,
@@ -30,6 +32,8 @@ pub enum Item {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ProntidaoProntojogo"))]
 pub struct Prontidao {
     pub pronto: bool,
     pub itens: Vec<Item>,
