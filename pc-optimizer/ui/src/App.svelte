@@ -24,6 +24,7 @@
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
   import { areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
+  import { contextoDa } from "./lib/contexto";
   import { avisos as lerAvisos } from "./lib/clima";
   import { capaRemota, iniciais } from "./lib/capas";
   import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, receitaMedida, type Acao, type Fala } from "./lib/conversa";
@@ -194,6 +195,23 @@
       },
     ];
   });
+  /** O que a área aberta já sabe, para o topo dela (`lib/contexto.ts`). */
+  const contexto = $derived(
+    contextoDa(aberta, {
+      tela: telaPrincipal ? { hz: telaPrincipal.hz_atual, aguenta: telaPrincipal.hz_maximo } : null,
+      ligacao:
+        wifi?.ligacao.tipo === "cabo"
+          ? { tipo: "cabo" }
+          : wifi?.ligacao.tipo === "wi_fi"
+            ? { tipo: "wifi", sinal: sinalWifi }
+            : null,
+      memoriaPct,
+      mudancas,
+      jogosMedidos: biblioteca.length,
+      licenca: licenca ? { ativa: licenca.ativa, expira: licenca.expira ?? null } : null,
+      jogoAberto: jogo?.nome ?? null,
+    }),
+  );
   const jogosFiltrados = $derived(
     instalados.filter((i) => i.jogo.nome.toLowerCase().includes(filtroDeJogo.trim().toLowerCase())).slice(0, 3)
   );
@@ -1011,6 +1029,7 @@
               <div>
                 <h2>{area.nome}</h2>
                 {#if area.pergunta}<p class="sec">{area.pergunta}</p>{/if}
+                {#if contexto}<p class="contexto"><span class="ponto" data-tom={contexto.tom}></span>{contexto.texto}</p>{/if}
               </div>
             </header>
             <div class="area-corpo">
@@ -2264,6 +2283,15 @@
     align-items: center;
     gap: 12px;
     padding-bottom: 6px;
+  }
+  .area-topo .contexto {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 6px 0 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--texto);
   }
   .area-topo h2 {
     font-family: var(--fonte-titulo);
