@@ -43,3 +43,4 @@ npm-debug.log*
 # Cópias de trabalho dos agentes do Claude Code (uma por tarefa em paralelo).
 .claude/worktrees/
 .cargo-target-ferramentas/
+pc-optimizer/prints-nova/
