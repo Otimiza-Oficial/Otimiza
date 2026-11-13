@@ -764,6 +764,7 @@ export const ponte = {
         firmeza: "Firme",
         frase: "Rede firme: 19 ms até a internet, sem perda. Se travou, não foi a rede.",
       },
+      pontos: [88, 83, 79, 91].map((fps, i) => ({ quando: agora - 3600 + 180 + i * 1100, fps, low_1pct: fps - 32, comparavel: true })),
     };
   },
   /** `partida:preparada`: o jogo que o "Jogar" abriu apareceu e a receita ligou (ou não, e por quê). */

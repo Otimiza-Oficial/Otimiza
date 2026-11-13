@@ -404,6 +404,9 @@ deixa isso:
   trocados por elas; o congelamento com jogo aberto e "reduzir movimento" agora cobre também o `::before`.
 - 2.3.2 Tipografia: 30 tamanhos quebrados (11, 11,5, 12,5, 13,5, 26, 30, 34 px) trazidos para a escala; dígitos tabulares
   no app inteiro.
+- 2.3.3 Gráfico de verdade da partida: cada janela medida (FPS médio e 1% pior) sobre a faixa das partidas anteriores,
+  um eixo só, rótulo na ponta, legenda, cruz com os números e tabela para leitor de tela (`GraficoDaPartida.svelte`). A
+  série de tempo de quadro inteira não é guardada de propósito (milhares de carimbos por janela); o gráfico usa as janelas.
 - 6.1 Investigado no PC do dono: nenhum pânico no log e nenhum arquivo em `falhas/`; toda sessão sem fechamento normal
   foi encerramento forçado (testes de desenvolvimento e o instalador fechando o Otimiza), e a abertura já não conta
   reinício do Windows nem atualização como queda.
@@ -417,4 +420,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1.2 (dados reais nos testes), 2.3.3 a 2.3.5; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1.2 (dados reais nos testes), 2.3.4 e 2.3.5; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

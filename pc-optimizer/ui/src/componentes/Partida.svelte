@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GraficoDaPartida from "./GraficoDaPartida.svelte";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // A última partida, por que o jogo roda assim e o que este PC permite (trazidos da interface 3.6, `src/main.ts`:
@@ -25,7 +26,15 @@
     janelas_com_freio_lido: number;
     ja_freava: boolean;
     anteriores: { partidas: number; mediana_fps: number; menor_fps: number; maior_fps: number } | null;
+    pontos?: { quando: number; fps: number | null; low_1pct: number | null; comparavel: boolean }[];
   };
+
+  /** Uma janela a cada 20 minutos, como a medição automática: uma partida de 40 min na demonstração. */
+  function pontosDemo(inicio: number) {
+    const fps = [88, 83, 79, 91, 86, 74, 85];
+    const low = [52, 47, 41, 55, 50, 38, 49];
+    return fps.map((f, i) => ({ quando: inicio + 180 + i * 400, fps: f, low_1pct: low[i], comparavel: true }));
+  }
 
   type TipoDeCausa = "Processador" | "PlacaDeVideo" | "PresoNaTaxaDoMonitor" | "LimiteDeFps" | "CalorOuEnergia" | "DiscoNosTrancos" | "QuadroCopiado";
   type Ajuste =
@@ -256,6 +265,7 @@
     janelas_com_freio_lido: 126,
     ja_freava: false,
     anteriores: { partidas: 11, mediana_fps: 81, menor_fps: 70, maior_fps: 92 },
+    pontos: pontosDemo(Date.now() / 1000 - 3600),
   };
   const DEMO_RECEITA: Receita = {
     diagnostico: {
@@ -295,6 +305,7 @@
       <h2>Sua última partida</h2>
       <span class="apoio">{partida.jogo}</span>
     </div>
+    <GraficoDaPartida pontos={partida.pontos ?? []} anteriores={partida.anteriores} />
     <dl class="linhas">
       {#each linhasDaPartida(partida) as l (l.rotulo)}
         <dt>{l.rotulo}</dt>

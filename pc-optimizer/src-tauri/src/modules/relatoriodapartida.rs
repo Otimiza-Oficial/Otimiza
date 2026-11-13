@@ -61,6 +61,20 @@ pub struct Relatorio {
     pub anteriores: Option<Faixa>,
     /// A rede nas mesmas janelas (`plataforma::rede_partida`), posta pelo comando. `None`: sem ping nas janelas.
     pub rede: Option<crate::plataforma::rede_partida::RedeDaPartida>,
+    /// Cada janela medida, na ordem (Plano de refino 2.3.3: o gráfico da partida com número medido, não ilustração).
+    pub pontos: Vec<PontoDaPartida>,
+}
+
+/// Uma janela de 20 s da partida, como a medição gravou.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct PontoDaPartida {
+    pub quando: u64,
+    pub fps: f64,
+    /// Só com amostra suficiente (`confiavel`): 1% pior de janela curta é ruído.
+    pub low_1pct: Option<f64>,
+    /// Sem gerador de quadros na janela (entra na conta da partida).
+    pub comparavel: bool,
 }
 
 /// **Pura.** As partidas de um jogo, cada uma com as suas janelas, em ordem.
@@ -245,6 +259,15 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
         ja_freava,
         anteriores: faixa,
         rede: None,
+        pontos: esta
+            .iter()
+            .map(|m| PontoDaPartida {
+                quando: m.quando,
+                fps: m.fps,
+                low_1pct: m.confiavel.then_some(m.low_1pct),
+                comparavel: medicoes::comparavel(m),
+            })
+            .collect(),
     })
 }
 

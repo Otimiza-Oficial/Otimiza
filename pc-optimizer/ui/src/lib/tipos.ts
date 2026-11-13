@@ -4643,6 +4643,29 @@ export type PoliticaDeDispositivo = "Windows" |
 /**  Economia desligada NA TOMADA. Só entra como variação testada. */
 "Desligada";
 
+/**  Uma janela de 20 s da partida, como a medição gravou. */
+export type PontoDaPartida = PontoDaPartida_Serialize | PontoDaPartida_Deserialize;
+
+/**  Uma janela de 20 s da partida, como a medição gravou. */
+export type PontoDaPartida_Deserialize = {
+	quando: number,
+	fps: number | null,
+	/**  Só com amostra suficiente (`confiavel`): 1% pior de janela curta é ruído. */
+	low_1pct?: number | null,
+	/**  Sem gerador de quadros na janela (entra na conta da partida). */
+	comparavel: boolean,
+};
+
+/**  Uma janela de 20 s da partida, como a medição gravou. */
+export type PontoDaPartida_Serialize = {
+	quando: number,
+	fps: number | null,
+	/**  Só com amostra suficiente (`confiavel`): 1% pior de janela curta é ruído. */
+	low_1pct: number | null,
+	/**  Sem gerador de quadros na janela (entra na conta da partida). */
+	comparavel: boolean,
+};
+
 export type PoolAjustado = PoolAjustado_Serialize | PoolAjustado_Deserialize;
 
 export type PoolAjustado_Deserialize = {
@@ -5067,6 +5090,8 @@ export type RelatorioDaPartida_Deserialize = {
 	anteriores?: FaixaDasPartidas | null,
 	/**  A rede nas mesmas janelas (`plataforma::rede_partida`), posta pelo comando. `None`: sem ping nas janelas. */
 	rede?: RedeDaPartida | null,
+	/**  Cada janela medida, na ordem (Plano de refino 2.3.3: o gráfico da partida com número medido, não ilustração). */
+	pontos: PontoDaPartida_Deserialize[],
 };
 
 export type RelatorioDaPartida_Serialize = {
@@ -5105,6 +5130,8 @@ export type RelatorioDaPartida_Serialize = {
 	anteriores: FaixaDasPartidas | null,
 	/**  A rede nas mesmas janelas (`plataforma::rede_partida`), posta pelo comando. `None`: sem ping nas janelas. */
 	rede: RedeDaPartida | null,
+	/**  Cada janela medida, na ordem (Plano de refino 2.3.3: o gráfico da partida com número medido, não ilustração). */
+	pontos: PontoDaPartida_Serialize[],
 };
 
 export type RelatorioDeTetos = RelatorioDeTetos_Serialize | RelatorioDeTetos_Deserialize;
