@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // VRR (G-Sync / FreeSync) lido do EDID de cada monitor (trazido de `src/main.ts`). O Windows não diz se o VRR está
   // LIGADO no painel do driver: aqui só o que o monitor anuncia, e onde ligar. "Provável" é dito como provável.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Monitor = { nome: string | null; min_hz: number | null; max_hz: number | null; vrr: "Anunciado" | "Provavel" | "NaoAnunciado" };
   const FRASE = {
@@ -16,7 +17,7 @@
 
   onMount(async () => {
     monitores = noTauri
-      ? await invoke<Monitor[]>("vrr_dos_monitores").catch(() => null)
+      ? await como<Monitor[]>(commands.vrrDosMonitores()).catch(() => null)
       : [{ nome: "AOC 24G2", min_hz: 48, max_hz: 144, vrr: "Anunciado" }];
   });
 </script>

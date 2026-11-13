@@ -18,6 +18,8 @@ pub const SEGUNDOS_MINIMOS: f64 = 5.0 * 60.0;
 pub const MANTEVE_MINIMO_PCT: f64 = 90.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EscolhaFbPorJogo"))]
 pub struct Escolha {
     /// 0 = Auto, 1 = só escala, 2+ = fixo.
     pub multiplicador: u8,

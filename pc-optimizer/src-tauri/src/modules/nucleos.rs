@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ClasseNucleos"))]
 pub enum Classe {
     Desempenho,
     Eficiencia,
@@ -14,6 +16,7 @@ pub enum Classe {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct NucleoLogico {
     pub indice: u32,
     /// Dois lógicos no mesmo físico são irmãos de SMT.
@@ -22,6 +25,7 @@ pub struct NucleoLogico {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Topologia {
     pub nucleos: Vec<NucleoLogico>,
     pub hibrido: bool,
@@ -76,6 +80,8 @@ pub fn mascara_de_desempenho(t: &Topologia) -> Option<u64> {
 
 /// Sai JUNTO da máscara: quem lê o número de núcleos precisa ler que isso some quando o jogo fechar.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConselhoNucleos"))]
 pub struct Conselho {
     pub cabe: bool,
     pub explicacao: String,

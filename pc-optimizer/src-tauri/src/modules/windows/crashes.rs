@@ -13,6 +13,7 @@ pub const JANELA_ANTES_S: u64 = 48 * 3600;
 pub const MEMORIA_NO_LIMITE_PCT: u32 = 90;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Crash {
     /// Segundos desde 1970 (quando o FiveM gravou o relatório).
     pub quando: u64,
@@ -31,6 +32,8 @@ pub struct Crash {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PistaCrashes"))]
 pub enum Pista {
     /// O mesmo hash em dois ou mais crashes: um defeito que se repete no mesmo ponto do jogo.
     MesmoDefeito,
@@ -45,12 +48,16 @@ pub enum Pista {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LeituraCrashes"))]
 pub struct Leitura {
     pub pista: Pista,
     pub frase: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RelatorioCrashes"))]
 pub struct Relatorio {
     /// Do mais novo para o mais velho.
     pub crashes: Vec<Crash>,

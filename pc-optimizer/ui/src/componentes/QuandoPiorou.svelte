@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // Quando foi que piorou (trazido da interface 3.6, `renderHistorico`): compara as duas últimas medições repetidas de
   // cada métrica e lista o que aconteceu entre elas. Contra as duas últimas, e não contra o melhor já medido: o melhor
   // de sempre é a medição que mais teve sorte. A margem vai SEMPRE junto, é ela que diz se a diferença é real. Sem
   // nenhuma comparação, a seção não aparece (`historico_de_desempenho`).
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Lado = { media: number; n: number; margem: number | null };
   type Regressao = {
@@ -22,7 +23,7 @@
   onMount(async () => {
     if (!noTauri) return;
     try {
-      const h = await invoke<HistoricoDeDesempenho>("historico_de_desempenho");
+      const h = await como<HistoricoDeDesempenho>(commands.historicoDeDesempenho());
       regressoes = [...h.regressoes].sort((a, b) => Number(b.piorou) - Number(a.piorou));
     } catch {
       regressoes = [];

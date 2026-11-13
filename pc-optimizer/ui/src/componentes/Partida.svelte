@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // A última partida, por que o jogo roda assim e o que este PC permite (trazidos da interface 3.6, `src/main.ts`:
   // `carregarRelatorioDaPartida`, `carregarDiagnosticoDaPartida` e `carregarPerfilDoPc`). Só o que foi medido: o que
   // não se leu diz que não se leu, sem virar zero. A causa é sempre inferida dos números, por isso "evidência forte",
   // nunca "medido". Tipos escritos à mão, os mesmos da 3.6.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Gargalo = "Gpu" | "Cpu" | "Espera" | "NaoDeuParaSaber";
   type RelatorioDaPartida = {
@@ -117,10 +118,10 @@
       return;
     }
     const [p, r, f, k] = await Promise.allSettled([
-      invoke<RelatorioDaPartida | null>("relatorio_da_ultima_partida"),
-      invoke<Receita>("receita_da_partida"),
-      invoke<PerfilDoPc>("perfil_do_pc"),
-      invoke<Nota>("nota_do_jogo"),
+      como<RelatorioDaPartida | null>(commands.relatorioDaUltimaPartida()),
+      como<Receita>(commands.receitaDaPartida()),
+      como<PerfilDoPc>(commands.perfilDoPc()),
+      como<Nota>(commands.notaDoJogo()),
     ]);
     // Sem amostra confiável não há nota: zero afirmaria algo sobre uma máquina que não foi medida.
     nota = k.status === "fulfilled" && k.value.estado === "Calculada" ? k.value : null;
@@ -132,7 +133,7 @@
     } else {
       // Sem a receita, o diagnóstico sozinho.
       try {
-        diagnostico = await invoke<Diagnostico>("diagnostico_da_partida");
+        diagnostico = await como<Diagnostico>(commands.diagnosticoDaPartida());
       } catch (e) {
         erroDoDiagnostico = String(e);
       }

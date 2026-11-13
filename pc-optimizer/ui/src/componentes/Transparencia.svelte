@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // Suporte e transparência (trazido da interface antiga, `src/main.ts`): o modo seguro (o Otimiza parou o que é
   // automático depois de fechar de repente várias vezes), o relatório para o suporte, a planilha do que foi alterado,
   // a lista completa do que o Otimiza pode alterar (com risco e escopo) e o que ele NÃO faz e por quê.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type ModoSeguro = { ativo: boolean; quedas_seguidas: number };
   type Alteracao = { id: string; titulo: string; o_que_muda: string; risco: "Baixo" | "Medio" | "Alto"; escopo: string; precisa_reiniciar: boolean };
@@ -27,14 +28,14 @@
       return;
     }
     [modo, altera, naoFazemos] = await Promise.all([
-      invoke<ModoSeguro>("modo_seguro").catch(() => null),
-      invoke<Alteracao[]>("o_que_o_otimiza_altera").catch(() => null),
-      invoke<NaoFazemos[]>("o_que_nao_fazemos").catch(() => null),
+      como<ModoSeguro>(commands.modoSeguro()).catch(() => null),
+      como<Alteracao[]>(commands.oQueOOtimizaAltera()).catch(() => null),
+      como<NaoFazemos[]>(commands.oQueNaoFazemos()).catch(() => null),
     ]);
   });
 
   async function sairDoModoSeguro() {
-    if (noTauri) await invoke("sair_do_modo_seguro").catch(() => {});
+    if (noTauri) await commands.sairDoModoSeguro().catch(() => {});
     modo = { ativo: false, quedas_seguidas: 0 };
   }
 
@@ -43,7 +44,7 @@
     recado = null;
     try {
       const r = noTauri
-        ? await invoke<{ path: string; note: string }>("export_report", { comparison: null })
+        ? await como<{ path: string; note: string }>(commands.exportReport(null))
         : { path: "Documentos\\Otimiza-relatorio.pdf", note: "" };
       recado = `Relatório salvo em ${r.path}. Mande ao suporte pelo Discord.${r.note ? ` ${r.note}` : ""}`;
     } catch (e) {
@@ -62,7 +63,7 @@
     recado = null;
     try {
       compat = noTauri
-        ? await invoke<string>("relatorio_de_compatibilidade")
+        ? await como<string>(commands.relatorioDeCompatibilidade())
         : "Relatório de compatibilidade (demonstração)\nPlano de energia: 12 já certos, 3 mudariam, 1 não existe neste Windows.";
     } catch (e) {
       recado = String(e);
@@ -82,7 +83,7 @@
 
   async function planilha() {
     try {
-      recado = `Planilha salva em ${noTauri ? await invoke<string>("exportar_alteracoes") : "Documentos\\Otimiza-alteracoes.csv"}.`;
+      recado = `Planilha salva em ${noTauri ? await como<string>(commands.exportarAlteracoes()) : "Documentos\\Otimiza-alteracoes.csv"}.`;
     } catch (e) {
       recado = String(e);
     }

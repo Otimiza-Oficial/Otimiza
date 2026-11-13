@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // Sistema › Agora (trazido da interface 3.6, `src/main.ts`: `renderProcesses`, `analyzeBottleneck` e `carregarPlaca`):
   // quem está pesando agora, o que segura a máquina medido por 10 s, e a placa com o driver. A lista se atualiza a cada
   // 3 s só com a aba à vista, e para com jogo aberto (a interface congela: `jogo-aberto` no <html>). Tipos escritos à
   // mão, os mesmos da 3.6.
   import { onDestroy, onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Processo = { name: string; cpu_percent: number; ram_mb: number; instances: number; in_startup: boolean };
   type Limite = "CpuUmNucleo" | "CpuTodos" | "Gpu" | "MemoriaVideo" | "MemoriaRam" | "Disco" | "NaoIdentificado" | "SemCarga";
@@ -79,7 +80,7 @@
     if (lendo || document.hidden || document.documentElement.classList.contains("jogo-aberto")) return;
     lendo = true;
     try {
-      processos = noTauri ? await invoke<Processo[]>("top_processes") : DEMO_PROCESSOS;
+      processos = noTauri ? await como<Processo[]>(commands.topProcesses()) : DEMO_PROCESSOS;
       erroDosProcessos = null;
     } catch (e) {
       erroDosProcessos = String(e);
@@ -92,7 +93,7 @@
     void lerProcessos();
     relogio = setInterval(lerProcessos, 3000);
     placa = undefined;
-    (noTauri ? invoke<Placa>("placa_de_video") : Promise.resolve(DEMO_PLACA)).then((p) => (placa = p)).catch(() => (placa = null));
+    (noTauri ? como<Placa>(commands.placaDeVideo()) : Promise.resolve(DEMO_PLACA)).then((p) => (placa = p)).catch(() => (placa = null));
   });
   onDestroy(() => clearInterval(relogio));
 
@@ -100,7 +101,7 @@
     medindo = true;
     erroDoGargalo = null;
     try {
-      gargalo = noTauri ? await invoke<Gargalo>("analyze_bottleneck", { seconds: 10 }) : await demoGargalo();
+      gargalo = noTauri ? await como<Gargalo>(commands.analyzeBottleneck(10)) : await demoGargalo();
     } catch (e) {
       erroDoGargalo = String(e);
     } finally {

@@ -4,6 +4,7 @@
 use super::*;
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn analyze_shaders() -> Result<ShaderReport, String> {
     #[cfg(target_os = "windows")]
     {
@@ -19,6 +20,7 @@ pub async fn analyze_shaders() -> Result<ShaderReport, String> {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn clean_shader_cache(id: String) -> Result<ShaderCleanOutcome, String> {
     crate::modules::licenca::exigir()?;
 
@@ -37,6 +39,7 @@ pub async fn clean_shader_cache(id: String) -> Result<ShaderCleanOutcome, String
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn analyze_gpu_preference() -> Result<GpuPrefReport, String> {
     #[cfg(target_os = "windows")]
     {
@@ -53,6 +56,7 @@ pub async fn analyze_gpu_preference() -> Result<GpuPrefReport, String> {
 
 /// Em notebook com duas placas é o maior ganho que o produto dá, sem administrador nem reinício.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn set_gpu_preference(
     caminho: String,
     desempenho: bool,
@@ -87,6 +91,7 @@ pub async fn set_gpu_preference(
 
 /// Só leitura. Sem placa NVIDIA, a frase que diz isso.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn ajustes_do_driver_nvidia(
     state: State<'_, AppState>,
 ) -> Result<PainelDoDriver, String> {
@@ -147,6 +152,7 @@ pub async fn ajustes_do_driver_nvidia(
 
 /// `EXIGEM_LICENCA`. O desfazer é o `revert_optimization`, com o id que o painel recebe pronto.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn aplicar_ajuste_nvidia(
     opcao: String,
     state: State<'_, AppState>,
@@ -167,6 +173,7 @@ pub async fn aplicar_ajuste_nvidia(
 }
 
 #[derive(serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PainelAmd {
     pub estado: String,
     pub nota: String,
@@ -179,6 +186,7 @@ pub struct PainelAmd {
 /// O que o driver AMD tem e como está. `LIVRES`: só lê.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn driver_amd(state: State<'_, AppState>) -> Result<PainelAmd, String> {
     let aplicados = aplicados_com_prefixo(&state, "amd-").await;
     tokio::task::spawn_blocking(move || {
@@ -200,6 +208,7 @@ pub async fn driver_amd(state: State<'_, AppState>) -> Result<PainelAmd, String>
 /// `EXIGEM_LICENCA`. `opcao`: `amd-antilag`, `amd-afmf`, `amd-rsr` ou `amd-frtc:<fps>`. O desfazer é o `revert_optimization`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn aplicar_ajuste_amd(
     opcao: String,
     state: State<'_, AppState>,
@@ -211,6 +220,7 @@ pub async fn aplicar_ajuste_amd(
 }
 
 #[derive(serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PainelIntel {
     pub estado: String,
     pub nota: String,
@@ -233,6 +243,7 @@ async fn aplicados_com_prefixo(state: &State<'_, AppState>, prefixo: &str) -> Ve
 /// O que o driver Intel tem e como está. `LIVRES`: só lê.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn driver_intel(state: State<'_, AppState>) -> Result<PainelIntel, String> {
     let aplicados = aplicados_com_prefixo(&state, "intel-").await;
     tokio::task::spawn_blocking(move || {
@@ -254,6 +265,7 @@ pub async fn driver_intel(state: State<'_, AppState>) -> Result<PainelIntel, Str
 /// `EXIGEM_LICENCA`. `opcao`: `intel-latencia` ou `intel-limite:<fps>`. O desfazer é o `revert_optimization`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn aplicar_ajuste_intel(
     opcao: String,
     state: State<'_, AppState>,
@@ -266,6 +278,7 @@ pub async fn aplicar_ajuste_intel(
 
 /// `EXIGEM_LICENCA`. O desfazer é o `revert_optimization`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn limitar_fps_nvidia(
     executavel: String,
     fps: u32,

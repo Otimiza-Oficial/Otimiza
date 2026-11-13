@@ -3,12 +3,13 @@
 /// Liga a mira na tela por cima do jogo aberto. `EXIGEM_LICENCA`: recurso do produto; não grava nada no PC e some
 /// ao desligar. Recusa com anticheat que barra sobreposição; com ressalva (servidor de RP), só com `confirmado`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn mira_ligar(
-    app: tauri::AppHandle,
     mira: crate::plataforma::mira::Mira,
     confirmado: bool,
 ) -> Result<crate::plataforma::mira::Estado, String> {
     crate::modules::licenca::exigir()?;
+    let app = crate::aplicativo()?;
 
     #[cfg(target_os = "windows")]
     {
@@ -52,10 +53,11 @@ pub async fn mira_ligar(
 
 /// Troca o desenho da mira já ligada. `LIVRES`: só redesenha a janela do Otimiza.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn mira_atualizar(
-    app: tauri::AppHandle,
     mira: crate::plataforma::mira::Mira,
 ) -> Result<(), String> {
+    let app = crate::aplicativo()?;
     let mira = crate::plataforma::mira::validar(&mira)?;
     #[cfg(target_os = "windows")]
     return crate::plataforma::mira::atualizar(&app, mira);
@@ -68,7 +70,9 @@ pub fn mira_atualizar(
 
 /// `LIVRES`: desligar nunca depende de licença.
 #[tauri::command(async)]
-pub fn mira_desligar(app: tauri::AppHandle) -> Result<(), String> {
+#[cfg_attr(test, specta::specta)]
+pub fn mira_desligar() -> Result<(), String> {
+    let app = crate::aplicativo()?;
     #[cfg(target_os = "windows")]
     crate::plataforma::mira::desligar(&app);
     #[cfg(not(target_os = "windows"))]
@@ -78,6 +82,7 @@ pub fn mira_desligar(app: tauri::AppHandle) -> Result<(), String> {
 
 /// `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn mira_estado() -> Result<crate::plataforma::mira::Estado, String> {
     #[cfg(target_os = "windows")]
     return Ok(crate::plataforma::mira::estado());
@@ -90,6 +95,7 @@ pub fn mira_estado() -> Result<crate::plataforma::mira::Estado, String> {
 
 /// Os comandos de console do CS2 para a mesma mira. `LIVRES`: só monta texto.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn mira_cs2(mira: crate::plataforma::mira::Mira) -> Result<String, String> {
     Ok(crate::plataforma::mira::comandos_cs2(
         &crate::plataforma::mira::validar(&mira)?,
@@ -99,6 +105,7 @@ pub fn mira_cs2(mira: crate::plataforma::mira::Mira) -> Result<String, String> {
 /// Por qual caminho as cores vão (driver AMD, vibração NVIDIA ou rampa do Windows), o que cada um sabe mudar e os
 /// perfis por jogo. `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn cores_estado() -> Result<crate::plataforma::cores::Estado, String> {
     #[cfg(target_os = "windows")]
     return Ok(crate::plataforma::cores::estado());
@@ -108,6 +115,7 @@ pub fn cores_estado() -> Result<crate::plataforma::cores::Estado, String> {
 
 /// Aplica no monitor agora. Guarda o valor de antes primeiro. `EXIGEM_LICENCA`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn cores_aplicar(
     ajuste: crate::plataforma::cores::Ajuste,
 ) -> Result<crate::plataforma::cores::Caminho, String> {
@@ -123,6 +131,7 @@ pub fn cores_aplicar(
 
 /// Devolve as cores de antes. `LIVRES`: voltar ao normal nunca depende de licença.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn cores_restaurar() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     return crate::plataforma::cores::restaurar();
@@ -133,6 +142,7 @@ pub fn cores_restaurar() -> Result<(), String> {
 /// Grava o ajuste de um jogo e se ele liga sozinho com o jogo aberto. `LIVRES`: grava só a preferência; quem mexe no
 /// monitor é `cores_aplicar` ou a abertura do jogo, que confere a licença.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn cores_salvar_perfil(
     jogo: Option<String>,
     ajuste: Option<crate::plataforma::cores::Ajuste>,
@@ -237,6 +247,7 @@ pub fn overlay_ligar(
 
 /// O contador do Otimiza no lugar do do FiveM (`cl_drawFPS` no fivem.cfg). `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn contador_fivem_estado() -> Result<crate::plataforma::contador_fivem::Estado, String> {
     Ok(crate::plataforma::contador_fivem::estado())
 }
@@ -244,6 +255,7 @@ pub fn contador_fivem_estado() -> Result<crate::plataforma::contador_fivem::Esta
 /// Desliga o `cl_drawFPS` no fivem.cfg (agora, ou quando o FiveM fechar) e deixa o FPS do Otimiza sempre no canto do
 /// jogo. `EXIGEM_LICENCA`: recurso do produto.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn contador_fivem_ligar() -> Result<crate::plataforma::contador_fivem::Estado, String> {
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
@@ -261,6 +273,7 @@ pub fn contador_fivem_ligar() -> Result<crate::plataforma::contador_fivem::Estad
 
 /// Devolve o `cl_drawFPS` de antes. `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn contador_fivem_desligar() -> Result<crate::plataforma::contador_fivem::Estado, String> {
     #[cfg(target_os = "windows")]
     return crate::plataforma::contador_fivem::pedir(false);
@@ -270,6 +283,7 @@ pub fn contador_fivem_desligar() -> Result<crate::plataforma::contador_fivem::Es
 
 /// O FOV de primeira pessoa do FiveM (`profile_fpsFieldOfView` no fivem.cfg). `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn fov_fivem() -> Result<crate::plataforma::fov_fivem::Painel, String> {
     #[cfg(target_os = "windows")]
     return Ok(crate::plataforma::fov_fivem::painel());
@@ -279,6 +293,7 @@ pub fn fov_fivem() -> Result<crate::plataforma::fov_fivem::Painel, String> {
 
 /// Grava a posição do FOV (agora, ou quando o FiveM fechar), guardando a de antes. `EXIGEM_LICENCA`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn fov_fivem_definir(posicao: u8) -> Result<crate::plataforma::fov_fivem::Painel, String> {
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
@@ -292,6 +307,7 @@ pub fn fov_fivem_definir(posicao: u8) -> Result<crate::plataforma::fov_fivem::Pa
 
 /// Devolve o FOV de antes. `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn fov_fivem_devolver() -> Result<crate::plataforma::fov_fivem::Painel, String> {
     #[cfg(target_os = "windows")]
     return crate::plataforma::fov_fivem::pedir(None);

@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O FiveM no destaque do jogo (trazido da interface antiga, `src/main.ts`): as pastas de cache com o que cada uma
   // custa apagar (nunca o perfil, nunca com o FiveM aberto), os crashes com as pistas — mesmo defeito, pool cheio do
   // servidor, memória no limite, já acontecia antes do Otimiza — e a nota do CitizenFX.ini.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
   import GraficosGta from "./GraficosGta.svelte";
 
   type Pasta = { id: string; name: string; path: string; bytes: number; formatted: string; cleanable: boolean; explanation: string; tradeoff: string | null };
@@ -43,9 +44,9 @@
       return;
     }
     const [r, c, x] = await Promise.allSettled([
-      invoke<Relatorio>("analyze_fivem"),
-      invoke<Crashes>("crashes_do_jogo"),
-      invoke<CitizenFx>("analyze_citizenfx"),
+      como<Relatorio>(commands.analyzeFivem()),
+      como<Crashes>(commands.crashesDoJogo()),
+      como<CitizenFx>(commands.analyzeCitizenfx()),
     ]);
     rel = r.status === "fulfilled" ? r.value : null;
     crashes = c.status === "fulfilled" ? c.value : null;
@@ -59,7 +60,7 @@
     limpando = p.id;
     recado = null;
     try {
-      const r = noTauri ? await invoke<{ freed_mb: number; message: string }>("clean_fivem", { id: p.id }) : { message: `Demonstração: ${p.formatted} liberados.` };
+      const r = noTauri ? await como<{ freed_mb: number; message: string }>(commands.cleanFivem(p.id)) : { message: `Demonstração: ${p.formatted} liberados.` };
       recado = r.message;
       await carregar();
     } catch (e) {

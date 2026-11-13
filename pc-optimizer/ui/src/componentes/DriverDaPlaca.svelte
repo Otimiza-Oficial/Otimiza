@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O driver da placa de vídeo (trazido da interface antiga: `src/main.ts`, ajustes da NVIDIA, perfis e limitador, e
   // `src/v33/app.ts`, AMD e Intel). Só aparece o que o driver respondeu: botão que o driver recusaria é teatro. Cada
   // ajuste entra no histórico e se desfaz sozinho. O driver só grava com o Otimiza como administrador.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri, ponte } from "../lib/ponte";
+    import { noTauri, ponte } from "../lib/ponte";
 
   type Resultado = { id: string; name: string; success: boolean; applied: boolean; message: string };
   type AjusteNvidia = { id: string; titulo: string; explicacao: string; historico: string; aplicado: boolean };
@@ -63,23 +64,23 @@
     admin = await ponte.administrador().catch(() => null);
     try {
       if (fabricante === "Nvidia") {
-        nvidia = noTauri ? await invoke<PainelNvidia>("ajustes_do_driver_nvidia") : structuredClone(demoNvidia);
+        nvidia = noTauri ? await como<PainelNvidia>(commands.ajustesDoDriverNvidia()) : structuredClone(demoNvidia);
         nota = nvidia.nota;
         linhas = nvidia.estado !== "Disponivel" ? [] : nvidia.ajustes.map((a) => ({
           titulo: a.titulo,
           texto: a.explicacao,
           ligado: a.aplicado,
           porVoce: false,
-          acao: () => (a.aplicado ? ponte.desfazer(a.historico) : invoke<Resultado>("aplicar_ajuste_nvidia", { opcao: a.id })),
+          acao: () => (a.aplicado ? ponte.desfazer(a.historico) : como<Resultado>(commands.aplicarAjusteNvidia(a.id))),
         }));
       } else if (fabricante === "Amd") {
-        const p = noTauri ? await invoke<PainelAmd>("driver_amd") : ({ estado: "NaoCarregou", nota: "Demonstração: sem placa AMD.", ajustes: null, aplicados: [] } as PainelAmd);
+        const p = noTauri ? await como<PainelAmd>(commands.driverAmd()) : ({ estado: "NaoCarregou", nota: "Demonstração: sem placa AMD.", ajustes: null, aplicados: [] } as PainelAmd);
         nota = p.nota;
         const l: Linha[] = [];
         const item = (valor: boolean | null | undefined, id: string, titulo: string, texto: string) => {
           if (valor === null || valor === undefined) return;
           const meu = p.aplicados.includes(id);
-          l.push({ titulo, texto, ligado: !!valor, porVoce: !!valor && !meu, acao: () => (meu ? ponte.desfazer(id) : invoke<Resultado>("aplicar_ajuste_amd", { opcao: id })) });
+          l.push({ titulo, texto, ligado: !!valor, porVoce: !!valor && !meu, acao: () => (meu ? ponte.desfazer(id) : como<Resultado>(commands.aplicarAjusteAmd(id))) });
         };
         if (p.estado === "Disponivel" && p.ajustes) {
           item(p.ajustes.anti_lag, "amd-antilag", "Radeon Anti-Lag", "Menos atraso quando a placa está no limite.");
@@ -88,7 +89,7 @@
         }
         linhas = l;
       } else if (fabricante === "Intel") {
-        const p = noTauri ? await invoke<PainelIntel>("driver_intel") : ({ estado: "NaoCarregou", nota: "Demonstração: sem placa Intel.", ajustes: null, aplicados: [] } as PainelIntel);
+        const p = noTauri ? await como<PainelIntel>(commands.driverIntel()) : ({ estado: "NaoCarregou", nota: "Demonstração: sem placa Intel.", ajustes: null, aplicados: [] } as PainelIntel);
         nota = p.nota;
         if (p.estado === "Disponivel" && p.ajustes) {
           const meu = p.aplicados.includes("intel-latencia");
@@ -98,7 +99,7 @@
             texto: "Menos atraso entre o clique e a tela.",
             ligado,
             porVoce: ligado && !meu,
-            acao: () => (meu ? ponte.desfazer("intel-latencia") : invoke<Resultado>("aplicar_ajuste_intel", { opcao: "intel-latencia" })),
+            acao: () => (meu ? ponte.desfazer("intel-latencia") : como<Resultado>(commands.aplicarAjusteIntel("intel-latencia"))),
           }];
         } else linhas = [];
       } else {
@@ -134,7 +135,7 @@
     // Um de cada vez, parando no primeiro que falhar: metade de um perfil não é nada.
     for (const id of ids.filter((x) => !ligados.has(x))) {
       try {
-        if (noTauri) await invoke<Resultado>("aplicar_ajuste_nvidia", { opcao: id });
+        if (noTauri) await como<Resultado>(commands.aplicarAjusteNvidia(id));
       } catch (e) {
         recado = String(e);
         ocupado = false;
@@ -148,12 +149,12 @@
   }
 
   async function limitar() {
-    const jogo = noTauri ? await invoke<{ executavel: string } | null>("jogo_aberto").catch(() => null) : { executavel: "FiveM_GTAProcess.exe" };
+    const jogo = noTauri ? await como<{ executavel: string } | null>(commands.jogoAberto()).catch(() => null) : { executavel: "FiveM_GTAProcess.exe" };
     if (!jogo) {
       recado = "Abra o jogo e volte aqui: o limite vai no perfil do executável que estiver rodando.";
       return;
     }
-    await agir(() => (noTauri ? invoke<Resultado>("limitar_fps_nvidia", { executavel: jogo.executavel, fps: limite }) : Promise.resolve({ message: `${jogo.executavel} limitado a ${limite} FPS pelo driver.` })));
+    await agir(() => (noTauri ? como<Resultado>(commands.limitarFpsNvidia(jogo.executavel, limite)) : Promise.resolve({ message: `${jogo.executavel} limitado a ${limite} FPS pelo driver.` })));
   }
 </script>
 

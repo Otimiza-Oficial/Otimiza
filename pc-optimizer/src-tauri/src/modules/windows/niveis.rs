@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use super::catalog::{entra_no_lote, OptimizationSpec, CATALOG, FORA_DO_LOTE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Nivel {
     Seguro,
     Competitivo,

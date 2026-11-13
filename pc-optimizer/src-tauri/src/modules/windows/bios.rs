@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LeituraBios"))]
 pub struct Leitura {
     pub placa_mae: Option<String>,
     pub versao_da_bios: Option<String>,
@@ -18,6 +20,7 @@ pub struct Leitura {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Fase {
     UsarOQueTem = 1,
     Documentado = 2,
@@ -70,6 +73,8 @@ impl Fase {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PassoBios"))]
 pub struct Passo {
     pub id: String,
     pub fase: Fase,

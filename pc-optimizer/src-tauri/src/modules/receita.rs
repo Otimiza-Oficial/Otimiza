@@ -21,6 +21,8 @@ use crate::modules::provaalternada::{Desfecho as DesfechoDaProva, Resultado as P
 
 /// Os perfis gráficos do FiveM/GTA V (`config_jogo_<perfil>`), do mais leve ao que só tira o limite.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PerfilDoJogoReceita"))]
 pub enum PerfilDoJogo {
     /// Só tira o limite de FPS: não deixa o gráfico mais leve.
     SemTeto,
@@ -54,6 +56,7 @@ impl PerfilDoJogo {
 /// O que o Otimiza sabe aplicar e provar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "tipo", content = "perfil")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Estrategia {
     PlanoOtimiza,
     PerfilGrafico(PerfilDoJogo),
@@ -62,6 +65,7 @@ pub enum Estrategia {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Resultado {
     Ganhou,
     Piorou,
@@ -69,6 +73,7 @@ pub enum Resultado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Lembranca {
     pub estrategia: Estrategia,
     pub jogo: String,
@@ -79,6 +84,8 @@ pub struct Lembranca {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ContextoReceita"))]
 pub enum Contexto {
     /// Driver e Windows lidos e iguais aos de agora.
     Igual,
@@ -88,6 +95,7 @@ pub enum Contexto {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "estado")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Oferta {
     Oferecer,
     /// Já piorou este jogo nesta máquina.
@@ -107,6 +115,7 @@ pub enum Oferta {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum ComoProvar {
     /// Rodadas alternadas no jogo (área Otimizar).
     ProvaNoJogo,
@@ -117,6 +126,8 @@ pub enum ComoProvar {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PassoReceita"))]
 pub struct Passo {
     pub ajuste: Ajuste,
     /// `None`: ajuste que o Otimiza não aplica (limite de FPS, refrigeração, SSD, resolução).
@@ -136,6 +147,7 @@ pub struct Aplicados {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Receita {
     /// O diagnóstico inteiro, com as hipóteses, para a tela não pedir duas vezes.
     pub diagnostico: Diagnostico,

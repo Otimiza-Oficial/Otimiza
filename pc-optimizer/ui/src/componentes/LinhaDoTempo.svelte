@@ -31,11 +31,12 @@
 </script>
 
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O que mudou neste jogo (trazido da interface 3.6, `desenharLinhaDoJogo`): as partidas medidas, o que trocou em volta
   // da máquina (driver, Windows, placa, BIOS, versão do Otimiza) e o que o Otimiza mudou no meio. Estar no mesmo período
   // não prova que foi a causa: a queda só é dita quando as partidas de antes e de depois passam da margem de erro.
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   let { jogo }: { jogo: string } = $props();
 
@@ -55,7 +56,7 @@
     const nome = jogo;
     linha = undefined;
     todas ??= noTauri
-      ? invoke<LinhaDoJogo[]>("o_que_mudou").catch((e) => {
+      ? como<LinhaDoJogo[]>(commands.oQueMudou()).catch((e) => {
           erro = String(e);
           todas = null;
           return null;

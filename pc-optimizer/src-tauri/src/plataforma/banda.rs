@@ -54,6 +54,7 @@ const CHAVE_DO_UPDATE: &str = r"SOFTWARE\Policies\Microsoft\Windows\DeliveryOpti
 const VALOR_DO_UPDATE: &str = "DOMaxBackgroundDownloadBandwidth";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Categoria {
     /// OneDrive, Google Drive, Dropbox: sobem arquivo sem a pessoa ver.
     Nuvem,
@@ -118,6 +119,8 @@ pub struct Processo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AlvoBanda"))]
 pub struct Alvo {
     /// O nome do executável em minúsculas: é a condição da política (vale para todas as cópias dele).
     pub exe: String,
@@ -126,6 +129,7 @@ pub struct Alvo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Aviso {
     pub exe: String,
     pub recebido_bps: u64,
@@ -133,6 +137,8 @@ pub struct Aviso {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DecisaoBanda"))]
 pub struct Decisao {
     pub limitar: Vec<Alvo>,
     /// Baixando muito e fora do alcance do Windows: só se diz quem é.
@@ -342,6 +348,8 @@ pub struct ResumoDePicos {
 
 #[allow(dead_code)] // fronteira: o comando e o relatório da sessão ligam (proposta no commit)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VereditoBanda"))]
 pub enum Veredito {
     Melhorou,
     Igual,
@@ -432,6 +440,8 @@ pub fn comparar_picos(antes: &[Amostra], depois: &[Amostra]) -> ComparacaoDePico
 // Estado em disco.
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AplicadoBanda"))]
 pub struct Aplicado {
     pub jogo: String,
     /// Nomes das políticas criadas (anotados ANTES de criar).
@@ -441,6 +451,8 @@ pub struct Aplicado {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoBanda"))]
 pub struct Estado {
     /// Vem desligado: exige administrador e muda o comportamento da nuvem; a pessoa liga.
     pub ligado: bool,

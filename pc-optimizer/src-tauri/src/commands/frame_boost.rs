@@ -142,6 +142,7 @@ pub struct FramegenComparacao {
 /// O Frame Boost do jogo aberto: o gerador que o automático escolhe, os multiplicadores que cabem no monitor dele, a
 /// estimativa (ESTIMADA) antes de ligar e o FPS na tela (MEDIDO) depois. `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn frame_boost_painel() -> Result<crate::plataforma::frameboost::Painel, String> {
     #[cfg(target_os = "windows")]
     return Ok(crate::plataforma::frameboost::painel());
@@ -152,8 +153,8 @@ pub fn frame_boost_painel() -> Result<crate::plataforma::frameboost::Painel, Str
 /// `EXIGEM_LICENCA`: liga o gerador do Otimiza no jogo aberto (o anticheat é conferido antes) e trava o FPS base
 /// (`base_do_jogo`), no histórico de mudanças do app.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn frame_boost_ligar(
-    app: tauri::AppHandle,
     multiplicador: u8,
     sem_limite: Option<bool>,
     escala: Option<crate::modules::windows::geracao::escala::Nivel>,
@@ -161,6 +162,7 @@ pub async fn frame_boost_ligar(
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
     crate::modules::licenca::exigir()?;
+    let app = crate::aplicativo()?;
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
@@ -188,6 +190,7 @@ pub async fn frame_boost_ligar(
 
 /// O mesmo pedaço do quadro do jogo (antes de ampliar) e da imagem ampliada pelo FSR, para a tela comparar.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ComparacaoNaTela {
     /// `data:image/bmp;base64,...`
     pub jogo: String,
@@ -209,6 +212,7 @@ pub fn escala_nitidez(stops: f32) -> f32 {
 
 /// Pede a comparação da escala: o próximo quadro real com o jogo na frente. `LIVRES`: só lê a tela.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn escala_pedir_comparacao() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -226,6 +230,7 @@ pub fn escala_pedir_comparacao() -> Result<(), String> {
 
 /// A comparação pedida, se o gerador já a tirou. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn escala_comparacao() -> Option<ComparacaoNaTela> {
     #[cfg(target_os = "windows")]
     {
@@ -250,6 +255,7 @@ pub fn escala_comparacao() -> Option<ComparacaoNaTela> {
 
 /// Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn frame_boost_destravar_base(
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
@@ -278,6 +284,7 @@ pub async fn frame_boost_destravar_base(
 
 /// `EXIGEM_LICENCA`: volta a travar o FPS base do jogo aberto (desfaz o Destravar), com o Frame Boost ligado.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn frame_boost_travar_base(
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
@@ -300,6 +307,7 @@ pub async fn frame_boost_travar_base(
 
 /// `LIVRES`: desligar nunca depende de licença.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn frame_boost_desligar() -> Result<crate::plataforma::frameboost::Painel, String> {
     #[cfg(target_os = "windows")]
     return crate::plataforma::frameboost::desligar();
@@ -309,6 +317,7 @@ pub fn frame_boost_desligar() -> Result<crate::plataforma::frameboost::Painel, S
 
 /// Seis segundos de PresentMon no jogo: o FPS na tela com AFMF ou Smooth Motion, medido. `LIVRES`: só mede.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn frame_boost_medir() -> Result<crate::plataforma::frameboost::Painel, String> {
     #[cfg(target_os = "windows")]
     return crate::plataforma::frameboost::medir();
@@ -318,6 +327,7 @@ pub fn frame_boost_medir() -> Result<crate::plataforma::frameboost::Painel, Stri
 
 /// Mede o jogo aberto e devolve o plano de ritmo estável (o teto que deixa o jogo liso). `LIVRES`: só mede.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn jogo_liso_medir() -> Result<crate::plataforma::jogo_liso::Plano, String> {
     #[cfg(target_os = "windows")]
     {
@@ -354,6 +364,7 @@ pub async fn jogo_liso_depois_da_partida(
 
 /// Aplica o teto de FPS estável no perfil do jogo (guardando o anterior). Vale ao reabrir o jogo. `EXIGEM_LICENCA`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub async fn jogo_liso_aplicar(
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::jogo_liso::Plano, String> {
@@ -376,6 +387,7 @@ pub async fn jogo_liso_aplicar(
 
 /// Quem ocupa a memória agora (o jogo aberto nunca entra). `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn memoria_para_o_jogo() -> Result<crate::plataforma::memoria_jogo::Memoria, String> {
     #[cfg(target_os = "windows")]
     {
@@ -388,6 +400,7 @@ pub fn memoria_para_o_jogo() -> Result<crate::plataforma::memoria_jogo::Memoria,
 
 /// Fecha o programa que a pessoa escolheu na lista. `EXIGEM_LICENCA`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn memoria_fechar(nome: String) -> Result<crate::plataforma::memoria_jogo::Memoria, String> {
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]

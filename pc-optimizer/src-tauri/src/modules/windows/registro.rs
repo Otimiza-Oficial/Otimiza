@@ -9,6 +9,7 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Risco {
     /// Não muda o que a pessoa vê, e volta inteiro.
     Baixo,
@@ -19,6 +20,7 @@ pub enum Risco {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Escopo {
     /// Configuração do Windows.
     Windows,
@@ -31,6 +33,7 @@ pub enum Escopo {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Alteracao {
     pub id: &'static str,
     pub titulo: &'static str,

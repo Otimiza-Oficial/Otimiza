@@ -3,10 +3,10 @@
 // (`contrato.rs` roda com o MockRuntime): aqui vão por `invoke`, com os tipos escritos à mão — os mesmos da 3.3, que já
 // conversavam com esses comandos. Fora do Tauri, dados de demonstração.
 
-import { invoke } from "@tauri-apps/api/core";
 import { noTauri } from "./ponte";
 import { commands } from "./tipos";
 import type { Mira } from "./mira";
+import { como } from "./contrato";
 
 export type Suporte =
   | { estado: "Suportado" }
@@ -239,16 +239,16 @@ let coresDemo: EstadoDasCores = {
 // ── Pontes ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 export const ferramentas = {
   frameBoost: (): Promise<PainelFrameBoost> =>
-    noTauri ? invoke<PainelFrameBoost>("frame_boost_painel") : Promise.resolve(structuredClone(fbDemo)),
+    noTauri ? como<PainelFrameBoost>(commands.frameBoostPainel()) : Promise.resolve(structuredClone(fbDemo)),
   /** `multiplicador` 0 = Auto (enche o monitor, ou o `alvo`); 1 = só escala (vale com `escala`). */
   frameBoostLigar: (multiplicador: number, escala: NivelDeEscala | null, alvo: number | null = null): Promise<PainelFrameBoost> =>
     noTauri
-      ? invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite: false, escala, alvo })
+      ? como<PainelFrameBoost>(commands.frameBoostLigar(multiplicador, false, escala, alvo))
       : Promise.resolve(fbLigadoDemo(multiplicador, escala)),
   /** Nitidez da escala (FB6), em "stops" do FSR: 0 a mais forte, 2 a mais suave. Vale no próximo quadro. */
   escalaNitidez: async (stops: number): Promise<number> => (noTauri ? ((await commands.escalaNitidez(stops)) ?? stops) : stops),
   frameBoostDesligar: (): Promise<PainelFrameBoost> => {
-    if (noTauri) return invoke<PainelFrameBoost>("frame_boost_desligar");
+    if (noTauri) return como<PainelFrameBoost>(commands.frameBoostDesligar());
     fbDemo = {
       ...fbDemo,
       ativo: null,
@@ -257,21 +257,21 @@ export const ferramentas = {
     return Promise.resolve(structuredClone(fbDemo));
   },
   frameBoostDestravarBase: (): Promise<PainelFrameBoost> =>
-    noTauri ? invoke<PainelFrameBoost>("frame_boost_destravar_base") : Promise.resolve(structuredClone(fbDemo)),
+    noTauri ? como<PainelFrameBoost>(commands.frameBoostDestravarBase()) : Promise.resolve(structuredClone(fbDemo)),
   frameBoostTravarBase: (): Promise<PainelFrameBoost> =>
-    noTauri ? invoke<PainelFrameBoost>("frame_boost_travar_base") : Promise.resolve(structuredClone(fbDemo)),
+    noTauri ? como<PainelFrameBoost>(commands.frameBoostTravarBase()) : Promise.resolve(structuredClone(fbDemo)),
   frameBoostMedir: (): Promise<PainelFrameBoost> =>
-    noTauri ? invoke<PainelFrameBoost>("frame_boost_medir") : Promise.resolve(structuredClone(fbDemo)),
+    noTauri ? como<PainelFrameBoost>(commands.frameBoostMedir()) : Promise.resolve(structuredClone(fbDemo)),
 
   /** O jogo aberto e o id com que os perfis (cores) são guardados: o do catálogo, ou o executável em minúsculas. */
   jogoAberto: async (): Promise<{ id: string; nome: string } | null> => {
     if (!noTauri) return { id: "fivem", nome: "FiveM" };
-    const j = await invoke<{ nome: string; executavel: string; no_catalogo: boolean; perfil: { id: string } } | null>("jogo_aberto");
+    const j = await como<{ nome: string; executavel: string; no_catalogo: boolean; perfil: { id: string } } | null>(commands.jogoAberto());
     return j ? { id: j.no_catalogo ? j.perfil.id : j.executavel.toLowerCase(), nome: j.nome } : null;
   },
   configDosJogos: (): Promise<ConfigDoJogo[]> =>
     noTauri
-      ? invoke("config_motor_painel")
+      ? commands.configMotorPainel()
       : Promise.resolve([
           {
             id: "cs2", nome: "Counter-Strike 2", arquivo: "cs2_video.txt", aberto: false, ilegivel: null, ficha: "", historico: "config:cs2", aplicado: false,
@@ -283,10 +283,10 @@ export const ferramentas = {
           { id: "fortnite", nome: "Fortnite", arquivo: null, aberto: false, ilegivel: null, ficha: "", historico: "config:fortnite", aplicado: false, previsao: [] },
         ]),
   /** Grava o perfil leve no arquivo do jogo (fechado). Desfaz pelo histórico, byte a byte. */
-  configAplicar: (jogo: string): Promise<string[]> => (noTauri ? invoke("config_motor_aplicar", { jogo }) : Promise.resolve([])),
+  configAplicar: (jogo: string): Promise<string[]> => (noTauri ? commands.configMotorAplicar(jogo) : Promise.resolve([])),
   jogoLisoMedir: (): Promise<PlanoJogoLiso> =>
     noTauri
-      ? invoke("jogo_liso_medir")
+      ? como<PlanoJogoLiso>(commands.jogoLisoMedir())
       : new Promise((r) =>
           setTimeout(
             () =>
@@ -299,10 +299,10 @@ export const ferramentas = {
             900,
           ),
         ),
-  jogoLisoAplicar: (): Promise<PlanoJogoLiso> => (noTauri ? invoke("jogo_liso_aplicar") : Promise.reject("Demonstração: nada é gravado.")),
+  jogoLisoAplicar: (): Promise<PlanoJogoLiso> => (noTauri ? como<PlanoJogoLiso>(commands.jogoLisoAplicar()) : Promise.reject("Demonstração: nada é gravado.")),
   memoriaParaOJogo: (): Promise<MemoriaParaOJogo> =>
     noTauri
-      ? invoke("memoria_para_o_jogo")
+      ? como<MemoriaParaOJogo>(commands.memoriaParaOJogo())
       : Promise.resolve({
           total_gb: 16, livre_gb: 2.1,
           pesados: [
@@ -311,56 +311,56 @@ export const ferramentas = {
           ],
         }),
   memoriaFechar: (nome: string): Promise<MemoriaParaOJogo> =>
-    noTauri ? invoke("memoria_fechar", { nome }) : Promise.resolve({ total_gb: 16, livre_gb: 4.4, pesados: [] }),
+    noTauri ? como<MemoriaParaOJogo>(commands.memoriaFechar(nome)) : Promise.resolve({ total_gb: 16, livre_gb: 4.4, pesados: [] }),
   miraEstado: (): Promise<{ ligada: boolean; jogo: string | null }> =>
-    noTauri ? invoke("mira_estado") : Promise.resolve({ ligada: miraDemo, jogo: miraDemo ? "FiveM" : null }),
+    noTauri ? commands.miraEstado() : Promise.resolve({ ligada: miraDemo, jogo: miraDemo ? "FiveM" : null }),
   /** Recusa com "CONFIRMAR:<motivo>" quando o anticheat pede cuidado (servidor de RP): aí liga com `confirmado`. */
   miraLigar: async (mira: Mira, confirmado: boolean): Promise<{ ligada: boolean; jogo: string | null }> => {
-    if (noTauri) return invoke("mira_ligar", { mira, confirmado });
+    if (noTauri) return commands.miraLigar(mira, confirmado);
     miraDemo = true;
     return { ligada: true, jogo: "FiveM" };
   },
-  miraAtualizar: (mira: Mira): Promise<void> => (noTauri ? invoke("mira_atualizar", { mira }) : Promise.resolve()),
+  miraAtualizar: (mira: Mira): Promise<void> => (noTauri ? commands.miraAtualizar(mira).then(() => {}) : Promise.resolve()),
   miraDesligar: async (): Promise<void> => {
-    if (noTauri) return invoke("mira_desligar");
+    if (noTauri) return commands.miraDesligar().then(() => {});
     miraDemo = false;
   },
   /** Os comandos do console do CS2 que desenham esta mira no próprio jogo. */
   miraCs2: (mira: Mira): Promise<string> =>
-    noTauri ? invoke("mira_cs2", { mira }) : Promise.resolve("cl_crosshairstyle 4; cl_crosshairsize 2.5"),
+    noTauri ? commands.miraCs2(mira) : Promise.resolve("cl_crosshairstyle 4; cl_crosshairsize 2.5"),
 
-  fovFivem: (): Promise<FovFivem> => (noTauri ? invoke("fov_fivem") : Promise.resolve({ ...fovDemo })),
+  fovFivem: (): Promise<FovFivem> => (noTauri ? commands.fovFivem() : Promise.resolve({ ...fovDemo })),
   fovFivemDefinir: async (posicao: number): Promise<FovFivem> => {
-    if (noTauri) return invoke("fov_fivem_definir", { posicao });
+    if (noTauri) return commands.fovFivemDefinir(posicao);
     fovDemo = { ...fovDemo, atual: posicao, alterado: true };
     return { ...fovDemo };
   },
   fovFivemDevolver: async (): Promise<FovFivem> => {
-    if (noTauri) return invoke("fov_fivem_devolver");
+    if (noTauri) return commands.fovFivemDevolver();
     fovDemo = { ...fovDemo, atual: 5, alterado: false };
     return { ...fovDemo };
   },
 
-  contadorFivem: (): Promise<ContadorFivem> => (noTauri ? invoke("contador_fivem_estado") : Promise.resolve({ ...contadorDemo })),
+  contadorFivem: (): Promise<ContadorFivem> => (noTauri ? commands.contadorFivemEstado() : Promise.resolve({ ...contadorDemo })),
   contadorFivemDefinir: async (ligado: boolean): Promise<ContadorFivem> => {
-    if (noTauri) return invoke(ligado ? "contador_fivem_ligar" : "contador_fivem_desligar");
+    if (noTauri) return como<ContadorFivem>(ligado ? commands.contadorFivemLigar() : commands.contadorFivemDesligar());
     contadorDemo = { ...contadorDemo, ligado };
     return { ...contadorDemo };
   },
 
-  coresEstado: (): Promise<EstadoDasCores> => (noTauri ? invoke("cores_estado") : Promise.resolve(structuredClone(coresDemo))),
+  coresEstado: (): Promise<EstadoDasCores> => (noTauri ? commands.coresEstado() : Promise.resolve(structuredClone(coresDemo))),
   coresAplicar: async (ajuste: AjusteDeCor): Promise<CaminhoDasCores> => {
-    if (noTauri) return invoke("cores_aplicar", { ajuste });
+    if (noTauri) return commands.coresAplicar(ajuste);
     coresDemo = { ...coresDemo, aplicado: true, saturacao_atual: ajuste.saturacao };
     return coresDemo.caminho;
   },
   coresRestaurar: async (): Promise<void> => {
-    if (noTauri) return invoke("cores_restaurar");
+    if (noTauri) return commands.coresRestaurar().then(() => {});
     coresDemo = { ...coresDemo, aplicado: false, saturacao_atual: 50 };
   },
   /** `ajuste` null tira o perfil do jogo. */
   coresSalvarPerfil: async (jogo: string | null, ajuste: AjusteDeCor | null, soComJogo: boolean): Promise<EstadoDasCores["perfis"]> => {
-    if (noTauri) return invoke("cores_salvar_perfil", { jogo, ajuste, soComJogo });
+    if (noTauri) return commands.coresSalvarPerfil(jogo, ajuste, soComJogo);
     const por_jogo = { ...coresDemo.perfis.por_jogo };
     if (jogo && ajuste) por_jogo[jogo] = ajuste;
     else if (jogo) delete por_jogo[jogo];

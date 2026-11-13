@@ -18,6 +18,7 @@ pub const JANELA_S: i64 = 48 * 3600;
 pub const ESTAVEL_ANTES_S: i64 = 30 * 24 * 3600;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Queda {
     Desligamento,
     TelaAzul,
@@ -37,6 +38,7 @@ impl Queda {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ocorrencia {
     /// Segundos desde 1970.
     pub quando: i64,
@@ -44,6 +46,7 @@ pub struct Ocorrencia {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Aplicado {
     pub id: String,
     pub nome: String,

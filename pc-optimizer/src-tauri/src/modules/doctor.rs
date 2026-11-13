@@ -13,6 +13,7 @@ use crate::modules::windows::presentmon::{Apresentacao, GargaloProvavel, Resumo}
 use crate::modules::windows::tetos::Teto;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum TipoDeCausa {
     /// O processador monta os quadros no limite; a placa sobra.
     Processador,
@@ -31,6 +32,8 @@ pub enum TipoDeCausa {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConfiancaDoctor"))]
 pub enum Confianca {
     Alta,
     Media,
@@ -40,6 +43,8 @@ pub enum Confianca {
 
 /// Ajustes conhecidos, pelo que atacam. A receita (item 3) é quem escolhe e prova.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AjusteDoctor"))]
 pub enum Ajuste {
     PerfilGraficoMaisLeve,
     MenosCargaNoProcessador,
@@ -54,6 +59,7 @@ pub enum Ajuste {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Causa {
     pub tipo: TipoDeCausa,
     pub confianca: Confianca,
@@ -66,6 +72,8 @@ pub struct Causa {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DiagnosticoDoctor"))]
 pub struct Diagnostico {
     pub jogo: Option<String>,
     /// Janelas da partida medidas pelo PresentMon (as outras não dizem o gargalo).

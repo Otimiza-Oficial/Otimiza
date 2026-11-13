@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // A área Latência: o Caçador de DPC. Mede por alguns segundos qual driver segura o processador (o que o LatencyMon
   // faz) e diz o que fazer com o pior. Só mede: nada é alterado. A captura de kernel exige administrador, e o Rust
   // devolve isso como resultado, não como erro.
 
   import { onDestroy, onMount } from "svelte";
   import TesteDeReflexo from "./TesteDeReflexo.svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri, ponte, type CapturaDpc, type DriverMedido, type TaxaDoMouse } from "../lib/ponte";
+    import { noTauri, ponte, type CapturaDpc, type DriverMedido, type TaxaDoMouse } from "../lib/ponte";
 
   const DURACOES = [10, 30, 60] as const;
   const NOME_DO_NIVEL = { Saudavel: "Saudável", Atencao: "Atenção", Pico: "Pico" } as const;
@@ -51,7 +52,7 @@
   onMount(() => {
     ponte.administrador().then((a) => (admin = a)).catch(() => (admin = null));
     if (noTauri)
-      invoke<{ achados: AchadoDoMouse[] }>("caminho_do_mouse", { intervalosUs: [] })
+      como<{ achados: AchadoDoMouse[] }>(commands.caminhoDoMouse([]))
         .then((c) => (ponteiro = c.achados))
         .catch(() => (ponteiro = null));
     else ponteiro = [];

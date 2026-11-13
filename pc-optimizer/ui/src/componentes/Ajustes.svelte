@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // A área Ajustes: o FPS por cima do jogo (sobreposição), o que o Otimiza faz sozinho, a licença, a versão e o
   // relatório de suporte. O tema (claro/escuro) mora na barra de cima, onde a referência põe.
@@ -7,8 +9,7 @@
   import { ABRIR_FEEDBACK } from "./PedidoDeFeedback.svelte";
   import AtivarLicenca from "./AtivarLicenca.svelte";
   import { ABRIR_BOAS_VINDAS } from "./BoasVindas.svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
   import {
     ponte,
     type AvisoDeVersao,
@@ -43,9 +44,9 @@
   async function alternarSmoothMotion() {
     if (!noTauri || smoothMotion === null) return;
     try {
-      const atual = await invoke<Record<string, unknown>>("flags_ler");
+      const atual = await como<Record<string, unknown>>(commands.flagsLer());
       const ligado = !atual.smooth_motion_drs;
-      await invoke("flags_gravar", { flags: { ...atual, smooth_motion_drs: ligado } });
+      await commands.flagsGravar({ ...atual, smooth_motion_drs: ligado });
       smoothMotion = ligado;
     } catch (e) {
       recado = { tom: "perigo", texto: String(e) };
@@ -137,12 +138,12 @@
     ponte.sobreposicao().then((s) => (sobreposicao = s)).catch(() => {});
     ponte.preferencias().then((p) => (preferencias = p)).catch(() => {});
     ponte.licenca().then((l) => (licenca = l)).catch(() => {});
-    if (noTauri) invoke<NonNullable<typeof feedback>>("feedback_estado").then((f) => (feedback = f)).catch(() => {});
+    if (noTauri) como<NonNullable<typeof feedback>>(commands.feedbackEstado()).then((f) => (feedback = f)).catch(() => {});
     ponte
       .hardwareUltimo()
       .then((h) => {
         nvidia = h?.placa.fabricante === "Nvidia";
-        if (nvidia && noTauri) invoke<{ smooth_motion_drs: boolean }>("flags_ler").then((f) => (smoothMotion = f.smooth_motion_drs)).catch(() => {});
+        if (nvidia && noTauri) como<{ smooth_motion_drs: boolean }>(commands.flagsLer()).then((f) => (smoothMotion = f.smooth_motion_drs)).catch(() => {});
       })
       .catch(() => {});
     ponte.versao().then((v) => (versao = v)).catch(() => {});

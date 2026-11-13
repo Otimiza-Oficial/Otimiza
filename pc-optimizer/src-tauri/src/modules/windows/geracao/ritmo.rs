@@ -277,6 +277,7 @@ impl Giro {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Retangulo {
     pub x: i32,
     pub y: i32,
@@ -339,6 +340,7 @@ pub fn niveis(largura: i32, altura: i32) -> ((u32, u32), (u32, u32), (u32, u32))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Contadores {
     pub reais: u64,
     pub gerados: u64,

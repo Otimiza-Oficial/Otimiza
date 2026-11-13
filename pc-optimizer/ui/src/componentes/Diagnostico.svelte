@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // Diagnóstico (trazido da interface antiga, `src/main.ts` e `src/travadas.ts`): "pronto para jogar?" antes da
   // partida, "por que meu FPS está baixo?" com os suspeitos medidos (o Otimiza é o PRIMEIRO suspeito quando houve
   // regressão), a investigação de travadas com o jogo aberto e as quedas de FPS depois de atualizar driver ou Windows.
   // Suspeito ausente não quer dizer máquina limpa: as lacunas aparecem escritas.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Suspeito = { id: string; titulo: string; medido: string; porque: string; como_confirmar: string };
   type Investigacao = { suspeitos: Suspeito[]; lacunas: string[] };
@@ -34,7 +35,7 @@
     erro = null;
     try {
       teste = noTauri
-        ? await invoke("testar_causa_da_travada", { processo: travadas.teste_possivel })
+        ? await commands.testarCausaDaTravada(travadas.teste_possivel)
         : { processo: travadas.teste_possivel, mantido: true, aviso: null };
     } catch (e) {
       erro = String(e);
@@ -45,7 +46,7 @@
 
   async function devolver() {
     try {
-      const r = noTauri ? await invoke<string | null>("devolver_teste_da_travada") : null;
+      const r = noTauri ? await como<string | null>(commands.devolverTesteDaTravada()) : null;
       teste = null;
       erro = r;
     } catch (e) {
@@ -59,7 +60,7 @@
       quedas = [{ jogo: "FiveM", mudou: { tipo: "Driver", de: "560.94", para: "566.03" }, fps_antes: 92, fps_depois: 78, queda_pct: 15.2 }];
       return;
     }
-    const [p, q] = await Promise.allSettled([invoke<Prontidao>("pronto_para_jogar"), invoke<Deriva[]>("quedas_de_desempenho")]);
+    const [p, q] = await Promise.allSettled([como<Prontidao>(commands.prontoParaJogar()), como<Deriva[]>(commands.quedasDeDesempenho())]);
     pronto = p.status === "fulfilled" ? p.value : null;
     quedas = q.status === "fulfilled" ? q.value : [];
   });
@@ -89,7 +90,7 @@
     erro = null;
     try {
       causas = noTauri
-        ? await invoke<Investigacao>("por_que_o_fps_esta_baixo")
+        ? await como<Investigacao>(commands.porQueOFpsEstaBaixo())
         : { suspeitos: [{ id: "vram", titulo: "Pouca memória de vídeo para servidor de RP", medido: "A placa tem 4 GB e o jogo usou 3,9 GB na última partida.", porque: "Sem memória de vídeo, a textura vem da RAM e o FPS cai conforme o lugar do mapa.", como_confirmar: "Jogue com texturas em Normal e compare a última partida." }], lacunas: ["Sem leitura da temperatura do processador."] };
     } catch (e) {
       erro = String(e);
@@ -103,7 +104,7 @@
     erro = null;
     try {
       travadas = noTauri
-        ? await invoke<Travadas>("investigar_travadas", { segundos: 30 })
+        ? await como<Travadas>(commands.investigarTravadas(30))
         : await new Promise((r) => setTimeout(() => r({ jogo: "FiveM", investigacao: { suspeitos: [], lacunas: [] }, teste_possivel: null, motivo_sem_teste: null }), 1200));
     } catch (e) {
       erro = String(e);

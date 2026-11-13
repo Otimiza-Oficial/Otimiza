@@ -15,6 +15,7 @@ pub const AMOSTRA_PARA_01PCT: usize = 10_000;
 /// RAZÃO sobre a mediana E ATRASO ABSOLUTO: só a razão acusaria todo quadro a 400 FPS; só o absoluto nunca
 /// acusaria nada a 30 FPS. Os ms seguem o quadro de 60 Hz (16,7 ms).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Gravidade {
     Micro,
     Perceptivel,
@@ -44,6 +45,7 @@ pub fn gravidade(intervalo_ms: f64, mediana_ms: f64) -> Option<Gravidade> {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ContagemDeEngasgos {
     pub micro: u32,
     pub perceptivel: u32,
@@ -52,6 +54,7 @@ pub struct ContagemDeEngasgos {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct SaudeDosQuadros {
     pub quadros: usize,
     pub duracao_s: f64,

@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // Ativar a licença, em três passos que dizem o caminho inteiro: o código desta máquina vai para o bot, o bot devolve a
   // chave, a chave é colada aqui (`bot/README.md`). O campo entende a chave como ela chega do Discord e avisa quando
   // colaram o código da máquina no lugar dela. Serve à apresentação (`BoasVindas`) e aos Ajustes.
-  import { invoke } from "@tauri-apps/api/core";
-  import { scale } from "svelte/transition";
+    import { scale } from "svelte/transition";
   import { backOut } from "svelte/easing";
   import { noTauri, ponte, type EstadoDaLicenca } from "../lib/ponte";
   import { lerCampo, limparChave } from "../lib/chave";
@@ -38,7 +39,7 @@
   }
 
   async function abrirDiscord() {
-    const alvo = noTauri ? await invoke<string>("convite_do_discord", { embutido: CONVITE }).catch(() => CONVITE) : CONVITE;
+    const alvo = noTauri ? await como<string>(commands.conviteDoDiscord(CONVITE)).catch(() => CONVITE) : CONVITE;
     if (noTauri) {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
       await openUrl(alvo).catch(() => {});

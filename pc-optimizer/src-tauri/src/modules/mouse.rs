@@ -12,6 +12,8 @@ pub const BARRA_UM_PARA_UM: u32 = 6;
 pub const INTERVALOS_PARA_A_TAXA: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AchadoMouse"))]
 pub enum Achado {
     AceleracaoLigada,
     BarraAbaixoDoMeio,
@@ -66,6 +68,8 @@ impl Achado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CaminhoMouse"))]
 pub struct Caminho {
     /// `None` quando não se leu: absolver o que ninguém olhou é o defeito que este produto não comete.
     pub aceleracao: Option<bool>,
@@ -149,6 +153,7 @@ pub fn taxa_de_varredura(intervalos_us: &[u64]) -> Option<f64> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct AchadoNaTela {
     pub achado: Achado,
     pub titulo: String,

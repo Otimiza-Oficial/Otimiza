@@ -10,6 +10,8 @@ use super::achados::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VereditoVeredito"))]
 pub struct Veredito {
     pub frase: String,
     /// O que foi medido para poder afirmar aquilo.
@@ -29,6 +31,7 @@ pub struct Veredito {
 
 /// Prioridade de um problema. Sempre resolver P0 e P1 primeiro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Prioridade {
     /// Erro de configuração crítico: a máquina está entregando muito menos do
     /// que deveria por um motivo que se corrige (boot limitado, paginação
@@ -86,6 +89,7 @@ pub fn prioridade(a: &Achado) -> Option<Prioridade> {
 
 /// Há desempenho perdido nesta máquina?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Perdido {
     /// Pelo menos um P0/P1 sustentado por medição, histórico ou declaração.
     Sim,
@@ -96,6 +100,7 @@ pub enum Perdido {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Recuperacao {
     pub perdido: Perdido,
     /// (id do achado, prioridade), na ordem em que resolver.

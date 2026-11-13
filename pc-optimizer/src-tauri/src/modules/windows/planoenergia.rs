@@ -282,6 +282,7 @@ pub struct RelatorioDoPlano {
 
 /// `None` é NÃO MEXER, diferente de "mexer para o padrão": protege a autonomia do notebook na bateria.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Alvo {
     pub ac: Option<u32>,
     pub dc: Option<u32>,

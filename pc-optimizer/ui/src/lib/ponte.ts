@@ -5,8 +5,8 @@
 // Fora do Tauri (o navegador do `npm run nova:web`) não há backend: a ponte devolve uma máquina de demonstração e a
 // barra de menu diz isso. Dado de demonstração nunca aparece como se fosse do PC de quem está olhando.
 
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { como } from "./contrato";
 import {
   commands,
   type DiagnosticoDaTela_Serialize,
@@ -152,7 +152,7 @@ export type ContaQueRoda = {
 
 export async function contaQueRoda(): Promise<ContaQueRoda | null> {
   if (!noTauri) return null;
-  return invoke<ContaQueRoda>("conta_que_esta_rodando").catch(() => null);
+  return como<ContaQueRoda>(commands.contaQueEstaRodando()).catch(() => null);
 }
 
 const demo: {

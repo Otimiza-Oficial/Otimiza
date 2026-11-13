@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // A saúde do que foi aplicado (trazida da interface antiga, `src/main.ts`): o que o Windows (ou outro programa)
   // desfez por fora — com "Refazer" —, os ajustes que brigam entre si e por quê, e o Otimiza conferindo o próprio
   // trabalho: o FPS de cada jogo antes e depois. "Sem amostra" é dito como "ainda não dá para dizer", nunca "tudo bem".
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Estado = "Intacto" | "MudouPorFora" | "NaoLeu" | "NaoSeAplicaMais";
   type Vistoria = { itens: { id: string; nome: string; estado: Estado; retirado: boolean }[]; fora_da_vistoria: string[]; com_politica_de_grupo: boolean };
@@ -35,9 +36,9 @@
       return;
     }
     const [v, c, r] = await Promise.allSettled([
-      invoke<Vistoria>("vistoriar_mudancas"),
-      invoke<Conflito[]>("conflitos_entre_ajustes"),
-      invoke<Veredito[]>("conferir_o_proprio_trabalho"),
+      como<Vistoria>(commands.vistoriarMudancas()),
+      como<Conflito[]>(commands.conflitosEntreAjustes()),
+      como<Veredito[]>(commands.conferirOProprioTrabalho()),
     ]);
     vistoria = v.status === "fulfilled" ? v.value : null;
     conflitos = c.status === "fulfilled" ? c.value : [];
@@ -50,7 +51,7 @@
     ocupado = id;
     recado = null;
     try {
-      const r = noTauri ? await invoke<{ message: string }>("refazer_mudanca", { id }) : { message: "Demonstração: refeito." };
+      const r = noTauri ? await como<{ message: string }>(commands.refazerMudanca(id)) : { message: "Demonstração: refeito." };
       recado = r.message;
       await carregar();
     } catch (e) {

@@ -7,6 +7,7 @@ use crate::modules::changelog::ChangeRecord;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum StartMode {
     Automatic,
     Manual,
@@ -15,6 +16,7 @@ pub enum StartMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ServiceEntry {
     pub name: String,
     pub display_name: String,

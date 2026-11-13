@@ -13,12 +13,14 @@ use super::RecursoAvaliado;
 use crate::modules::windows::geracao::{self, Situacao};
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Estimativa {
     pub multiplicador: u8,
     pub faixa: Faixa,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ativo {
     pub recurso: Recurso,
     pub multiplicador: u8,
@@ -67,6 +69,7 @@ pub struct Ativo {
 
 /// O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando).
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct UltimaSessao {
     pub jogo: String,
     pub minutos: f64,
@@ -78,6 +81,8 @@ pub struct UltimaSessao {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PainelFrameboost"))]
 pub struct Painel {
     pub jogo: Option<String>,
     /// O que o automático escolhe: o do jogo, depois o do driver, depois o do Otimiza.

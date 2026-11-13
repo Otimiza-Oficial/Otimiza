@@ -385,6 +385,7 @@ mod maquina {
     }
 
     #[derive(Debug, Clone, Serialize)]
+    #[cfg_attr(test, derive(specta::Type))]
     pub struct Passo {
         /// 0 é o aquecimento; 1 a 8, as rodadas.
         pub indice: usize,

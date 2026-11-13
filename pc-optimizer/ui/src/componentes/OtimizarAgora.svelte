@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands, type Nivel as NivelDoContrato } from "../lib/tipos";
   // "Otimizar agora" (trazido da 3.3, `src/v33/app.ts`, `otimizar`): os ajustes do Windows, do registro e do plano de
   // energia no nível escolhido, conferidos neste PC; cada um entra no histórico e se desfaz sozinho. O Rust cria o
   // ponto de restauração antes (se a preferência estiver ligada) e manda cada passo no evento `optimize:step`. O nível
   // Experimental não aparece aqui: ele vai um grupo por vez, medindo (aplicar tudo de uma vez derrubou o FPS de um
   // cliente).
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { listen } from "@tauri-apps/api/event";
+    import { listen } from "@tauri-apps/api/event";
   import { noTauri } from "../lib/ponte";
 
   type Nivel = { id: string; nome: string; promessa: string; exigencia: string; itens: string[]; acrescenta: string[]; aplica_de_uma_vez: boolean };
@@ -32,7 +33,7 @@
 
   onMount(async () => {
     const todos: Nivel[] = noTauri
-      ? await invoke<Nivel[]>("niveis_de_otimizacao").catch(() => [])
+      ? await como<Nivel[]>(commands.niveisDeOtimizacao()).catch(() => [])
       : [
           { id: "Seguro", nome: "Seguro", promessa: "Só o que não muda nada que você veja: menos coisa rodando por trás.", exigencia: "Nenhuma.", itens: Array(14).fill(""), acrescenta: [], aplica_de_uma_vez: true },
           { id: "Competitivo", nome: "Competitivo", promessa: "O Seguro, mais o que tira atraso: rede, mouse, plano de energia.", exigencia: "Pode deixar o PC um pouco mais quente em uso.", itens: Array(26).fill(""), acrescenta: [], aplica_de_uma_vez: true },
@@ -65,7 +66,7 @@
         });
       }
       const r: Resultado[] = noTauri
-        ? await invoke<Resultado[]>("optimize_now", { only: null, nivel: escolhido })
+        ? await como<Resultado[]>(commands.optimizeNow(null, escolhido as NivelDoContrato))
         : await new Promise((ok) => {
             const nomes = ["Ponto de restauração", "Plano de energia OTIMIZA", "Atrasos de rede (Nagle)", "Precisão do ponteiro", "Notificações durante o jogo"];
             total = nomes.length;

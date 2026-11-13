@@ -19,6 +19,8 @@ use crate::modules::changelog::ChangeLog;
 use crate::modules::optimizer::OptimizationOutcome;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoGuardiao"))]
 pub enum Estado {
     /// Tudo o que o Otimiza escreveu continua lá.
     Intacto,
@@ -31,6 +33,7 @@ pub enum Estado {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Item {
     pub id: String,
     pub nome: String,
@@ -40,6 +43,7 @@ pub struct Item {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Vistoria {
     pub itens: Vec<Item>,
     /// Aplicadas que o guardião não relê, pelo nome.

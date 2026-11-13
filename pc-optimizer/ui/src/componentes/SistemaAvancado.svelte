@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // Sistema avançado (trazido da interface antiga, `src/main.ts`): os serviços essenciais que "Windows lite" e outros
   // otimizadores desligam (e o religar), os serviços de outros programas, as tarefas agendadas que não são da
   // Microsoft e os programas que vieram de fábrica. Cada mudança entra no histórico. Nada é marcado sem motivo escrito,
   // e o que é proteção, áudio ou vídeo nunca aparece como mexível.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Inicio = "Desativado" | "Ativo" | "NaoExiste" | "NaoConsegui";
   type Checagem = { servicos: { servico: string; inicio: Inicio }[]; desativados: number; fabricante: string | null; modelo: string | null };
@@ -52,10 +53,10 @@
       return;
     }
     const [c, s, t, b] = await Promise.allSettled([
-      invoke<Checagem>("checar_essenciais"),
-      invoke<Servico[]>("list_third_party_services"),
-      invoke<Tarefa[]>("list_scheduled_tasks"),
-      invoke<Relatorio>("analyze_bloatware"),
+      como<Checagem>(commands.checarEssenciais()),
+      como<Servico[]>(commands.listThirdPartyServices()),
+      como<Tarefa[]>(commands.listScheduledTasks()),
+      como<Relatorio>(commands.analyzeBloatware()),
     ]);
     checagem = c.status === "fulfilled" ? c.value : null;
     servicos = s.status === "fulfilled" ? s.value : [];
@@ -102,7 +103,7 @@
       {/each}
     </ul>
     {#if checagem.desativados}
-      <button class="btn primario" disabled={ocupado !== null} onclick={() => agir("essenciais", () => (noTauri ? invoke("religar_essenciais") : demoOk("religados.")))}>Religar os essenciais</button>
+      <button class="btn primario" disabled={ocupado !== null} onclick={() => agir("essenciais", () => (noTauri ? commands.religarEssenciais() : demoOk("religados.")))}>Religar os essenciais</button>
     {/if}
   {/if}
 </section>
@@ -123,7 +124,7 @@
             <p class="apoio pequeno">{INICIO[s.start_mode]}{s.running ? " · rodando" : ""}{s.ram_mb != null ? ` · ${n(s.ram_mb, 1)} MB` : ""}{s.protected ? ` · ${s.protected}: não mexer` : ""}</p>
           </div>
           {#if !s.protected && (s.start_mode === "Automatic" || s.start_mode === "Manual")}
-            <button class="btn" disabled={ocupado !== null} onclick={() => agir(s.name, () => (noTauri ? invoke("set_service_start", { name: s.name, automatic: s.start_mode !== "Automatic" }) : demoOk(`${s.display_name} mudado.`)))}>
+            <button class="btn" disabled={ocupado !== null} onclick={() => agir(s.name, () => (noTauri ? commands.setServiceStart(s.name, s.start_mode !== "Automatic") : demoOk(`${s.display_name} mudado.`)))}>
               {s.start_mode === "Automatic" ? "Passar para manual" : "Voltar para automático"}
             </button>
           {/if}
@@ -148,7 +149,7 @@
       {#each visiveis as t (t.path + t.name)}
         <li>
           <div><span>{t.name}</span><p class="apoio pequeno">{t.author || "autor não informado"}{t.microsoft ? " · Microsoft" : ""}</p></div>
-          <button class="interruptor" role="switch" aria-checked={t.enabled} aria-label={t.name} disabled={ocupado !== null} onclick={() => agir(t.name, () => (noTauri ? invoke("set_scheduled_task", { path: t.path, name: t.name, enabled: !t.enabled }) : demoOk(`${t.name} mudada.`)))}></button>
+          <button class="interruptor" role="switch" aria-checked={t.enabled} aria-label={t.name} disabled={ocupado !== null} onclick={() => agir(t.name, () => (noTauri ? commands.setScheduledTask(t.path, t.name, !t.enabled) : demoOk(`${t.name} mudada.`)))}></button>
         </li>
       {/each}
     </ul>
@@ -172,9 +173,9 @@
             <p class="apoio pequeno">{b.reason}</p>
           </div>
           {#if b.removable_here && b.package}
-            <button class="btn" disabled={ocupado !== null} onclick={() => confirm(`Remover ${b.name}?`) && agir(b.name, () => (noTauri ? invoke("remove_store_app", { package: b.package }) : demoOk(`${b.name} removido.`)))}>Remover</button>
+            <button class="btn" disabled={ocupado !== null} onclick={() => confirm(`Remover ${b.name}?`) && agir(b.name, () => (noTauri ? commands.removeStoreApp(b.package ?? "") : demoOk(`${b.name} removido.`)))}>Remover</button>
           {:else}
-            <button class="btn quieto" onclick={() => (noTauri ? invoke<string>("open_apps_settings").catch(() => {}) : undefined)}>Abrir o desinstalador</button>
+            <button class="btn quieto" onclick={() => (noTauri ? como<string>(commands.openAppsSettings()).catch(() => {}) : undefined)}>Abrir o desinstalador</button>
           {/if}
         </li>
       {/each}

@@ -10,6 +10,7 @@ use std::path::Path;
 const CHAVE: &str = r"SOFTWARE\Microsoft\DirectX\UserGpuPreferences";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Preferencia {
     Automatica,
     Economia,
@@ -59,6 +60,7 @@ pub fn preferencia_do_texto(bruto: &str) -> Option<Preferencia> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct GpuPrefFinding {
     pub id: String,
     pub title: String,
@@ -69,6 +71,7 @@ pub struct GpuPrefFinding {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct GpuPrefReport {
     pub placas: Vec<String>,
     pub tem_placa_dupla: bool,

@@ -149,6 +149,7 @@ pub fn windows_modificado() -> Option<WindowsModificado> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Inicio {
     Desativado,
     Ativo,
@@ -158,12 +159,14 @@ pub enum Inicio {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ServicoEssencial {
     pub servico: &'static str,
     pub inicio: Inicio,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Checagem {
     pub servicos: Vec<ServicoEssencial>,
     pub desativados: usize,

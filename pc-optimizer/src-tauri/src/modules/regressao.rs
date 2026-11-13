@@ -16,6 +16,8 @@ pub const MARGEM_DE_RUIDO_PCT: f64 = 8.0;
 pub const QUEDA_GRAVE_PCT: f64 = 20.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LadoRegressao"))]
 pub struct Lado {
     pub fps: f64,
     pub low_1pct: f64,
@@ -24,6 +26,8 @@ pub struct Lado {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "desfecho")]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DesfechoRegressao"))]
 pub enum Desfecho {
     /// NÃO é "está tudo bem": é "ainda não dá para dizer", com essas palavras.
     SemAmostra,
@@ -35,6 +39,8 @@ pub enum Desfecho {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VereditoRegressao"))]
 pub struct Veredito {
     pub jogo: String,
     pub desfecho: Desfecho,

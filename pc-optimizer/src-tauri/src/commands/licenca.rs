@@ -6,6 +6,7 @@ use super::*;
 /// O convite embutido vem da tela (é o único em `PedidoDeFeedback.svelte`): duplicá-lo aqui faria dois valores discordarem.
 /// `LIVRES`: quem não ativou é quem mais precisa do suporte.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn convite_do_discord(embutido: String) -> Result<String, String> {
     Ok(crate::modules::convite::consultar()
         .await
@@ -14,6 +15,7 @@ pub async fn convite_do_discord(embutido: String) -> Result<String, String> {
 
 /// Onde está o pedido de feedback: contando, liberado ou exigido. `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn feedback_estado() -> Result<crate::plataforma::feedback::Estado, String> {
     Ok(crate::plataforma::feedback::estado(None))
 }
@@ -21,6 +23,7 @@ pub fn feedback_estado() -> Result<crate::plataforma::feedback::Estado, String> 
 /// "Já enviei": pergunta ao bot se o feedback desta máquina está no canal. `LIVRES`: quem está com as correções
 /// pausadas é justamente quem precisa chamar.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn feedback_verificar() -> Result<crate::plataforma::feedback::Estado, String> {
     crate::plataforma::feedback::atualizar_configuracao().await;
     Ok(crate::plataforma::feedback::verificar().await)
@@ -28,6 +31,7 @@ pub async fn feedback_verificar() -> Result<crate::plataforma::feedback::Estado,
 
 /// Vinte e um ajustes são por CONTA: elevado por outra, iriam para um perfil que ninguém usa. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn conta_que_esta_rodando() -> ContaDoUsuario {
     #[cfg(target_os = "windows")]
     {

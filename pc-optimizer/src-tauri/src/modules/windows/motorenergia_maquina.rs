@@ -187,6 +187,7 @@ pub fn enumerar_base() -> Result<Enumeracao, String> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Bateria {
     pub autoajuste: Vec<Candidato>,
     pub escada_de_epp: Vec<Candidato>,
@@ -235,6 +236,7 @@ fn pasta() -> PathBuf {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ValorGuardado {
     pub plano: String,
     pub subgrupo: String,
@@ -245,6 +247,7 @@ pub struct ValorGuardado {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Backup {
     pub plano_anterior: String,
     pub nome_anterior: Option<String>,
@@ -989,6 +992,8 @@ pub fn medir_atual(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PerfilDeJogoMotorenergiaMaquina"))]
 pub struct PerfilDeJogo {
     pub executavel: String,
     pub parametros: Parametros,

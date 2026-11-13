@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O jogo está esperando o disco? (trazido da interface 3.6, `analyzeStreaming`): cruza os trancos da última partida
   // medida com o instante em que o disco estava ocupado e separa as três causas do mesmo sintoma (troca de memória,
   // jogo num disco lento, outra coisa no disco). Só lê (`laboratorio_de_streaming`). Os números que sustentaram vão
   // junto, mesmo com algum faltando.
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Veredito = "SemMedicao" | "SemEngasgos" | "NaoEODisco" | "TrocaDeMemoria" | "AssetsDeMidiaLenta" | "OutraCoisaNoDisco";
   type Laboratorio = {
@@ -41,7 +42,7 @@
     lendo = true;
     erro = null;
     try {
-      r = noTauri ? await invoke<Laboratorio>("laboratorio_de_streaming") : DEMO;
+      r = noTauri ? await como<Laboratorio>(commands.laboratorioDeStreaming()) : DEMO;
     } catch (e) {
       erro = String(e);
     } finally {

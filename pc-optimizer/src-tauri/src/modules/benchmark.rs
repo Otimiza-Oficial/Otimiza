@@ -23,6 +23,7 @@ const IDLE_SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 const BUSY_CPU_PERCENT: f64 = 25.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BenchmarkSnapshot {
     pub timestamp: u64,
     pub idle_cpu_percent: f64,
@@ -39,6 +40,7 @@ pub struct BenchmarkSnapshot {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Verdict {
     Improved,
     Worsened,
@@ -48,6 +50,7 @@ pub enum Verdict {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct MetricDelta {
     pub key: String,
     pub label: String,
@@ -60,6 +63,7 @@ pub struct MetricDelta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BenchmarkComparison {
     pub before: BenchmarkSnapshot,
     pub after: BenchmarkSnapshot,

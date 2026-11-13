@@ -118,6 +118,7 @@ pub fn nome_do_jogo(executavel: &str) -> Option<&'static str> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct GameModeStatus {
     pub game_running: bool,
     pub game: Option<String>,

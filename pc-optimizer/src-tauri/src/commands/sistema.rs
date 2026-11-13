@@ -65,6 +65,7 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
 
 /// `LIVRES`: só mede.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 /// `pagina_ms`: quanto a própria página levou, da navegação ao primeiro desenho (`performance.now()`). O resto até o
 /// total é o WebView2 nascendo: a divisão diz onde cortar.
 pub fn abertura_pronta(pagina_ms: Option<f64>) -> Option<u64> {
@@ -83,6 +84,7 @@ pub fn abertura_pronta(pagina_ms: Option<f64>) -> Option<u64> {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn list_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -99,6 +101,7 @@ pub async fn list_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
 
 /// Id próprio no histórico: "Desfazer tudo" alcança.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn set_scheduled_task(
     path: String,
     name: String,
@@ -122,6 +125,7 @@ pub async fn set_scheduled_task(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn list_third_party_services() -> Result<Vec<ServiceEntry>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -137,6 +141,7 @@ pub async fn list_third_party_services() -> Result<Vec<ServiceEntry>, String> {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn set_service_start(
     name: String,
     automatic: bool,
@@ -159,6 +164,7 @@ pub async fn set_service_start(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn analyze_bloatware() -> Result<BloatReport, String> {
     #[cfg(target_os = "windows")]
     {
@@ -175,13 +181,14 @@ pub async fn analyze_bloatware() -> Result<BloatReport, String> {
 
 /// Só apps da Loja (voltam pela Loja); programa comum vai pela tela oficial do Windows.
 #[tauri::command]
-pub async fn remove_store_app(package: String) -> Result<String, String> {
+#[cfg_attr(test, specta::specta)]
+pub async fn remove_store_app(pacote: String) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
 
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
-            crate::modules::windows::bloatware::remover_app_da_loja(&package)
+            crate::modules::windows::bloatware::remover_app_da_loja(&pacote)
         })
         .await
         .map_err(|e| format!("Falha ao remover: {}", e))?
@@ -189,13 +196,14 @@ pub async fn remove_store_app(package: String) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = package;
+        let _ = pacote;
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
 
 /// O desinstalador do fabricante faz perguntas: imitá-lo arriscaria instalação pela metade.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn open_apps_settings() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
@@ -398,6 +406,7 @@ pub fn fundos_limpar() -> Result<(), String> {
 
 /// Erro de JavaScript da tela vai para o `otimiza.log`, o arquivo que o cliente manda ao suporte. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn anotar_erro_da_tela(texto: String) -> Result<(), String> {
     let curto: String = texto.chars().take(2000).collect();
     crate::utils::Logger::warn(&format!("tela: {}", curto));
@@ -406,12 +415,14 @@ pub fn anotar_erro_da_tela(texto: String) -> Result<(), String> {
 
 /// `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn flags_ler() -> Result<crate::plataforma::flags::Flags, String> {
     Ok(crate::plataforma::flags::Flags::load())
 }
 
 /// `LIVRES`: liga e desliga telas do próprio Otimiza, não mexe no computador.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn flags_gravar(flags: crate::plataforma::flags::Flags) -> Result<(), String> {
     flags.save()
 }

@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ProcessImpact {
     pub name: String,
     /// Porcentagem da CPU TOTAL da máquina, não de um núcleo.

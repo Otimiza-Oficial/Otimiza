@@ -61,6 +61,7 @@ pub fn get_hardware_profile() -> Result<HardwareProfileResponse, String> {
 /// `LIVRES`: **não escreve absolutamente nada** (uma ferramenta capaz de alterar firmware deixaria a máquina sem
 /// ligar). Memória abaixo do nominal e Resizable BAR vêm de quem já mede: remedir daria dois números.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn passo_a_passo_da_bios() -> BiosNaTela {
     #[cfg(target_os = "windows")]
     {
@@ -96,6 +97,7 @@ pub fn passo_a_passo_da_bios() -> BiosNaTela {
 
 /// `LIVRES`: só lê.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha, String> {
     tokio::task::spawn_blocking(crate::modules::windows::fichabios::ler)
         .await
@@ -105,6 +107,7 @@ pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha
 /// `LIVRES`: grava a ficha num arquivo da Área de Trabalho, com nome escolhido aqui. O texto vem da tela (é o que
 /// ela mostra), limitado em tamanho.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn salvar_ficha_da_bios(texto: String) -> Result<String, String> {
     const LIMITE: usize = 64 * 1024;
     if texto.trim().is_empty() || texto.len() > LIMITE {
@@ -115,6 +118,7 @@ pub fn salvar_ficha_da_bios(texto: String) -> Result<String, String> {
 
 /// `LIVRES`: não altera configuração; a tela confirma antes.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn reiniciar_na_bios() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -127,6 +131,7 @@ pub fn reiniciar_na_bios() -> Result<(), String> {
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BiosNaTela {
     pub leitura: crate::modules::windows::bios::Leitura,
     pub passos: Vec<crate::modules::windows::bios::Passo>,
@@ -134,6 +139,7 @@ pub struct BiosNaTela {
 
 /// `LIVRES`: o `rbar` só lê, e só a BIOS liga. `(async)`: chama `nvidia-smi`, processo externo.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn analyze_rbar() -> Result<crate::modules::windows::rbar::RelatorioDoRbar, String> {
     #[cfg(target_os = "windows")]
     {
@@ -204,6 +210,7 @@ pub async fn monitores() -> Result<Vec<crate::modules::windows::display::Monitor
 
 /// `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn memoria_instalada(
 ) -> Result<crate::modules::windows::firmware::MemoriaInstalada, String> {
     #[cfg(target_os = "windows")]
@@ -218,6 +225,7 @@ pub async fn memoria_instalada(
 }
 
 #[derive(serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PlacaDeVideo {
     pub marca: String,
     pub nome: Option<String>,
@@ -247,6 +255,7 @@ pub fn marca_da_placa(nome: &str) -> &'static str {
 
 /// O nome de `shaders`, a memória de `bottleneck` (o WMI satura em 4 GB). `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
     #[cfg(target_os = "windows")]
     {
@@ -280,6 +289,7 @@ pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
 
 /// `LIVRES`: o que os monitores ligados anunciam de taxa variável, pelo EDID.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn vrr_dos_monitores() -> Result<Vec<crate::modules::windows::vrr::MonitorVrr>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -320,6 +330,7 @@ pub async fn set_max_refresh_rate(
 
 /// `LIVRES`: é de quem ainda não comprou, ou reclamou, que vem o dado das máquinas que o projeto não tem.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn relatorio_de_compatibilidade() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {

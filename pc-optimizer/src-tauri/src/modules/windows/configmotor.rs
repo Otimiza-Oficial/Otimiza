@@ -14,6 +14,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Formato {
     /// `GameUserSettings.ini` da Unreal: `chave=valor` dentro de `[secao]`.
     IniDaUnreal { secao: &'static str },
@@ -22,6 +23,7 @@ pub enum Formato {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Mudanca {
     pub chave: &'static str,
     pub valor: &'static str,
@@ -30,6 +32,7 @@ pub struct Mudanca {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PerfilDeJogo {
     /// O id do catálogo (`plataforma::jogos`).
     pub id: &'static str,
@@ -192,6 +195,7 @@ pub fn perfil(id: &str) -> Option<&'static PerfilDeJogo> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Previsao {
     pub chave: String,
     pub antes: String,
@@ -280,6 +284,7 @@ pub fn aberto(id: &str) -> bool {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct JogoNaTela {
     pub id: &'static str,
     pub nome: &'static str,

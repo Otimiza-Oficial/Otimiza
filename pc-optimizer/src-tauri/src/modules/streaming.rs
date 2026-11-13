@@ -10,6 +10,7 @@ use super::telemetry::Telemetry;
 
 /// Espelha `windows::discodojogo::Midia` em vez de importar: o laboratório é puro e roda em qualquer sistema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Midia {
     Ssd,
     Mecanico,
@@ -35,6 +36,8 @@ pub const LATENCIA_DE_DISCO_LENTO_MS: f64 = 10.0;
 pub const MEMORIA_QUE_TROCA_PAGINA: f64 = 90.0;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VereditoStreaming"))]
 pub enum Veredito {
     SemMedicao,
     SemEngasgos,
@@ -46,6 +49,8 @@ pub enum Veredito {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AnaliseStreaming"))]
 pub struct Analise {
     pub veredito: Veredito,
     pub engasgos_por_minuto: Option<f64>,

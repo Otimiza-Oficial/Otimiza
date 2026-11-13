@@ -6,6 +6,7 @@ use super::{registry, shell};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum BloatKind {
     OemUtility,
     TrialSecurity,
@@ -14,6 +15,7 @@ pub enum BloatKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BloatItem {
     pub name: String,
     pub publisher: String,
@@ -27,6 +29,7 @@ pub struct BloatItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BloatReport {
     pub items: Vec<BloatItem>,
     pub total_mb: f64,

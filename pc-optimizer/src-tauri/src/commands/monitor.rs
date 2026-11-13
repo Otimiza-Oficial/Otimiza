@@ -16,6 +16,7 @@ pub async fn get_performance_metrics(
 /// curta dá taxa ausente, nunca zero.
 #[cfg(target_os = "windows")]
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
     use crate::modules::mouse;
 
@@ -31,6 +32,7 @@ pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
 
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct CaminhoNaTela {
     pub caminho: crate::modules::mouse::Caminho,
     pub achados: Vec<crate::modules::mouse::AchadoNaTela>,
@@ -91,6 +93,7 @@ pub struct PlanoNaTela {
 /// segundo em segundo. Entra o PRIMEIRO jogo em disco mecânico: é o único que muda a conclusão.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn laboratorio_de_streaming(
     state: State<'_, AppState>,
 ) -> Result<LaboratorioNaTela, String> {
@@ -120,6 +123,7 @@ pub async fn laboratorio_de_streaming(
 /// O jogo vai junto: "o disco está lento" sem dizer qual jogo não se confere.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct LaboratorioNaTela {
     pub analise: crate::modules::streaming::Analise,
     pub jogo: Option<crate::modules::windows::discodojogo::OndeMora>,
@@ -183,6 +187,7 @@ fn anotar_no_historico(retrato: &crate::modules::baseline::Baseline) -> Result<(
 /// As mudanças vêm do `changelog` na hora: duas listas do mesmo fato discordam.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn historico_de_desempenho(
     state: State<'_, AppState>,
 ) -> Result<HistoricoNaTela, String> {
@@ -208,6 +213,8 @@ pub async fn historico_de_desempenho(
 
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "HistoricoNaTelaMonitor"))]
 pub struct HistoricoNaTela {
     pub historico: crate::modules::historico::Historico,
     pub regressoes: Vec<crate::modules::historico::Regressao>,
@@ -379,6 +386,7 @@ pub async fn measure_and_compare() -> Result<BenchmarkComparison, String> {
 
 /// Aponta o culpado pelo nome e se ele volta no próximo boot.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn top_processes(state: State<'_, AppState>) -> Result<Vec<ProcessImpact>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -395,6 +403,7 @@ pub async fn top_processes(state: State<'_, AppState>) -> Result<Vec<ProcessImpa
 
 /// Só explica, não otimiza.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn analyze_bottleneck(seconds: u64) -> Result<BottleneckReport, String> {
     #[cfg(target_os = "windows")]
     {
@@ -444,6 +453,7 @@ pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasur
 
 /// O classificador (`core::gargalo`) aponta os gargalos sustentados na janela, com a evidência.
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct DiagnosticoAoVivo {
     pub placa: Option<crate::core::telemetria::Placa>,
     pub jogo: Option<String>,
@@ -457,6 +467,7 @@ pub struct DiagnosticoAoVivo {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn diagnostico_ao_vivo(
     segundos: u64,
     state: State<'_, AppState>,

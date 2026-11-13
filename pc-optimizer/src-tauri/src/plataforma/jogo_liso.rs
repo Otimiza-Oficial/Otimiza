@@ -10,6 +10,8 @@ use serde::Serialize;
 use crate::modules::windows::presentmon::{Apresentacao, GargaloProvavel};
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PlanoJogoLiso"))]
 pub struct Plano {
     /// FPS que o jogo entrega (mediana medida agora).
     pub fps_agora: f64,
@@ -29,6 +31,8 @@ pub struct Plano {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TelaJogoLiso"))]
 pub struct Tela {
     pub apresentacao: Apresentacao,
     /// O texto do PresentMon, ex. "Composed: Copy with GPU GDI".

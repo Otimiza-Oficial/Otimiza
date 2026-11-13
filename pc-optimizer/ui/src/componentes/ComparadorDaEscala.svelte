@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O comparador da escala (trazido da interface 3.3/3.6, `comparadorDaEscala`): o mesmo pedaço do centro do jogo,
   // ampliado do jeito comum (como um monitor faria) e pelo FSR do Otimiza, com um divisor arrastável. A captura só sai
   // com o jogo na frente, então o pedido espera o próximo quadro dele (`escala_pedir_comparacao`) e a tela confere a
   // cada segundo se já chegou (`escala_comparacao`), por até 2 minutos.
   import { onDestroy } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Comparacao = { jogo: string; tela: string; jogo_px: [number, number]; tela_px: [number, number] };
 
@@ -26,7 +27,7 @@
       return;
     }
     try {
-      await invoke("escala_pedir_comparacao");
+      await commands.escalaPedirComparacao();
     } catch (e) {
       recado = String(e);
       return;
@@ -35,7 +36,7 @@
     let tentativas = 0;
     vigia = setInterval(async () => {
       tentativas += 1;
-      const c = await invoke<Comparacao | null>("escala_comparacao").catch(() => null);
+      const c = await como<Comparacao | null>(commands.escalaComparacao()).catch(() => null);
       if (c) {
         clearInterval(vigia);
         comparacao = c;

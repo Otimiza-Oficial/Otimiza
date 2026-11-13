@@ -51,6 +51,7 @@ fn memory_modules() -> Option<Vec<MemoryModule>> {
 /// O dado cru para desenhar os slots (o relatório só devolve achados): três encaixes vazios explicam canal único
 /// melhor que uma frase.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct MemoriaInstalada {
     pub slots: Option<u32>,
     pub pentes_gb: Vec<f64>,

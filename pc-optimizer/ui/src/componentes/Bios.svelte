@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // A BIOS (trazida da interface antiga, `src/bios.ts`). O Otimiza NÃO grava na BIOS: em placa de consumo um erro ali
   // deixa a placa sem ligar. Mostra o que o Windows deixa ler (ficha), os defeitos conhecidos (microcódigo Intel,
   // boot lento), o que olhar na BIOS em ordem de risco, e um "antes e depois": a foto guardada neste PC antes de
   // reiniciar na BIOS, comparada na volta. Sem foto, sem comparação, e a tela diz.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Defeito =
     | { tipo: "MicrocodigoIntelAntigo"; atual: number }
@@ -66,9 +67,9 @@
       return;
     }
     const [f, fw, m] = await Promise.allSettled([
-      invoke<Ficha>("ficha_da_bios"),
-      invoke<Firmware>("passo_a_passo_da_bios"),
-      invoke<Memoria>("memoria_instalada"),
+      como<Ficha>(commands.fichaDaBios()),
+      como<Firmware>(commands.passoAPassoDaBios()),
+      como<Memoria>(commands.memoriaInstalada()),
     ]);
     ficha = f.status === "fulfilled" ? f.value : null;
     firmware = fw.status === "fulfilled" ? fw.value : null;
@@ -167,7 +168,7 @@
 
   async function salvar() {
     try {
-      recado = noTauri ? `Salva em ${await invoke<string>("salvar_ficha_da_bios", { texto: texto() })}` : "Salva em Documentos\\ficha-da-bios.txt";
+      recado = noTauri ? `Salva em ${await como<string>(commands.salvarFichaDaBios(texto()))}` : "Salva em Documentos\\ficha-da-bios.txt";
     } catch (e) {
       recado = String(e);
     }
@@ -178,7 +179,7 @@
     guardarFoto();
     reiniciando = true;
     try {
-      if (noTauri) await invoke("reiniciar_na_bios");
+      if (noTauri) await commands.reiniciarNaBios();
       recado = "Reiniciando na BIOS…";
     } catch (e) {
       reiniciando = false;

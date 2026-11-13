@@ -4,6 +4,7 @@
 use super::*;
 
 #[derive(serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PainelDeEnergia {
     pub impressao: crate::modules::windows::motorenergia::Impressao,
     pub bateria: crate::modules::windows::motorenergia_maquina::Bateria,
@@ -18,6 +19,7 @@ pub struct PainelDeEnergia {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn energia_painel() -> Result<PainelDeEnergia, String> {
     tokio::task::spawn_blocking(|| {
         use crate::modules::windows::{
@@ -239,6 +241,7 @@ pub fn energia_salvar_perfil_de_jogo(
 }
 
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn energia_remover_perfil_de_jogo(
     executavel: String,
 ) -> Result<Vec<crate::modules::windows::motorenergia_maquina::PerfilDeJogo>, String> {
@@ -247,6 +250,7 @@ pub fn energia_remover_perfil_de_jogo(
 
 /// `EXIGEM_LICENCA`: ligado, troca o plano sozinho.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn energia_modo_dinamico(ligado: bool) -> Result<bool, String> {
     crate::modules::licenca::exigir()?;
     crate::modules::windows::motorenergia_maquina::definir_dinamico(ligado).map(|d| d.ligado)

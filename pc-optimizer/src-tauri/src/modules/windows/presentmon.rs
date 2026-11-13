@@ -124,6 +124,7 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
 
 /// Por onde o quadro chega à tela. A tela escolhe a frase por aqui, nunca comparando o texto do PresentMon.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Apresentacao {
     /// "Hardware: Independent Flip", "Hardware: Legacy Flip", "Hardware Composed: Independent Flip": direto na tela.
     Direta,

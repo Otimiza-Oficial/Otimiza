@@ -29,6 +29,7 @@ pub const PIORA_FORTE_TRANCOS_VEZES: f64 = 2.0;
 pub const PIORA_FORTE_TRANCOS_A_MAIS: f64 = 10.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Vigiado {
     pub id: String,
     pub nome: String,
@@ -38,6 +39,7 @@ pub struct Vigiado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Veredito {
     Aguardando {
         antes: usize,
@@ -59,6 +61,7 @@ pub fn tinha_antes(v: &Vigiado, todas: &[MedicaoAutomatica]) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Lados {
     pub media_base: f64,
     pub media_candidato: f64,
@@ -66,6 +69,8 @@ pub struct Lados {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AvaliacaoPortao"))]
 pub struct Avaliacao {
     pub veredito: Veredito,
     pub fps: Option<Lados>,
@@ -230,6 +235,7 @@ pub fn marcar(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct GovernadorNoJogo {
     pub processo: String,
     pub nome: String,
@@ -410,6 +416,8 @@ pub fn observar_governador(
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoPortao"))]
 pub struct Estado {
     pub vigiados: Vec<Vigiado>,
     pub decididos: Vec<Decidido>,
@@ -418,6 +426,7 @@ pub struct Estado {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Decidido {
     pub vigiado: Vigiado,
     pub veredito: Veredito,

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Flags {
     /// Barra superior nova, com Início, Jogos, Boost, Lab e Ajustes.
     pub novo_shell: bool,

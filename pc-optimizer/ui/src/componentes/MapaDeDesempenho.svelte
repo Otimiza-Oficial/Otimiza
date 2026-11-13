@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O mapa de desempenho (trazido da interface 3.6, `src/mapa.ts`): 40 s dos contadores do Windows (processador,
   // memória, disco, placa e memória de vídeo) e, com um jogo aberto, os quadros dele no mesmo intervalo pelo PresentMon
   // (`diagnostico_ao_vivo`). O classificador do Rust aponta TODOS os gargalos sustentados, com os números; o detetive
   // de travadas diz o que coincidiu com cada uma. O que o Windows não entregou aparece como "não medido", nunca zero.
   // Os limites de FPS escondidos moram na área Energia.
   import { onDestroy } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Classe =
     | "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | "MemoriaVideo" | "Disco"
@@ -162,7 +163,7 @@
       const inicio = Date.now();
       pct = 0;
       relogio = setInterval(() => (pct = Math.min(100, ((Date.now() - inicio) / 1000 / SEGUNDOS) * 100)), 400);
-      d = noTauri ? await invoke<Diagnostico>("diagnostico_ao_vivo", { segundos: SEGUNDOS }) : await demo();
+      d = noTauri ? await como<Diagnostico>(commands.diagnosticoAoVivo(SEGUNDOS)) : await demo();
     } catch (e) {
       erro = String(e);
     } finally {

@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::modules::gargalo::{CARGA_MINIMA, FOLGADO, SATURADO};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Limite {
     CpuUmNucleo,
     CpuTodos,
@@ -27,6 +28,7 @@ pub enum Limite {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct BottleneckReport {
     pub limite: Limite,
     pub summary: String,

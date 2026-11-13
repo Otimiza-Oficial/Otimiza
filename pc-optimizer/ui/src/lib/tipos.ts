@@ -258,6 +258,297 @@ export const commands = {
 	overlayLigar: (confirmado: boolean) => __TAURI_INVOKE<EstadoDaSobreposicao_Serialize>("overlay_ligar", { confirmado }),
 	/**  `LIVRES`: não muda nada no PC (a licença é conferida no servidor, que recusa quem não tem). */
 	otiPerguntar: (pergunta: string, fatos: string, historico: TrocaComOti[]) => __TAURI_INVOKE<RespostaDoOti_Serialize>("oti_perguntar", { pergunta, fatos, historico }),
+	/**  Devolve o `cl_drawFPS` de antes. `LIVRES`: desfazer nunca depende de licença. */
+	contadorFivemDesligar: () => __TAURI_INVOKE<EstadoContadorFivem_Serialize>("contador_fivem_desligar"),
+	/**
+	 *  Desliga o `cl_drawFPS` no fivem.cfg (agora, ou quando o FiveM fechar) e deixa o FPS do Otimiza sempre no canto do
+	 *  jogo. `EXIGEM_LICENCA`: recurso do produto.
+	 */
+	contadorFivemLigar: () => __TAURI_INVOKE<EstadoContadorFivem_Serialize>("contador_fivem_ligar"),
+	/**  Os comandos de console do CS2 para a mesma mira. `LIVRES`: só monta texto. */
+	miraCs2: (mira: Mira_Deserialize) => __TAURI_INVOKE<string>("mira_cs2", { mira }),
+	/**  `LIVRES`: o que os monitores ligados anunciam de taxa variável, pelo EDID. */
+	vrrDosMonitores: () => __TAURI_INVOKE<MonitorVrr_Serialize[]>("vrr_dos_monitores"),
+	/**
+	 *  Guardião (`modules::windows::guardiao`): relê cada ajuste do catálogo que o histórico diz estar aplicado.
+	 *  Só leitura, `LIVRES`.
+	 */
+	vistoriarMudancas: () => __TAURI_INVOKE<Vistoria>("vistoriar_mudancas"),
+	/**  `EXIGEM_LICENCA`: pede o perfil gráfico do jogo (aplicado quando ele fechar; `None` cancela o pedido). */
+	turboPerfilDoJogoPedir: (perfil: string | null) => __TAURI_INVOKE<PerfilDoJogoNoTurbo_Serialize>("turbo_perfil_do_jogo_pedir", { perfil }),
+	turboPerfilDoJogo: () => __TAURI_INVOKE<PerfilDoJogoNoTurbo_Serialize>("turbo_perfil_do_jogo"),
+	/**  Aponta o culpado pelo nome e se ele volta no próximo boot. */
+	topProcesses: () => __TAURI_INVOKE<ProcessImpact[]>("top_processes"),
+	/**
+	 *  `EXIGEM_LICENCA`: acalma o programa suspeito em janelas alternadas e devolve; só fica acalmado com a causa
+	 *  demonstrada, e até o jogo fechar.
+	 */
+	testarCausaDaTravada: (processo: string) => __TAURI_INVOKE<ResultadoDoTeste_Serialize>("testar_causa_da_travada", { processo }),
+	setServiceStart: (name: string, automatic: boolean) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("set_service_start", { name, automatic }),
+	/**  Id próprio no histórico: "Desfazer tudo" alcança. */
+	setScheduledTask: (path: string, name: string, enabled: boolean) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("set_scheduled_task", { path, name, enabled }),
+	/**  Em notebook com duas placas é o maior ganho que o produto dá, sem administrador nem reinício. */
+	setGpuPreference: (caminho: string, desempenho: boolean) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("set_gpu_preference", { caminho, desempenho }),
+	setGameMode: (active: boolean) => __TAURI_INVOKE<string>("set_game_mode", { active }),
+	/**
+	 *  `LIVRES`: grava a ficha num arquivo da Área de Trabalho, com nome escolhido aqui. O texto vem da tela (é o que
+	 *  ela mostra), limitado em tamanho.
+	 */
+	salvarFichaDaBios: (texto: string) => __TAURI_INVOKE<string>("salvar_ficha_da_bios", { texto }),
+	/**  `LIVRES`: só religa o que o próprio Otimiza parou. */
+	sairDoModoSeguro: () => __TAURI_INVOKE<void>("sair_do_modo_seguro"),
+	/**  Só apps da Loja (voltam pela Loja); programa comum vai pela tela oficial do Windows. */
+	removeStoreApp: (pacote: string) => __TAURI_INVOKE<string>("remove_store_app", { pacote }),
+	/**  `EXIGEM_LICENCA`. O "Desfazer" os devolve a desligados. */
+	religarEssenciais: () => __TAURI_INVOKE<OptimizationOutcome_Serialize>("religar_essenciais"),
+	/**  `LIVRES`: é de quem ainda não comprou, ou reclamou, que vem o dado das máquinas que o projeto não tem. */
+	relatorioDeCompatibilidade: () => __TAURI_INVOKE<string>("relatorio_de_compatibilidade"),
+	/**  `LIVRES`: não altera configuração; a tela confirma antes. */
+	reiniciarNaBios: () => __TAURI_INVOKE<null>("reiniciar_na_bios"),
+	/**  Desfaz e aplica de novo o que não está mais como o Otimiza deixou. `EXIGEM_LICENCA`, como aplicar. */
+	refazerMudanca: (id: string) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("refazer_mudanca", { id }),
+	/**
+	 *  A receita (`modules::receita`): o ajuste de cada causa, se já está aplicado, como se prova, e o que já piorou
+	 *  este jogo nesta máquina. Só leitura, `LIVRES`.
+	 */
+	receitaDaPartida: () => __TAURI_INVOKE<Receita_Serialize>("receita_da_partida"),
+	quedasDeDesempenho: () => __TAURI_INVOKE<Deriva[]>("quedas_de_desempenho"),
+	/**
+	 *  `LIVRES`. Aplicar é `optimize_now`; desfazer é `revert`. Por jogo: FPS de jogos diferentes não se compara;
+	 *  sem jogo, o mais medido.
+	 */
+	protocoloDeGrupos: (jogo: string | null) => __TAURI_INVOKE<Experimento_Serialize[]>("protocolo_de_grupos", { jogo }),
+	prontoParaJogar: () => __TAURI_INVOKE<ProntidaoProntojogo_Serialize>("pronto_para_jogar"),
+	/**  `LIVRES`: chave por chave antes de decidir. */
+	previewGameProfile: (perfil: string) => __TAURI_INVOKE<([string, string, string, string])[]>("preview_game_profile", { perfil }),
+	/**
+	 *  NÃO entra no histórico: afinidade morre com o processo, e uma linha lá ofereceria para sempre desfazer um
+	 *  processo que não existe. O desfazer é o botão ao lado, ou fechar o jogo.
+	 */
+	prenderJogoNosNucleos: (pid: number, prender: boolean) => __TAURI_INVOKE<string>("prender_jogo_nos_nucleos", { pid, prender }),
+	/**  `LIVRES`. Com a regressão medida: se o Otimiza pode ser a causa, é o PRIMEIRO suspeito. */
+	porQueOFpsEstaBaixo: () => __TAURI_INVOKE<InvestigacaoCausas>("por_que_o_fps_esta_baixo"),
+	/**  O nome de `shaders`, a memória de `bottleneck` (o WMI satura em 4 GB). `LIVRES`. */
+	placaDeVideo: () => __TAURI_INVOKE<PlacaDeVideo_Serialize>("placa_de_video"),
+	/**
+	 *  O perfil do PC para a primeira abertura (`modules::perfil`): o que esta máquina pode esperar, sem porcentagem.
+	 *  Só leitura, `LIVRES`.
+	 */
+	perfilDoPc: () => __TAURI_INVOKE<PerfilPerfil>("perfil_do_pc"),
+	/**
+	 *  `LIVRES`: **não escreve absolutamente nada** (uma ferramenta capaz de alterar firmware deixaria a máquina sem
+	 *  ligar). Memória abaixo do nominal e Resizable BAR vêm de quem já mede: remedir daria dois números.
+	 */
+	passoAPassoDaBios: () => __TAURI_INVOKE<BiosNaTela_Serialize>("passo_a_passo_da_bios"),
+	/**  `only` restringe a uma lista de ids (perfis); os filtros de segurança valem igual. */
+	optimizeNow: (only: string[] | null, nivel: Nivel | null) => __TAURI_INVOKE<OptimizationOutcome_Serialize[]>("optimize_now", { only, nivel }),
+	/**  O desinstalador do fabricante faz perguntas: imitá-lo arriscaria instalação pela metade. */
+	openAppsSettings: () => __TAURI_INVOKE<string>("open_apps_settings"),
+	/**  `LIVRES`: com SSD pequeno e HD grande o jogo quase sempre está no HD. */
+	ondeOsJogosMoram: () => __TAURI_INVOKE<RelatorioDiscodojogo_Serialize>("onde_os_jogos_moram"),
+	oQueOOtimizaAltera: () => __TAURI_INVOKE<Alteracao[]>("o_que_o_otimiza_altera"),
+	/**  `LIVRES`. O cliente compara com vídeos de "50 tweaks" sem saber que metade não faz nada. */
+	oQueNaoFazemos: () => __TAURI_INVOKE<NaoFazemos[]>("o_que_nao_fazemos"),
+	/**
+	 *  "O que mudou?" por jogo (`modules::linhadotempo`): partidas, trocas em volta da máquina e mudanças do Otimiza.
+	 *  Só leitura.
+	 */
+	oQueMudou: () => __TAURI_INVOKE<LinhaDoJogo[]>("o_que_mudou"),
+	/**
+	 *  SÓ LÊ. A classe de cada núcleo vem do Windows, não de tabela de modelos. Processador uniforme: NÃO HÁ O QUE
+	 *  FAZER, escrito (um botão ali seria um jeito de piorar).
+	 */
+	nucleosDaMaquina: () => __TAURI_INVOKE<NucleosNaTela_Serialize>("nucleos_da_maquina"),
+	/**  `LIVRES`. 60% no 1% pior e 40% na média: ninguém sente média. */
+	notaDoJogo: () => __TAURI_INVOKE<Nota>("nota_do_jogo"),
+	/**
+	 *  `LIVRES`: definição montada do catálogo; aplicar é `optimize_now`. Perfis respondem "para que você usa"; níveis,
+	 *  "o que você aceita trocar": perguntas independentes.
+	 */
+	niveisDeOtimizacao: () => __TAURI_INVOKE<NivelNaTela[]>("niveis_de_otimizacao"),
+	modoSeguro: () => __TAURI_INVOKE<ModoSeguro>("modo_seguro"),
+	/**
+	 *  Liga a mira na tela por cima do jogo aberto. `EXIGEM_LICENCA`: recurso do produto; não grava nada no PC e some
+	 *  ao desligar. Recusa com anticheat que barra sobreposição; com ressalva (servidor de RP), só com `confirmado`.
+	 */
+	miraLigar: (mira: Mira_Deserialize, confirmado: boolean) => __TAURI_INVOKE<EstadoMira_Serialize>("mira_ligar", { mira, confirmado }),
+	/**  `LIVRES`. */
+	miraEstado: () => __TAURI_INVOKE<EstadoMira_Serialize>("mira_estado"),
+	/**  `LIVRES`: desligar nunca depende de licença. */
+	miraDesligar: () => __TAURI_INVOKE<null>("mira_desligar"),
+	/**  Troca o desenho da mira já ligada. `LIVRES`: só redesenha a janela do Otimiza. */
+	miraAtualizar: (mira: Mira_Deserialize) => __TAURI_INVOKE<null>("mira_atualizar", { mira }),
+	/**  Quem ocupa a memória agora (o jogo aberto nunca entra). `LIVRES`: só lê. */
+	memoriaParaOJogo: () => __TAURI_INVOKE<Memoria_Serialize>("memoria_para_o_jogo"),
+	/**  `LIVRES`. */
+	memoriaInstalada: () => __TAURI_INVOKE<MemoriaInstalada_Serialize>("memoria_instalada"),
+	/**  Fecha o programa que a pessoa escolheu na lista. `EXIGEM_LICENCA`. */
+	memoriaFechar: (nome: string) => __TAURI_INVOKE<Memoria_Serialize>("memoria_fechar", { nome }),
+	listThirdPartyServices: () => __TAURI_INVOKE<ServiceEntry_Serialize[]>("list_third_party_services"),
+	listScheduledTasks: () => __TAURI_INVOKE<ScheduledTask[]>("list_scheduled_tasks"),
+	/**  `EXIGEM_LICENCA`. O desfazer é o `revert_optimization`. */
+	limitarFpsNvidia: (executavel: string, fps: number) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("limitar_fps_nvidia", { executavel, fps }),
+	/**
+	 *  Comando, não campo da coleta: descobrir o disco de cada jogo custa sistema de arquivos e WMI, e não muda de
+	 *  segundo em segundo. Entra o PRIMEIRO jogo em disco mecânico: é o único que muda a conclusão.
+	 */
+	laboratorioDeStreaming: () => __TAURI_INVOKE<LaboratorioNaTela_Serialize>("laboratorio_de_streaming"),
+	/**  Mede o jogo aberto e devolve o plano de ritmo estável (o teto que deixa o jogo liso). `LIVRES`: só mede. */
+	jogoLisoMedir: () => __TAURI_INVOKE<PlanoJogoLiso_Serialize>("jogo_liso_medir"),
+	/**  Aplica o teto de FPS estável no perfil do jogo (guardando o anterior). Vale ao reabrir o jogo. `EXIGEM_LICENCA`. */
+	jogoLisoAplicar: () => __TAURI_INVOKE<PlanoJogoLiso_Serialize>("jogo_liso_aplicar"),
+	/**  `LIVRES`: só mede (PresentMon e contadores do Windows); nada é alterado. Motor V2 da causa da travada. */
+	investigarTravadas: (segundos: number) => __TAURI_INVOKE<ResultadoDaInvestigacao_Serialize>("investigar_travadas", { segundos }),
+	/**  As mudanças vêm do `changelog` na hora: duas listas do mesmo fato discordam. */
+	historicoDeDesempenho: () => __TAURI_INVOKE<HistoricoNaTelaMonitor_Serialize>("historico_de_desempenho"),
+	gameModeStatus: () => __TAURI_INVOKE<GameModeStatus_Serialize>("game_mode_status"),
+	/**  `EXIGEM_LICENCA`: volta a travar o FPS base do jogo aberto (desfaz o Destravar), com o Frame Boost ligado. */
+	frameBoostTravarBase: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_travar_base"),
+	/**
+	 *  O Frame Boost do jogo aberto: o gerador que o automático escolhe, os multiplicadores que cabem no monitor dele, a
+	 *  estimativa (ESTIMADA) antes de ligar e o FPS na tela (MEDIDO) depois. `LIVRES`: só lê.
+	 */
+	frameBoostPainel: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_painel"),
+	/**  Seis segundos de PresentMon no jogo: o FPS na tela com AFMF ou Smooth Motion, medido. `LIVRES`: só mede. */
+	frameBoostMedir: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_medir"),
+	/**
+	 *  `EXIGEM_LICENCA`: liga o gerador do Otimiza no jogo aberto (o anticheat é conferido antes) e trava o FPS base
+	 *  (`base_do_jogo`), no histórico de mudanças do app.
+	 */
+	frameBoostLigar: (multiplicador: number, semLimite: boolean | null, escala: NivelDeEscala | null, alvo: number | null) => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_ligar", { multiplicador, semLimite, escala, alvo }),
+	/**  Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença. */
+	frameBoostDestravarBase: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_destravar_base"),
+	/**  `LIVRES`: desligar nunca depende de licença. */
+	frameBoostDesligar: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_desligar"),
+	/**  Devolve o FOV de antes. `LIVRES`: desfazer nunca depende de licença. */
+	fovFivemDevolver: () => __TAURI_INVOKE<PainelFovFivem_Serialize>("fov_fivem_devolver"),
+	/**  Grava a posição do FOV (agora, ou quando o FiveM fechar), guardando a de antes. `EXIGEM_LICENCA`. */
+	fovFivemDefinir: (posicao: number) => __TAURI_INVOKE<PainelFovFivem_Serialize>("fov_fivem_definir", { posicao }),
+	/**  O FOV de primeira pessoa do FiveM (`profile_fpsFieldOfView` no fivem.cfg). `LIVRES`: só lê. */
+	fovFivem: () => __TAURI_INVOKE<PainelFovFivem_Serialize>("fov_fivem"),
+	/**  `LIVRES`: só lê. */
+	flagsLer: () => __TAURI_INVOKE<Flags_Serialize>("flags_ler"),
+	/**  `LIVRES`: liga e desliga telas do próprio Otimiza, não mexe no computador. */
+	flagsGravar: (flags: Flags_Deserialize) => __TAURI_INVOKE<null>("flags_gravar", { flags }),
+	/**  `LIVRES`: só lê. */
+	fichaDaBios: () => __TAURI_INVOKE<Ficha_Serialize>("ficha_da_bios"),
+	/**
+	 *  "Já enviei": pergunta ao bot se o feedback desta máquina está no canal. `LIVRES`: quem está com as correções
+	 *  pausadas é justamente quem precisa chamar.
+	 */
+	feedbackVerificar: () => __TAURI_INVOKE<EstadoFeedback_Serialize>("feedback_verificar"),
+	/**  Onde está o pedido de feedback: contando, liberado ou exigido. `LIVRES`: só lê. */
+	feedbackEstado: () => __TAURI_INVOKE<EstadoFeedback_Serialize>("feedback_estado"),
+	/**  `LIVRES`: só lê o histórico. */
+	exportarAlteracoes: () => __TAURI_INVOKE<string>("exportar_alteracoes"),
+	/**  A comparação vem da interface: refazer o benchmark mediria outro momento. */
+	exportReport: (comparison: BenchmarkComparison_Deserialize | null) => __TAURI_INVOKE<ReportSaved>("export_report", { comparison }),
+	/**  Pede a comparação da escala: o próximo quadro real com o jogo na frente. `LIVRES`: só lê a tela. */
+	escalaPedirComparacao: () => __TAURI_INVOKE<null>("escala_pedir_comparacao"),
+	/**  A comparação pedida, se o gerador já a tirou. `LIVRES`. */
+	escalaComparacao: () => __TAURI_INVOKE<ComparacaoNaTela | null>("escala_comparacao"),
+	energiaRemoverPerfilDeJogo: (executavel: string) => __TAURI_INVOKE<PerfilDeJogoMotorenergiaMaquina_Serialize[]>("energia_remover_perfil_de_jogo", { executavel }),
+	energiaPainel: () => __TAURI_INVOKE<PainelDeEnergia_Serialize>("energia_painel"),
+	/**  `EXIGEM_LICENCA`: ligado, troca o plano sozinho. */
+	energiaModoDinamico: (ligado: boolean) => __TAURI_INVOKE<boolean>("energia_modo_dinamico", { ligado }),
+	/**  O que o driver Intel tem e como está. `LIVRES`: só lê. */
+	driverIntel: () => __TAURI_INVOKE<PainelIntel_Serialize>("driver_intel"),
+	/**  O que o driver AMD tem e como está. `LIVRES`: só lê. */
+	driverAmd: () => __TAURI_INVOKE<PainelAmd_Serialize>("driver_amd"),
+	/**
+	 *  "Por que meu jogo roda assim?" (`modules::doctor`): a última partida medida e os limites de FPS escondidos.
+	 *  Só leitura, `LIVRES`.
+	 */
+	diagnosticoDaPartida: () => __TAURI_INVOKE<DiagnosticoDoctor_Serialize>("diagnostico_da_partida"),
+	diagnosticoAoVivo: (segundos: number) => __TAURI_INVOKE<DiagnosticoAoVivo_Serialize>("diagnostico_ao_vivo", { segundos }),
+	/**  `LIVRES`: só desfaz o que o teste deixou acalmado. */
+	devolverTesteDaTravada: () => __TAURI_INVOKE<string | null>("devolver_teste_da_travada"),
+	/**  `LIVRES`: só lê os relatórios do FiveM e o histórico. */
+	crashesDoJogo: () => __TAURI_INVOKE<RelatorioCrashes_Serialize>("crashes_do_jogo"),
+	/**  Auto CPU Set (2.9): mede o jogo em todos os núcleos e só nos de desempenho, alternando, e fica com o que rendeu. */
+	cpusetTestar: (pid: number, executavel: string) => __TAURI_INVOKE<ResultadoCpuSet_Serialize>("cpuset_testar", { pid, executavel }),
+	cpusetResultados: () => __TAURI_INVOKE<ResultadoCpuSet_Serialize[]>("cpuset_resultados"),
+	/**  `LIVRES`: só tira. */
+	cpusetEsquecer: (executavel: string) => __TAURI_INVOKE<null>("cpuset_esquecer", { executavel }),
+	/**
+	 *  Grava o ajuste de um jogo e se ele liga sozinho com o jogo aberto. `LIVRES`: grava só a preferência; quem mexe no
+	 *  monitor é `cores_aplicar` ou a abertura do jogo, que confere a licença.
+	 */
+	coresSalvarPerfil: (jogo: string | null, ajuste: Ajuste | null, soComJogo: boolean) => __TAURI_INVOKE<Perfis_Serialize>("cores_salvar_perfil", { jogo, ajuste, soComJogo }),
+	/**  Devolve as cores de antes. `LIVRES`: voltar ao normal nunca depende de licença. */
+	coresRestaurar: () => __TAURI_INVOKE<null>("cores_restaurar"),
+	/**
+	 *  Por qual caminho as cores vão (driver AMD, vibração NVIDIA ou rampa do Windows), o que cada um sabe mudar e os
+	 *  perfis por jogo. `LIVRES`: só lê.
+	 */
+	coresEstado: () => __TAURI_INVOKE<EstadoCores_Serialize>("cores_estado"),
+	/**  Aplica no monitor agora. Guarda o valor de antes primeiro. `EXIGEM_LICENCA`. */
+	coresAplicar: (ajuste: Ajuste) => __TAURI_INVOKE<CaminhoCores>("cores_aplicar", { ajuste }),
+	/**
+	 *  O convite embutido vem da tela (é o único em `PedidoDeFeedback.svelte`): duplicá-lo aqui faria dois valores discordarem.
+	 *  `LIVRES`: quem não ativou é quem mais precisa do suporte.
+	 */
+	conviteDoDiscord: (embutido: string) => __TAURI_INVOKE<string>("convite_do_discord", { embutido }),
+	/**  O contador do Otimiza no lugar do do FiveM (`cl_drawFPS` no fivem.cfg). `LIVRES`: só lê. */
+	contadorFivemEstado: () => __TAURI_INVOKE<EstadoContadorFivem_Serialize>("contador_fivem_estado"),
+	/**  Vinte e um ajustes são por CONTA: elevado por outra, iriam para um perfil que ninguém usa. `LIVRES`. */
+	contaQueEstaRodando: () => __TAURI_INVOKE<ContaDoUsuario>("conta_que_esta_rodando"),
+	/**  `LIVRES`: não impede nada (há casos legítimos). Diferente de `detect_conflicts`, que é entre PROGRAMAS. */
+	conflitosEntreAjustes: () => __TAURI_INVOKE<Conflito[]>("conflitos_entre_ajustes"),
+	/**  A configuração por motor (Fortnite, CS2, Apex): o arquivo achado e o que o perfil mudaria. `LIVRES`: só lê. */
+	configMotorPainel: () => __TAURI_INVOKE<ConfigDoJogoNaTela_Serialize[]>("config_motor_painel"),
+	/**
+	 *  `EXIGEM_LICENCA`: escreve o perfil leve no arquivo de configuração do jogo (fechado). O arquivo inteiro de antes
+	 *  vai para o histórico: o `revert_optimization` devolve byte a byte.
+	 */
+	configMotorAplicar: (jogo: string) => __TAURI_INVOKE<string[]>("config_motor_aplicar", { jogo }),
+	/**
+	 *  Antes contra depois, pelo histórico do vigia (na 2.1.0 os dois números estavam no disco e ninguém comparou).
+	 *  `Err` quando não se lê: lista vazia afirmaria que nenhum jogo piorou.
+	 */
+	conferirOProprioTrabalho: () => __TAURI_INVOKE<VereditoRegressao_Serialize[]>("conferir_o_proprio_trabalho"),
+	cleanShaderCache: (id: string) => __TAURI_INVOKE<CleanOutcome>("clean_shader_cache", { id }),
+	/**  Recusa pasta protegida e jogo aberto. Sem volta. */
+	cleanFivem: (id: string) => __TAURI_INVOKE<CleanOutcomeFivem>("clean_fivem", { id }),
+	/**
+	 *  Só leitura, antes do "Otimizar agora" e dos perfis: com esses serviços desligados, programa trava com ou sem
+	 *  otimização. Ver `essenciais.rs`.
+	 */
+	checarEssenciais: () => __TAURI_INVOKE<Checagem_Serialize>("checar_essenciais"),
+	/**
+	 *  NÃO mede mira nem olha dentro do jogo: duas chaves do registro do usuário. `intervalos_us` vêm da tela; lista
+	 *  curta dá taxa ausente, nunca zero.
+	 */
+	caminhoDoMouse: (intervalosUs: number[]) => __TAURI_INVOKE<CaminhoNaTela_Serialize>("caminho_do_mouse", { intervalosUs }),
+	applyGameProfile: (perfil: string) => __TAURI_INVOKE<string[]>("apply_game_profile", { perfil }),
+	/**  `EXIGEM_LICENCA`. O desfazer é o `revert_optimization`, com o id que o painel recebe pronto. */
+	aplicarAjusteNvidia: (opcao: string) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("aplicar_ajuste_nvidia", { opcao }),
+	/**  `EXIGEM_LICENCA`. `opcao`: `intel-latencia` ou `intel-limite:<fps>`. O desfazer é o `revert_optimization`. */
+	aplicarAjusteIntel: (opcao: string) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("aplicar_ajuste_intel", { opcao }),
+	/**  `EXIGEM_LICENCA`. `opcao`: `amd-antilag`, `amd-afmf`, `amd-rsr` ou `amd-frtc:<fps>`. O desfazer é o `revert_optimization`. */
+	aplicarAjusteAmd: (opcao: string) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("aplicar_ajuste_amd", { opcao }),
+	/**  Erro de JavaScript da tela vai para o `otimiza.log`, o arquivo que o cliente manda ao suporte. `LIVRES`. */
+	anotarErroDaTela: (texto: string) => __TAURI_INVOKE<null>("anotar_erro_da_tela", { texto }),
+	analyzeShaders: () => __TAURI_INVOKE<ShaderReport_Serialize>("analyze_shaders"),
+	/**  `LIVRES`: o `rbar` só lê, e só a BIOS liga. `(async)`: chama `nvidia-smi`, processo externo. */
+	analyzeRbar: () => __TAURI_INVOKE<RelatorioDoRbar>("analyze_rbar"),
+	analyzeGpuPreference: () => __TAURI_INVOKE<GpuPrefReport_Serialize>("analyze_gpu_preference"),
+	/**  `LIVRES`: descobrir de graça que o MSAA custa 40% é o que faz querer a chave. */
+	analyzeGameConfig: () => __TAURI_INVOKE<ConfigJogoReport_Serialize>("analyze_game_config"),
+	analyzeFivem: () => __TAURI_INVOKE<FiveMReport_Serialize>("analyze_fivem"),
+	/**  SÓ LEITURA e não sugere aumentar nada (ver `modules::windows::citizenfx`). */
+	analyzeCitizenfx: () => __TAURI_INVOKE<CitizenFxReport_Serialize>("analyze_citizenfx"),
+	/**  Só explica, não otimiza. */
+	analyzeBottleneck: (seconds: number) => __TAURI_INVOKE<BottleneckReport_Serialize>("analyze_bottleneck", { seconds }),
+	analyzeBloatware: () => __TAURI_INVOKE<BloatReport_Serialize>("analyze_bloatware"),
+	/**  Só leitura. Sem placa NVIDIA, a frase que diz isso. */
+	ajustesDoDriverNvidia: () => __TAURI_INVOKE<PainelDoDriver>("ajustes_do_driver_nvidia"),
+	/**
+	 *  `LIVRES`: só mede.
+	 *  `pagina_ms`: quanto a própria página levou, da navegação ao primeiro desenho (`performance.now()`). O resto até o
+	 *  total é o WebView2 nascendo: a divisão diz onde cortar.
+	 */
+	aberturaPronta: (paginaMs: number | null) => __TAURI_INVOKE<number | null>("abertura_pronta", { paginaMs }),
 };
 
 /* Types */
@@ -272,6 +563,47 @@ export type AchadoDaCalibracao = {
 export type AchadoDoWifi = {
 	gravidade: GravidadeDoWifi,
 	frase: string,
+};
+
+export type AchadoMotorenergia = 
+/**  O firmware limita a CPU (térmico) — nenhum plano resolve isso. */
+"FirmwareLimitaPorTemperatura" | 
+/**  O firmware limita a CPU (energia/EDP/PL) — nenhum plano resolve isso. */
+"FirmwareLimitaPorEnergia" | 
+/**  O clock reportado subiu e o efetivo caiu: não é melhora. */
+"ClockReportadoSubiuEfetivoCaiu" | 
+/**  Sem jogo medido: a escolha se apoia só na rajada e nos contadores. */
+"SemJogoMedido" | 
+/**  Temperatura não exposta pelo Windows nesta máquina. */
+"TemperaturaIndisponivel" | 
+/**
+ *  Os contadores de limite de firmware não responderam. Não dá para dizer
+ *  que a CPU está livre nem que está limitada.
+ */
+"LimitesDeFirmwareIndisponiveis" | 
+/**
+ *  A amostragem do PDH falhou em mais da metade das leituras. O resumo
+ *  vale menos do que o número de amostras sugere.
+ */
+"AmostragemFalha" | 
+/**  Os candidatos ficaram dentro da margem: fica o padrão do Windows. */
+"NenhumGanhouComMargem" | 
+/**  O plano que a pessoa já usa não perdeu para nenhum candidato: fica ele. */
+"PlanoAtualJaEOMelhor" | 
+/**  Um candidato foi descartado por ter MENOS FPS ou pior 1% low. */
+"CandidatoTirariaFps" | 
+/**  Sem jogo aberto, os quadros vieram do teste de quadros do Otimiza. */
+"QuadrosSinteticos" | 
+/**  Empate de desempenho; ganhou o que esquenta menos. */
+"EmpateDesfeitoPelaTemperatura" | "PoucasRepeticoes" | "MedicaoInstavel";
+
+export type AchadoMouse = "AceleracaoLigada" | "BarraAbaixoDoMeio" | "BarraAcimaDoMeio";
+
+export type AchadoNaTela = {
+	achado: AchadoMouse,
+	titulo: string,
+	explicacao: string,
+	onde_mexer: string,
 };
 
 export type Achado_Deserialize = {
@@ -343,7 +675,216 @@ export type ActionStatus =
 /**  O Windows tem o recurso e quem montou a imagem tirou (diferente de `Unsupported`). */
 "UserOrOemManaged" | "Skipped";
 
+/**
+ *  Na escala da tela: saturação 0 a 100 (50 é o normal), brilho e contraste -40 a 40, gama 70 a 150 (100 é o normal),
+ *  matiz -30 a 30 graus.
+ */
+export type Ajuste = {
+	saturacao: number,
+	brilho: number,
+	contraste: number,
+	gama: number,
+	matiz: number,
+};
+
+export type AjusteCaro = {
+	chave: string,
+	valor: string,
+	onde: string,
+	/**  Medida por terceiros, nunca por nós. */
+	ganho: string,
+};
+
+/**  Ajustes conhecidos, pelo que atacam. A receita (item 3) é quem escolhe e prova. */
+export type AjusteDoctor = "PerfilGraficoMaisLeve" | "MenosCargaNoProcessador" | "PlanoDeEnergiaOtimiza" | "FecharProgramasPesados" | "TirarLimiteDeFps" | "ConferirRefrigeracao" | "JogoNoSsd" | "TelaCheiaOuSemBordaComFlip" | "MaisResolucaoOuQualidade" | "BaixarResolucao";
+
+export type AjusteNaTela = {
+	id: string,
+	titulo: string,
+	explicacao: string,
+	historico: string,
+	/**
+	 *  Se o OTIMIZA aplicou e não desfez, não leitura do driver: o que o cliente pôs à mão aparece como não aplicado,
+	 *  e o "Aplicar" guarda o valor dele.
+	 */
+	aplicado: boolean,
+};
+
+export type Ajustes = Ajustes_Serialize | Ajustes_Deserialize;
+
+/**  O que o driver respondeu agora. `None` em cada campo: o recurso não existe nesta placa ou neste driver. */
+export type AjustesAmddriver = AjustesAmddriver_Serialize | AjustesAmddriver_Deserialize;
+
+/**  O que o driver respondeu agora. `None` em cada campo: o recurso não existe nesta placa ou neste driver. */
+export type AjustesAmddriver_Deserialize = {
+	anti_lag?: boolean | null,
+	afmf?: boolean | null,
+	rsr?: boolean | null,
+	limite_ligado?: boolean | null,
+	limite_fps?: number | null,
+	limite_faixa?: [number, number] | null,
+};
+
+/**  O que o driver respondeu agora. `None` em cada campo: o recurso não existe nesta placa ou neste driver. */
+export type AjustesAmddriver_Serialize = {
+	anti_lag: boolean | null,
+	afmf: boolean | null,
+	rsr: boolean | null,
+	limite_ligado: boolean | null,
+	limite_fps: number | null,
+	limite_faixa: [number, number] | null,
+};
+
+export type Ajustes_Deserialize = {
+	/**  0 desligado, 1 ligado, 2 ligado com boost. */
+	baixa_latencia?: number | null,
+	limite_ligado?: boolean | null,
+	limite_fps?: number | null,
+};
+
+export type Ajustes_Serialize = {
+	/**  0 desligado, 1 ligado, 2 ligado com boost. */
+	baixa_latencia: number | null,
+	limite_ligado: boolean | null,
+	limite_fps: number | null,
+};
+
+export type Alteracao = {
+	id: string,
+	titulo: string,
+	/**  Arquivo que aplica, sem `.rs`. É o que a trava confere. */
+	modulo: string,
+	o_que_muda: string,
+	risco: Risco,
+	escopo: Escopo,
+	precisa_reiniciar: boolean,
+	/**
+	 *  O próprio sistema refaz o que foi apagado (cache). Não é desfazer, mas
+	 *  é a diferença entre perder um cache e perder um arquivo do cliente.
+	 */
+	refaz_sozinho: boolean,
+	/**
+	 *  Como se desfaz — em palavras, porque é isto que o cliente precisa ler
+	 *  ANTES de aplicar.
+	 */
+	desfazer: string,
+};
+
+/**
+ *  O que cerca a partida e não é o jogo nem o Otimiza decidindo: gravado em cada medição automática. Os campos
+ *  depois de `windows` vieram com a identidade da máquina (MASTER-PLAN, item 4); medição antiga os tem vazios.
+ */
+export type Ambiente = Ambiente_Serialize | Ambiente_Deserialize;
+
+/**
+ *  O que cerca a partida e não é o jogo nem o Otimiza decidindo: gravado em cada medição automática. Os campos
+ *  depois de `windows` vieram com a identidade da máquina (MASTER-PLAN, item 4); medição antiga os tem vazios.
+ */
+export type Ambiente_Deserialize = {
+	driver?: string | null,
+	windows?: string | null,
+	/**  Nome da placa de vídeo principal: trocar de placa explica qualquer salto. */
+	placa?: string | null,
+	/**  Versão do firmware, só lida. */
+	bios?: string | null,
+	/**  Versão do Otimiza que mediu: uma versão nova pode medir ou agir diferente. */
+	otimiza?: string | null,
+};
+
+/**
+ *  O que cerca a partida e não é o jogo nem o Otimiza decidindo: gravado em cada medição automática. Os campos
+ *  depois de `windows` vieram com a identidade da máquina (MASTER-PLAN, item 4); medição antiga os tem vazios.
+ */
+export type Ambiente_Serialize = {
+	driver: string | null,
+	windows: string | null,
+	/**  Nome da placa de vídeo principal: trocar de placa explica qualquer salto. */
+	placa: string | null,
+	/**  Versão do firmware, só lida. */
+	bios: string | null,
+	/**  Versão do Otimiza que mediu: uma versão nova pode medir ou agir diferente. */
+	otimiza: string | null,
+};
+
+/**  `None` = o contador não existe ou não respondeu nesta máquina, e a tela diz isso. */
+export type Amostra = Amostra_Serialize | Amostra_Deserialize;
+
+/**  `None` = o contador não existe ou não respondeu nesta máquina, e a tela diz isso. */
+export type Amostra_Deserialize = {
+	instante_ms: number,
+	cpu_total_pct?: number | null,
+	cpu_nucleo_max_pct?: number | null,
+	nucleos?: number | null,
+	clock_efetivo_mhz?: number | null,
+	clock_nominal_mhz?: number | null,
+	gpu_pct?: number | null,
+	gpu_3d_pct?: number | null,
+	vram_usada_mb?: number | null,
+	vram_compartilhada_mb?: number | null,
+	ram_disponivel_mb?: number | null,
+	commit_pct?: number | null,
+	paginas_lidas_s?: number | null,
+	disco_latencia_ms?: number | null,
+	disco_fila?: number | null,
+	disco_ocupado_pct?: number | null,
+	/**  Os 3 programas que mais usavam processador (fora o jogo e o Otimiza): é o que o detetive de travadas usa. */
+	processos?: ProcessoNaAmostra[],
+	nucleos_pct?: (number | null)[],
+	/**  Bit 0 térmico, bit 1 energia. */
+	limite_flags?: number | null,
+};
+
+/**  `None` = o contador não existe ou não respondeu nesta máquina, e a tela diz isso. */
+export type Amostra_Serialize = {
+	instante_ms: number,
+	cpu_total_pct: number | null,
+	cpu_nucleo_max_pct: number | null,
+	nucleos: number | null,
+	clock_efetivo_mhz: number | null,
+	clock_nominal_mhz: number | null,
+	gpu_pct: number | null,
+	gpu_3d_pct: number | null,
+	vram_usada_mb: number | null,
+	vram_compartilhada_mb: number | null,
+	ram_disponivel_mb: number | null,
+	commit_pct: number | null,
+	paginas_lidas_s: number | null,
+	disco_latencia_ms: number | null,
+	disco_fila: number | null,
+	disco_ocupado_pct: number | null,
+	/**  Os 3 programas que mais usavam processador (fora o jogo e o Otimiza): é o que o detetive de travadas usa. */
+	processos: ProcessoNaAmostra[],
+	/**  Bit 0 térmico, bit 1 energia. */
+	limite_flags: number | null,
+};
+
 export type Analise = Analise_Serialize | Analise_Deserialize;
+
+export type AnaliseStreaming = AnaliseStreaming_Serialize | AnaliseStreaming_Deserialize;
+
+export type AnaliseStreaming_Deserialize = {
+	veredito: VereditoStreaming,
+	engasgos_por_minuto?: number | null,
+	coincidencia_pct?: number | null,
+	latencia_ms?: number | null,
+	memoria_pct?: number | null,
+	midia?: Midia | null,
+	falta: string[],
+	explicacao: string,
+	proximo_passo?: string | null,
+};
+
+export type AnaliseStreaming_Serialize = {
+	veredito: VereditoStreaming,
+	engasgos_por_minuto: number | null,
+	coincidencia_pct: number | null,
+	latencia_ms: number | null,
+	memoria_pct: number | null,
+	midia: Midia | null,
+	falta: string[],
+	explicacao: string,
+	proximo_passo: string | null,
+};
 
 export type Analise_Deserialize = {
 	estado: Estado,
@@ -373,12 +914,157 @@ export type AntiCheatDoJogo = "Nenhum" |
 
 export type Api = "DirectX12" | "DirectX11" | "DirectX9" | "Vulkan" | "OpenGl" | "Desconhecida";
 
+/**  Por onde o quadro chega à tela. A tela escolhe a frase por aqui, nunca comparando o texto do PresentMon. */
+export type Apresentacao = 
+/**  "Hardware: Independent Flip", "Hardware: Legacy Flip", "Hardware Composed: Independent Flip": direto na tela. */
+"Direta" | 
+/**  "Composed: Flip": o Windows compõe antes de mostrar. */
+"Composta" | 
+/**  "Composed: Copy with GPU/CPU GDI": o Windows copia cada quadro, o caminho com mais atraso. */
+"Copiada" | "Desconhecida";
+
+export type ArquiteturaMotorenergia = 
+/**  Sem Speed Shift (HWP): o Windows escolhe cada estado de desempenho. */
+"IntelLegada" | 
+/**  Skylake em diante, com HWP e núcleos todos iguais. */
+"IntelModerna" | 
+/**  Alder Lake em diante: núcleos P e E, com classes de eficiência. */
+"IntelHibrida" | 
+/**  Zen e Zen+ (e anteriores ao Ryzen): CPPC limitado ou ausente. */
+"AmdLegada" | "Zen2" | "Zen3" | "Zen4" | 
+/**  Zen 5 e posteriores (família 1Ah). */
+"Zen5Mais" | "Desconhecida";
+
+export type Ativo = Ativo_Serialize | Ativo_Deserialize;
+
+export type Ativo_Deserialize = {
+	recurso: Recurso,
+	multiplicador: number,
+	/**  No automático, `multiplicador` é o do último quadro real. */
+	automatico: boolean,
+	/**  Passando do limite do monitor: o número pode passar dos Hz (o monitor mostra até os Hz dele). */
+	sem_limite: boolean,
+	/**  O que chegou à tela. MEDIDO enquanto gera; desconhecido enquanto procura a janela. */
+	fps_na_tela: ValorMetricas_Deserialize,
+	situacao: Situacao,
+	/**  Hz do monitor onde o jogo está: o teto do número. */
+	hz: number,
+	hdr: boolean,
+	integrada: boolean,
+	refeitas: number,
+	/**
+	 *  Do quadro composto pelo Windows até o gerador mostrar. ESTIMADO: sem marcadores do jogo não dá para medir o
+	 *  atraso do clique até a tela.
+	 */
+	atraso_ms: ValorMetricas_Deserialize,
+	/**  AFMF ou Smooth Motion: ligado no driver, número pelo PresentMon. */
+	pelo_driver: boolean,
+	/**  Só para os de driver: a medição viu o driver gerar quadros? */
+	geracao_vista?: boolean | null,
+	nota?: string | null,
+	/**  Quanto da placa o gerador do Otimiza ocupou nos últimos 10 s, em % do tempo (MEDIDO pelos carimbos da placa). */
+	placa_pct?: number | null,
+	/**  No modo leve (placa sem folga, ou a guarda aliviou). */
+	leve?: boolean,
+	/**  FPS do jogo agora, com o gerador ligado (o que ele capturou de quadros reais). */
+	fps_do_jogo?: number | null,
+	/**  Quanto do FPS o jogo mantém com o gerador ligado, em %, MEDIDO pela guarda (com e sem ele, colados no tempo). */
+	manteve_pct?: number | null,
+	comparacoes?: number,
+	/**  Com escala: o nível, o tamanho em que o jogo renderiza e o da imagem ampliada na tela. */
+	escala?: NivelDeEscala | null,
+	jogo_px?: [number, number] | null,
+	tela_px?: [number, number] | null,
+};
+
+export type Ativo_Serialize = {
+	recurso: Recurso,
+	multiplicador: number,
+	/**  No automático, `multiplicador` é o do último quadro real. */
+	automatico: boolean,
+	/**  Passando do limite do monitor: o número pode passar dos Hz (o monitor mostra até os Hz dele). */
+	sem_limite: boolean,
+	/**  O que chegou à tela. MEDIDO enquanto gera; desconhecido enquanto procura a janela. */
+	fps_na_tela: ValorMetricas_Serialize,
+	situacao: Situacao,
+	/**  Hz do monitor onde o jogo está: o teto do número. */
+	hz: number,
+	hdr: boolean,
+	integrada: boolean,
+	refeitas: number,
+	/**
+	 *  Do quadro composto pelo Windows até o gerador mostrar. ESTIMADO: sem marcadores do jogo não dá para medir o
+	 *  atraso do clique até a tela.
+	 */
+	atraso_ms: ValorMetricas_Serialize,
+	/**  AFMF ou Smooth Motion: ligado no driver, número pelo PresentMon. */
+	pelo_driver: boolean,
+	/**  Só para os de driver: a medição viu o driver gerar quadros? */
+	geracao_vista: boolean | null,
+	nota: string | null,
+	/**  Quanto da placa o gerador do Otimiza ocupou nos últimos 10 s, em % do tempo (MEDIDO pelos carimbos da placa). */
+	placa_pct: number | null,
+	/**  No modo leve (placa sem folga, ou a guarda aliviou). */
+	leve: boolean,
+	/**  FPS do jogo agora, com o gerador ligado (o que ele capturou de quadros reais). */
+	fps_do_jogo: number | null,
+	/**  Quanto do FPS o jogo mantém com o gerador ligado, em %, MEDIDO pela guarda (com e sem ele, colados no tempo). */
+	manteve_pct: number | null,
+	comparacoes: number,
+	/**  Com escala: o nível, o tamanho em que o jogo renderiza e o da imagem ampliada na tela. */
+	escala: NivelDeEscala | null,
+	jogo_px: [number, number] | null,
+	tela_px: [number, number] | null,
+};
+
 /**  Como o endereço virou driver. */
 export type AtribuicaoDoDpc = 
 /**  Caiu dentro de base + tamanho de um módulo visto na captura. */
 "Exata" | 
 /**  Sem o evento de imagem: o módulo de base mais próxima abaixo, pela lista de drivers do Windows. */
 "Aproximada" | "SemModulo";
+
+export type Autonomia = "Windows" | 
+/**  Deixar o processador escolher os estados (HWP / CPPC). */
+"Hardware";
+
+export type Avaliacao = Avaliacao_Serialize | Avaliacao_Deserialize;
+
+export type Avaliacao_Deserialize = {
+	hipotese: Hipotese,
+	confianca: ConfiancaCausadatravada,
+	/**  k: episódios com o sinal ligado. */
+	episodios_com_sinal: number,
+	/**  n: episódios dentro da cobertura das amostras. */
+	episodios_cobertos: number,
+	/**  p0: fração das amostras com o sinal ligado. */
+	taxa_de_base: number | null,
+	lift?: number | null,
+	p_corrigido?: number | null,
+	a_favor: string[],
+	contra: string[],
+	teste: TesteCausadatravada,
+	/**  Resultado de um teste ativo anterior desta hipótese neste jogo (memória, inclusive negativa). */
+	ja_testado?: string | null,
+};
+
+export type Avaliacao_Serialize = {
+	hipotese: Hipotese,
+	confianca: ConfiancaCausadatravada,
+	/**  k: episódios com o sinal ligado. */
+	episodios_com_sinal: number,
+	/**  n: episódios dentro da cobertura das amostras. */
+	episodios_cobertos: number,
+	/**  p0: fração das amostras com o sinal ligado. */
+	taxa_de_base: number | null,
+	lift: number | null,
+	p_corrigido: number | null,
+	a_favor: string[],
+	contra: string[],
+	teste: TesteCausadatravada,
+	/**  Resultado de um teste ativo anterior desta hipótese neste jogo (memória, inclusive negativa). */
+	ja_testado: string | null,
+};
 
 /**  A tela decide só por `comparacao`, nunca por `versao_publicada` (texto para exibir). */
 export type AvisoDeVersao = AvisoDeVersao_Serialize | AvisoDeVersao_Deserialize;
@@ -401,12 +1087,194 @@ export type AvisoDeVersao_Serialize = {
 	pagina: string | null,
 };
 
+export type Backup = Backup_Serialize | Backup_Deserialize;
+
+export type Backup_Deserialize = {
+	plano_anterior: string,
+	nome_anterior?: string | null,
+	capturado_em: number,
+	valores: ValorGuardado_Deserialize[],
+};
+
+export type Backup_Serialize = {
+	plano_anterior: string,
+	nome_anterior: string | null,
+	capturado_em: number,
+	valores: ValorGuardado_Serialize[],
+};
+
 export type BandaDoWifi = "2,4 GHz" | "5 GHz" | "6 GHz";
+
+export type BaseTravada = {
+	fps: number,
+	/**  Quadros por real que fecham o monitor (60 em 180 Hz → 3). */
+	multiplicador: number,
+	/**  O teto está no perfil que o driver usa E o jogo abriu depois dele: está valendo nesta partida. */
+	valendo: boolean,
+};
+
+export type Bateria = Bateria_Serialize | Bateria_Deserialize;
+
+export type Bateria_Deserialize = {
+	autoajuste: CandidatoMotorenergia_Deserialize[],
+	escada_de_epp: CandidatoMotorenergia_Deserialize[],
+	dispositivos: CandidatoMotorenergia_Deserialize[],
+	controlados: string[],
+};
+
+export type Bateria_Serialize = {
+	autoajuste: CandidatoMotorenergia_Serialize[],
+	escada_de_epp: CandidatoMotorenergia_Serialize[],
+	dispositivos: CandidatoMotorenergia_Serialize[],
+	controlados: string[],
+};
+
+export type BenchmarkComparison = BenchmarkComparison_Serialize | BenchmarkComparison_Deserialize;
+
+export type BenchmarkComparison_Deserialize = {
+	before: BenchmarkSnapshot_Deserialize,
+	after: BenchmarkSnapshot_Deserialize,
+	metrics: MetricDelta[],
+	summary: string,
+};
+
+export type BenchmarkComparison_Serialize = {
+	before: BenchmarkSnapshot_Serialize,
+	after: BenchmarkSnapshot_Serialize,
+	metrics: MetricDelta[],
+	summary: string,
+};
+
+export type BenchmarkSnapshot = BenchmarkSnapshot_Serialize | BenchmarkSnapshot_Deserialize;
+
+export type BenchmarkSnapshot_Deserialize = {
+	timestamp: number,
+	idle_cpu_percent: number | null,
+	idle_ram_gb: number | null,
+	process_count: number | null,
+	cpu_single_thread_mops: number | null,
+	cpu_multi_thread_mops: number | null,
+	cpu_frequency_under_load_mhz: number | null,
+	/**  `default` mantém legível o baseline gravado antes desta métrica. */
+	scheduler_p99_delay_ms?: number | null,
+	hitches_per_minute?: number | null,
+};
+
+export type BenchmarkSnapshot_Serialize = {
+	timestamp: number,
+	idle_cpu_percent: number | null,
+	idle_ram_gb: number | null,
+	process_count: number | null,
+	cpu_single_thread_mops: number | null,
+	cpu_multi_thread_mops: number | null,
+	cpu_frequency_under_load_mhz: number | null,
+	/**  `default` mantém legível o baseline gravado antes desta métrica. */
+	scheduler_p99_delay_ms: number | null,
+	hitches_per_minute: number | null,
+};
+
+export type BiosNaTela = BiosNaTela_Serialize | BiosNaTela_Deserialize;
+
+export type BiosNaTela_Deserialize = {
+	leitura: LeituraBios_Deserialize,
+	passos: PassoBios[],
+};
+
+export type BiosNaTela_Serialize = {
+	leitura: LeituraBios_Serialize,
+	passos: PassoBios[],
+};
+
+export type BloatItem = BloatItem_Serialize | BloatItem_Deserialize;
+
+export type BloatItem_Deserialize = {
+	name: string,
+	publisher: string,
+	kind: BloatKind,
+	/**  `None` para apps da Loja (pasta protegida): "0 MB" daria a impressão de que não ocupam espaço. */
+	size_mb?: number | null,
+	/**  Sempre presente: marcar sem explicar é o que faz o cliente desinstalar coisa errada. */
+	reason: string,
+	package?: string | null,
+	removable_here: boolean,
+};
+
+export type BloatItem_Serialize = {
+	name: string,
+	publisher: string,
+	kind: BloatKind,
+	/**  `None` para apps da Loja (pasta protegida): "0 MB" daria a impressão de que não ocupam espaço. */
+	size_mb: number | null,
+	/**  Sempre presente: marcar sem explicar é o que faz o cliente desinstalar coisa errada. */
+	reason: string,
+	package: string | null,
+	removable_here: boolean,
+};
+
+export type BloatKind = "OemUtility" | "TrialSecurity" | "Sponsored" | "StoreApp";
+
+export type BloatReport = BloatReport_Serialize | BloatReport_Deserialize;
+
+export type BloatReport_Deserialize = {
+	items: BloatItem_Deserialize[],
+	total_mb: number | null,
+	unmeasured: number,
+	programs_scanned: number,
+	/**  Com o serviço da Loja desligado, a lista saía sem nenhum app da Loja e sem uma palavra sobre isso. */
+	lacunas: string[],
+};
+
+export type BloatReport_Serialize = {
+	items: BloatItem_Serialize[],
+	total_mb: number | null,
+	unmeasured: number,
+	programs_scanned: number,
+	/**  Com o serviço da Loja desligado, a lista saía sem nenhum app da Loja e sem uma palavra sobre isso. */
+	lacunas: string[],
+};
+
+export type BoostMotorenergia = "Windows" | "Agressivo";
 
 export type BotaoDoOti = {
 	rotulo: string,
 	/**  Uma área do app (`turbo`, `rede`…): o servidor só devolve as que existem. */
 	area: string,
+};
+
+export type BottleneckReport = BottleneckReport_Serialize | BottleneckReport_Deserialize;
+
+export type BottleneckReport_Deserialize = {
+	limite: Limite,
+	summary: string,
+	advice: string,
+	cpu_total: number | null,
+	/**  É este que denuncia o gargalo de um núcleo só. */
+	cpu_max_core: number | null,
+	gpu_percent: number | null,
+	vram_used_mb: number | null,
+	vram_total_mb?: number | null,
+	ram_available_gb: number | null,
+	ram_total_gb: number | null,
+	disk_percent: number | null,
+	samples: number,
+	seconds: number | null,
+};
+
+export type BottleneckReport_Serialize = {
+	limite: Limite,
+	summary: string,
+	advice: string,
+	cpu_total: number | null,
+	/**  É este que denuncia o gargalo de um núcleo só. */
+	cpu_max_core: number | null,
+	gpu_percent: number | null,
+	vram_used_mb: number | null,
+	vram_total_mb: number | null,
+	ram_available_gb: number | null,
+	ram_total_gb: number | null,
+	disk_percent: number | null,
+	samples: number,
+	seconds: number | null,
 };
 
 export type CPUMetrics = CPUMetrics_Serialize | CPUMetrics_Deserialize;
@@ -448,11 +1316,65 @@ export type Caminho =
 /**  O Roblox não tem jogo para abrir sozinho: abre a página inicial, a pessoa escolhe o jogo e o Otimiza reconhece. */
 "Site";
 
+export type CaminhoCores = "Amd" | "Nvidia" | "Gama";
+
+export type CaminhoMouse = CaminhoMouse_Serialize | CaminhoMouse_Deserialize;
+
+export type CaminhoMouse_Deserialize = {
+	/**  `None` quando não se leu: absolver o que ninguém olhou é o defeito que este produto não comete. */
+	aceleracao?: boolean | null,
+	barra?: number | null,
+	taxa_hz?: number | null,
+	achados: AchadoMouse[],
+	falta: string[],
+};
+
+export type CaminhoMouse_Serialize = {
+	/**  `None` quando não se leu: absolver o que ninguém olhou é o defeito que este produto não comete. */
+	aceleracao: boolean | null,
+	barra: number | null,
+	taxa_hz: number | null,
+	achados: AchadoMouse[],
+	falta: string[],
+};
+
+export type CaminhoNaTela = CaminhoNaTela_Serialize | CaminhoNaTela_Deserialize;
+
+export type CaminhoNaTela_Deserialize = {
+	caminho: CaminhoMouse_Deserialize,
+	achados: AchadoNaTela[],
+};
+
+export type CaminhoNaTela_Serialize = {
+	caminho: CaminhoMouse_Serialize,
+	achados: AchadoNaTela[],
+};
+
+export type Campo = "Driver" | "Windows" | "Placa" | "Bios" | "Otimiza";
+
 export type CanalMelhor = {
 	canal: number,
 	/**  Redes de outros que disputariam o ar lá, e no seu canal de hoje (pela mesma conta). */
 	disputando: number,
 	no_seu: number,
+};
+
+export type CandidatoMotorenergia = CandidatoMotorenergia_Serialize | CandidatoMotorenergia_Deserialize;
+
+export type CandidatoMotorenergia_Deserialize = {
+	id: string,
+	papel: Papel,
+	parametros: Parametros_Deserialize,
+	mudancas: MudancaMotorenergia_Deserialize[],
+	ignorados: Ignorado[],
+};
+
+export type CandidatoMotorenergia_Serialize = {
+	id: string,
+	papel: Papel,
+	parametros: Parametros_Serialize,
+	mudancas: MudancaMotorenergia_Serialize[],
+	ignorados: Ignorado[],
 };
 
 export type CantoDaSobreposicao = "SuperiorEsquerdo" | "SuperiorDireito" | "InferiorEsquerdo" | "InferiorDireito";
@@ -464,6 +1386,51 @@ export type CategoriaDoDriver = "Video" | "Rede" | "Energia" | "Disco" | "Usb" |
 "FrameworkWdf" | 
 /**  O próprio Windows (relógio, agendador). */
 "Windows" | "Outro" | "SemModulo";
+
+export type Causa = {
+	tipo: TipoDeCausa,
+	confianca: ConfiancaDoctor,
+	/**  Os números da partida, já em frase curta: "processador ocupado em 97% de cada quadro, placa em 61%". */
+	evidencia: string,
+	ajuda: AjusteDoctor[],
+	nao_ajuda: AjusteDoctor[],
+	/**  Janelas que sustentam a causa, de `janelas_lidas`. */
+	janelas: number,
+};
+
+export type Checagem = Checagem_Serialize | Checagem_Deserialize;
+
+export type Checagem_Deserialize = {
+	servicos: ServicoEssencial[],
+	desativados: number,
+	fabricante?: string | null,
+	modelo?: string | null,
+};
+
+export type Checagem_Serialize = {
+	servicos: ServicoEssencial[],
+	desativados: number,
+	fabricante: string | null,
+	modelo: string | null,
+};
+
+export type CitizenFxReport = CitizenFxReport_Serialize | CitizenFxReport_Deserialize;
+
+export type CitizenFxReport_Deserialize = {
+	existe: boolean,
+	caminho?: string | null,
+	/**  `None` é "não sei", nunca `Some(Vazio)`. */
+	pool_sizes?: PoolSizesIncrease_Deserialize | null,
+	note: string,
+};
+
+export type CitizenFxReport_Serialize = {
+	existe: boolean,
+	caminho: string | null,
+	/**  `None` é "não sei", nunca `Some(Vazio)`. */
+	pool_sizes: PoolSizesIncrease_Serialize | null,
+	note: string,
+};
 
 export type Classe = "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | "MemoriaVideo" | "Disco" | "LimiteTermico" | "LimiteEletrico" | "TetoDeQuadros" | 
 /**  A contagem é medida; a causa NÃO está nesta classe. */
@@ -488,10 +1455,41 @@ export type ClasseDaInicializacao = "Essencial" | "Util" | "Opcional" | "Desconh
 /**  Por padrão só `Segura` e `Recomendada`. `Avancada` existe para o relatório dizer que não foi aplicada. */
 export type ClasseDoAjuste = "Segura" | "Recomendada" | "Avancada";
 
+export type ClasseNucleos = "Desempenho" | "Eficiencia" | 
+/**  NÃO é "não descobri": é a resposta certa para um processador comum. */
+"Uniforme";
+
+export type CleanOutcome = {
+	freed_mb: number | null,
+	message: string,
+};
+
+export type CleanOutcomeFivem = {
+	freed_mb: number | null,
+	message: string,
+};
+
+export type ComoProvar = 
+/**  Rodadas alternadas no jogo (área Otimizar). */
+"ProvaNoJogo" | 
+/**  As próximas partidas contra as de antes (o portão). */
+"ProximasPartidas" | 
+/**  O Otimiza não mexe nisso: é o cliente quem faz, e a medição mostra depois. */
+"PeloCliente";
+
 /**  Três variantes, não um bool: "não sei" (consulta falhou ou ilegível) não pode virar "está tudo em dia". */
 export type ComparacaoDeVersao = 
 /**  Instalada igual ou MAIOR (compilação local). */
 "NaoHaNova" | "HaVersaoNova" | "NaoSei";
+
+/**  O mesmo pedaço do quadro do jogo (antes de ampliar) e da imagem ampliada pelo FSR, para a tela comparar. */
+export type ComparacaoNaTela = {
+	/**  `data:image/bmp;base64,...` */
+	jogo: string,
+	tela: string,
+	jogo_px: [number, number],
+	tela_px: [number, number],
+};
 
 export type Conclusao = "SemEvidencia" | "SemCarga" | "NadaNoLimite" | "Encontrado";
 
@@ -528,6 +1526,18 @@ export type ConexaoWifi_Serialize = {
 	envio_mbps: number,
 };
 
+/**  O cliente abre o Otimiza com o jogo FECHADO: quem persiste (marca d'água, log) vence a foto do instante. */
+export type Confianca = "Declarado" | "Medido" | "Historico" | 
+/**  Nunca sustenta sozinho uma afirmação sobre travamento. */
+"Inferido";
+
+/**  Ordem crescente de força. */
+export type ConfiancaCausadatravada = 
+/**  O contador não respondeu: nunca vira "ausente". */
+"NaoMedido" | 
+/**  Poucas travadas para qualquer conclusão. */
+"Inconclusiva" | "SemEvidencia" | "Moderada" | "Forte";
+
 export type ConfiancaDoLab = 
 /**  Separados com folga de 3% ou mais da média. */
 "Alta" | 
@@ -537,6 +1547,10 @@ export type ConfiancaDoLab =
 "SemDiferenca" | 
 /**  Faltam rodadas. */
 "Insuficiente";
+
+export type ConfiancaDoctor = "Alta" | "Media" | 
+/**  Sinal fraco ou indireto: aparece, mas não entra na receita automática. */
+"Hipotese";
 
 export type ConfigDaSobreposicao = ConfigDaSobreposicao_Serialize | ConfigDaSobreposicao_Deserialize;
 
@@ -580,14 +1594,243 @@ export type ConfigDaSobreposicao_Serialize = {
 	versao: number,
 };
 
+/**  Um jogo da configuração por motor, com o que o Otimiza já aplicou nele. */
+export type ConfigDoJogoNaTela = ConfigDoJogoNaTela_Serialize | ConfigDoJogoNaTela_Deserialize;
+
+/**  Um jogo da configuração por motor, com o que o Otimiza já aplicou nele. */
+export type ConfigDoJogoNaTela_Deserialize = {
+	historico: string,
+	aplicado: boolean,
+} & JogoNaTela_Deserialize;
+
+/**  Um jogo da configuração por motor, com o que o Otimiza já aplicou nele. */
+export type ConfigDoJogoNaTela_Serialize = {
+	historico: string,
+	aplicado: boolean,
+} & JogoNaTela_Serialize;
+
+export type ConfigJogoFinding = {
+	id: string,
+	title: string,
+	measured: string,
+	advice: string,
+	severity: FindingSeverity,
+	fix_location: FixLocation,
+};
+
+export type ConfigJogoReport = ConfigJogoReport_Serialize | ConfigJogoReport_Deserialize;
+
+export type ConfigJogoReport_Deserialize = {
+	arquivo?: string | null,
+	jogo: string,
+	caros: AjusteCaro[],
+	findings: ConfigJogoFinding[],
+};
+
+export type ConfigJogoReport_Serialize = {
+	arquivo: string | null,
+	jogo: string,
+	caros: AjusteCaro[],
+	findings: ConfigJogoFinding[],
+};
+
+/**  Um ajuste de energia como ESTE Windows o descreve. */
+export type Configuracao = Configuracao_Serialize | Configuracao_Deserialize;
+
+/**  Um ajuste de energia como ESTE Windows o descreve. */
+export type Configuracao_Deserialize = {
+	subgrupo: string,
+	subgrupo_alias?: string | null,
+	guid: string,
+	alias?: string | null,
+	minimo?: number | null,
+	maximo?: number | null,
+	incremento?: number | null,
+	/**  A unidade vem traduzida pelo Windows. Evidência, não decide nada. */
+	unidade?: string | null,
+	/**  Índice e nome amigável (traduzido) de cada valor possível. */
+	possiveis: ([number, string])[],
+	ac?: number | null,
+	dc?: number | null,
+};
+
+/**  Um ajuste de energia como ESTE Windows o descreve. */
+export type Configuracao_Serialize = {
+	subgrupo: string,
+	subgrupo_alias: string | null,
+	guid: string,
+	alias: string | null,
+	minimo: number | null,
+	maximo: number | null,
+	incremento: number | null,
+	/**  A unidade vem traduzida pelo Windows. Evidência, não decide nada. */
+	unidade: string | null,
+	/**  Índice e nome amigável (traduzido) de cada valor possível. */
+	possiveis: ([number, string])[],
+	ac: number | null,
+	dc: number | null,
+};
+
 export type ConfirmacaoDaBanda = "Confirmado" | 
 /**  Leu-se outro valor: o Windows não está usando o nosso (outra política mais forte, por exemplo). */
 ({ Divergente: number }) & { NaoConsegui?: never } | ({ NaoConsegui: string }) & { Divergente?: never } | "NaoSeAplica";
+
+export type Conflito = {
+	id: string,
+	um: string,
+	outro: string,
+	tipo: Tipo,
+	mecanismo: string,
+	/**  Nunca "escolha um": qual escolher, e por quê. */
+	conselho: string,
+};
 
 export type Conselho = {
 	/**  O que derramou acima do piso é exatamente o que não coube. */
 	liberar_gb: number | null,
 	texto: string,
+};
+
+/**  Sai JUNTO da máscara: quem lê o número de núcleos precisa ler que isso some quando o jogo fechar. */
+export type ConselhoNucleos = {
+	cabe: boolean,
+	explicacao: string,
+};
+
+export type ContaDoUsuario = {
+	conta: ContaDoWindows,
+	ajustes_por_conta: number,
+	explicacao: string,
+};
+
+export type ContaDoWindows = { estado: "Mesma"; usuario: string } | { estado: "Diferente"; processo: string; shell: string } | 
+/**  NÃO é "está tudo bem": é uma verificação que não aconteceu. */
+{ estado: "NaoDeuParaLer"; motivo: string };
+
+export type ContagemDeEngasgos = {
+	micro: number,
+	perceptivel: number,
+	severo: number,
+	extremo: number,
+};
+
+export type ContextoReceita = 
+/**  Driver e Windows lidos e iguais aos de agora. */
+"Igual" | 
+/**  Um dos lados não foi lido (medição antiga, leitura falha): não se sabe se mudou. */
+"NaoLido";
+
+/**  Quem escolhe o estado de desempenho quando nada é forçado. */
+export type Controle = 
+/**  Intel Speed Shift: o processador escolhe, guiado pelo EPP. */
+"HardwareHwp" | 
+/**  AMD CPPC: o processador escolhe, guiado pelo EPP. */
+"HardwareCppc" | 
+/**  P-states clássicos, escolhidos pelo Windows. */
+"SistemaOperacional";
+
+/**  Números, não nomes: iguais em qualquer idioma e versão do Windows. */
+export type Cpuid = {
+	fabricante_bruto: string,
+	familia: number,
+	modelo: number,
+	/**  Leaf 7, EDX bit 15. */
+	hibrido: boolean,
+	/**  Leaf 6, EAX bit 7: Hardware P-States (Speed Shift). */
+	hwp: boolean,
+	/**  Leaf 6, EAX bit 10: preferência de energia no HWP. */
+	hwp_epp: boolean,
+	/**  Leaf 6, EAX bit 14: Turbo Boost Max 3.0 (núcleos preferidos Intel). */
+	nucleos_preferidos_intel: boolean,
+	/**  Leaf 80000008h, EBX bit 27: CPPC da AMD. */
+	cppc: boolean,
+};
+
+export type Crash = Crash_Serialize | Crash_Deserialize;
+
+export type Crash_Deserialize = {
+	/**  Segundos desde 1970 (quando o FiveM gravou o relatório). */
+	quando: number,
+	/**  "An error at GTA5_b3258.exe+14B7EA2" ou "fragInstGta Pool Full, Size == 1600". */
+	erro?: string | null,
+	/**  "bacon-vegan-carbon": o mesmo defeito tem o mesmo hash em qualquer PC. */
+	hash?: string | null,
+	memoria_pct?: number | null,
+	paginacao_livre_mb?: number | null,
+	veiculo?: string | null,
+	/**  Minutos de jogo naquela sessão. */
+	minutos_de_jogo?: number | null,
+	/**  Ids do histórico aplicados nas 48 h antes. */
+	mudancas_antes?: string[],
+};
+
+export type Crash_Serialize = {
+	/**  Segundos desde 1970 (quando o FiveM gravou o relatório). */
+	quando: number,
+	/**  "An error at GTA5_b3258.exe+14B7EA2" ou "fragInstGta Pool Full, Size == 1600". */
+	erro: string | null,
+	/**  "bacon-vegan-carbon": o mesmo defeito tem o mesmo hash em qualquer PC. */
+	hash: string | null,
+	memoria_pct: number | null,
+	paginacao_livre_mb: number | null,
+	veiculo: string | null,
+	/**  Minutos de jogo naquela sessão. */
+	minutos_de_jogo: number | null,
+	/**  Ids do histórico aplicados nas 48 h antes. */
+	mudancas_antes: string[],
+};
+
+/**  O custo de observar, medido na própria investigação. Percentual de UM núcleo, média da janela. */
+export type Custo = Custo_Serialize | Custo_Deserialize;
+
+/**  O custo de observar, medido na própria investigação. Percentual de UM núcleo, média da janela. */
+export type Custo_Deserialize = {
+	otimiza_pct_de_um_nucleo?: number | null,
+	presentmon_pct_de_um_nucleo?: number | null,
+	amostras: number,
+	/**  Tempo do motor puro (detecção + hipóteses + testes), em milissegundos. */
+	analise_ms: number | null,
+};
+
+/**  O custo de observar, medido na própria investigação. Percentual de UM núcleo, média da janela. */
+export type Custo_Serialize = {
+	otimiza_pct_de_um_nucleo: number | null,
+	presentmon_pct_de_um_nucleo: number | null,
+	amostras: number,
+	/**  Tempo do motor puro (detecção + hipóteses + testes), em milissegundos. */
+	analise_ms: number | null,
+};
+
+export type DecisaoExperimento = { decisao: "Esperar"; falta: string } | { decisao: "Manter"; ganho_pct: number | null } | 
+/**  Também é resposta: deixa a pessoa parar de mexer nisso. */
+{ decisao: "NaoMudouNada" } | { decisao: "ReverterSozinho"; queda_pct: number | null } | 
+/**  Atravessou um reinício: avisa e oferece o botão. */
+{ decisao: "PiorouMasNaoReverto"; queda_pct: number | null; porque: string };
+
+export type DecisaoTestedatravada = 
+/**  Redução ≥ 30%, IC abaixo de 1 e FPS guardado. */
+"Manter" | 
+/**  Reduziu com certeza, mas menos que o mínimo que importa. */
+"SemMelhoriaQueImporta" | "SemMelhoriaConfiavel" | "PiorouAsTravadas" | "PiorouOFps" | "Invalido" | 
+/**  Olhada sem decisão: mais oito janelas. */
+"Continuar";
+
+export type Defeito = 
+/**  Intel de mesa da 13ª ou 14ª geração sem o microcódigo 0x12F. */
+{ tipo: "MicrocodigoIntelAntigo"; atual: number } | 
+/**  A placa-mãe demora no boot, e é AMD de mesa da série 7000 ou 9000 (AM5). */
+{ tipo: "BootLentoAm5"; segundos: number } | 
+/**  Placa lenta no boot, sem causa conhecida pela leitura. */
+{ tipo: "BootLento"; segundos: number };
+
+export type Deriva = {
+	jogo: string,
+	mudou: OQueMudou,
+	fps_antes: number | null,
+	fps_depois: number | null,
+	queda_pct: number | null,
+	partidas_antes: number,
+	partidas_depois: number,
 };
 
 export type Desfecho = { estado: "Voltou" } | { estado: "NadaAFazer" } | { estado: "Falhou"; motivo: string };
@@ -613,7 +1856,42 @@ export type DesfechoDaProva =
 
 export type DesfechoDoPlano = "Sucesso" | "EmParte" | "Falhou";
 
+export type DesfechoRegressao = 
+/**  NÃO é "está tudo bem": é "ainda não dá para dizer", com essas palavras. */
+{ desfecho: "SemAmostra" } | { desfecho: "Igual" } | { desfecho: "Melhorou" } | { desfecho: "Piorou" } | 
+/**  O único que interrompe o cliente em vez de esperar ele abrir a tela. */
+{ desfecho: "PiorouMuito" };
+
 export type Diagnostico = Diagnostico_Serialize | Diagnostico_Deserialize;
+
+/**  O classificador (`core::gargalo`) aponta os gargalos sustentados na janela, com a evidência. */
+export type DiagnosticoAoVivo = DiagnosticoAoVivo_Serialize | DiagnosticoAoVivo_Deserialize;
+
+/**  O classificador (`core::gargalo`) aponta os gargalos sustentados na janela, com a evidência. */
+export type DiagnosticoAoVivo_Deserialize = {
+	placa?: PlacaTelemetria | null,
+	jogo?: string | null,
+	amostras: Amostra_Deserialize[],
+	saude?: SaudeDosQuadros_Deserialize | null,
+	quadros_erro?: string | null,
+	gargalo: Diagnostico_Deserialize,
+	travadas?: Investigacao | null,
+	/**  `None` sem placa NVIDIA. */
+	sensores_da_placa?: ResumoGpu_Deserialize | null,
+};
+
+/**  O classificador (`core::gargalo`) aponta os gargalos sustentados na janela, com a evidência. */
+export type DiagnosticoAoVivo_Serialize = {
+	placa: PlacaTelemetria | null,
+	jogo: string | null,
+	amostras: Amostra_Serialize[],
+	saude: SaudeDosQuadros_Serialize | null,
+	quadros_erro: string | null,
+	gargalo: Diagnostico_Serialize,
+	travadas: Investigacao | null,
+	/**  `None` sem placa NVIDIA. */
+	sensores_da_placa: ResumoGpu_Serialize | null,
+};
 
 export type DiagnosticoDaTela = DiagnosticoDaTela_Serialize | DiagnosticoDaTela_Deserialize;
 
@@ -683,6 +1961,26 @@ export type DiagnosticoDoWifi_Deserialize = {
 export type DiagnosticoDoWifi_Serialize = {
 	ligacao: LigacaoDeRede_Serialize,
 	achados: AchadoDoWifi[],
+};
+
+export type DiagnosticoDoctor = DiagnosticoDoctor_Serialize | DiagnosticoDoctor_Deserialize;
+
+export type DiagnosticoDoctor_Deserialize = {
+	jogo?: string | null,
+	/**  Janelas da partida medidas pelo PresentMon (as outras não dizem o gargalo). */
+	janelas_lidas: number,
+	causas: Causa[],
+	/**  O que não deu para ler, em frase: faltar leitura não é "está tudo bem". */
+	lacunas: string[],
+};
+
+export type DiagnosticoDoctor_Serialize = {
+	jogo: string | null,
+	/**  Janelas da partida medidas pelo PresentMon (as outras não dizem o gargalo). */
+	janelas_lidas: number,
+	causas: Causa[],
+	/**  O que não deu para ler, em frase: faltar leitura não é "está tudo bem". */
+	lacunas: string[],
 };
 
 export type Diagnostico_Deserialize = {
@@ -801,11 +2099,124 @@ export type DriverMedido_Serialize = {
 	acao: string | null,
 };
 
+export type Episodio = {
+	/**  O pior quadro do episódio (`CPUStartQPC` dele). */
+	qpc: number,
+	/**
+	 *  O trecho em que o atraso aconteceu: do começo do primeiro quadro ruim ao fim do último. O `CPUStartQPC` do
+	 *  PresentMon marca o COMEÇO do quadro; o atraso está dentro dele, e pode cruzar para a amostra seguinte.
+	 */
+	inicio_qpc: number,
+	fim_qpc: number,
+	pior_ms: number | null,
+	excesso_ms: number | null,
+	severidade: Severidade,
+	quadros: number,
+	lado: Lado,
+};
+
+export type Escolha = "SoDesempenho" | "TodosOsNucleos";
+
+export type EscolhaMotorenergia = EscolhaMotorenergia_Serialize | EscolhaMotorenergia_Deserialize;
+
+export type EscolhaMotorenergia_Deserialize = {
+	notas: ([string, NotaMotorenergia_Deserialize])[],
+	/**  `None` = fica o padrão do Windows. */
+	vencedor?: string | null,
+	confianca_pct: number | null,
+	achados: AchadoMotorenergia[],
+	/**
+	 *  Ganhos MEDIDOS do vencedor contra o padrão, em %. `None` quando não
+	 *  houve medição daquele número.
+	 */
+	fps_pct?: number | null,
+	low_1_pct?: number | null,
+	p99_pct?: number | null,
+	resposta_pct?: number | null,
+	temperatura_delta_c?: number | null,
+};
+
+export type EscolhaMotorenergia_Serialize = {
+	notas: ([string, NotaMotorenergia_Serialize])[],
+	/**  `None` = fica o padrão do Windows. */
+	vencedor: string | null,
+	confianca_pct: number | null,
+	achados: AchadoMotorenergia[],
+	/**
+	 *  Ganhos MEDIDOS do vencedor contra o padrão, em %. `None` quando não
+	 *  houve medição daquele número.
+	 */
+	fps_pct: number | null,
+	low_1_pct: number | null,
+	p99_pct: number | null,
+	resposta_pct: number | null,
+	temperatura_delta_c: number | null,
+};
+
+export type Escopo = 
+/**  Configuração do Windows. */
+"Windows" | 
+/**  Só o processo ou o arquivo de UM jogo. */
+"Jogo" | 
+/**  Driver de vídeo. */
+"Driver" | 
+/**  Apaga arquivo. */
+"Arquivo";
+
+export type Estacionamento = 
+/**  O que o plano base traz. */
+"Windows" | 
+/**  Uma reserva de núcleos acordada, o resto acorda rápido e dorme devagar. */
+"Adaptativo" | 
+/**  Todos acordados. Testado, nunca presumido. */
+"TodosAcordados";
+
 export type Estado = "NaoAvaliado" | "PlacaIntegrada" | "Folgada" | 
 /**  O estado normal depois de um tempo de jogo; dito ao cliente, evita o ajuste desnecessário. */
 "CacheCheio" | "Transbordando" | 
 /**  Outra coisa usando memória compartilhada (captura, navegador): o módulo não atribui ao jogo. */
 "DerramaSemPressao";
+
+/**  O que o Otimiza lembra: se a pessoa quer o contador dele no lugar do do FiveM e o valor de antes, para devolver. */
+export type EstadoContadorFivem = EstadoContadorFivem_Serialize | EstadoContadorFivem_Deserialize;
+
+/**  O que o Otimiza lembra: se a pessoa quer o contador dele no lugar do do FiveM e o valor de antes, para devolver. */
+export type EstadoContadorFivem_Deserialize = {
+	ligado?: boolean,
+	/**  O `cl_drawFPS` que estava no arquivo antes da primeira troca (`None` = a linha não existia). */
+	antes?: string | null,
+	/**  A troca pedida ainda não foi feita porque o FiveM estava aberto. */
+	pendente?: boolean,
+};
+
+/**  O que o Otimiza lembra: se a pessoa quer o contador dele no lugar do do FiveM e o valor de antes, para devolver. */
+export type EstadoContadorFivem_Serialize = {
+	ligado: boolean,
+	/**  O `cl_drawFPS` que estava no arquivo antes da primeira troca (`None` = a linha não existia). */
+	antes: string | null,
+	/**  A troca pedida ainda não foi feita porque o FiveM estava aberto. */
+	pendente: boolean,
+};
+
+export type EstadoCores = EstadoCores_Serialize | EstadoCores_Deserialize;
+
+export type EstadoCores_Deserialize = {
+	caminho: CaminhoCores,
+	suporta: Suporta,
+	aplicado: boolean,
+	perfis: Perfis_Deserialize,
+	saturacao_atual?: number | null,
+	nota: string,
+};
+
+export type EstadoCores_Serialize = {
+	caminho: CaminhoCores,
+	suporta: Suporta,
+	aplicado: boolean,
+	perfis: Perfis_Serialize,
+	saturacao_atual: number | null,
+	nota: string,
+};
 
 export type EstadoDaLicenca = EstadoDaLicenca_Serialize | EstadoDaLicenca_Deserialize;
 
@@ -875,12 +2286,108 @@ export type EstadoDoCs2_Serialize = {
 	ha_s: number,
 };
 
+export type EstadoDoRbar = "Ligado" | "DesligadoESuportado" | "DesligadoSemSuporte" | "NaoSei";
+
+export type EstadoFeedback = EstadoFeedback_Serialize | EstadoFeedback_Deserialize;
+
+export type EstadoFeedback_Deserialize = {
+	maquina: string,
+	canal?: string | null,
+	canal_id: string,
+	/**  Frase da última verificação pedida pelo cliente, quando houve. */
+	aviso?: string | null,
+} & SituacaoFeedback;
+
+export type EstadoFeedback_Serialize = {
+	maquina: string,
+	canal: string | null,
+	canal_id: string,
+	/**  Frase da última verificação pedida pelo cliente, quando houve. */
+	aviso: string | null,
+} & SituacaoFeedback;
+
+export type EstadoGuardiao = 
+/**  Tudo o que o Otimiza escreveu continua lá. */
+"Intacto" | 
+/**  Pelo menos uma escrita não está mais como o Otimiza deixou. */
+"MudouPorFora" | 
+/**  Não deu para ler (permissão, política, sem administrador). NÃO é "intacto" nem "mudou". */
+"NaoLeu" | 
+/**  O que ele mexia não existe mais (serviço desinstalado, por exemplo). */
+"NaoSeAplicaMais";
+
+export type EstadoMira = EstadoMira_Serialize | EstadoMira_Deserialize;
+
+export type EstadoMira_Deserialize = {
+	ligada: boolean,
+	jogo?: string | null,
+};
+
+export type EstadoMira_Serialize = {
+	ligada: boolean,
+	jogo: string | null,
+};
+
+export type Estimativa = {
+	multiplicador: number,
+	faixa: FaixaMetricas,
+};
+
+/**  O que o Otimiza sabe aplicar e provar. */
+export type Estrategia = { tipo: "PlanoOtimiza" } | { tipo: "PerfilGrafico"; perfil: PerfilDoJogoReceita } | 
+/**  Modo jogo (o governador acalma programas em segundo plano). */
+{ tipo: "ModoJogo" };
+
 /**  Cinco porque é a divisão que o medível permite: o quadro que o Windows anuncia já passou por jogo e placa. */
 export type Etapa = "Entrada" | "JogoEPlaca" | "Fila" | "Apresentacao" | "Tela";
+
+export type Evento = Evento_Serialize | Evento_Deserialize;
+
+export type Evento_Deserialize = 
+/**  O resumo, não as amostras: a margem basta para julgar depois. */
+({ Medicao: ResumoDasRepeticoes_Deserialize }) & { Mudanca?: never } | ({ Mudanca: {
+	nome: string,
+	aplicada: boolean,
+} }) & { Medicao?: never };
+
+export type Evento_Serialize = 
+/**  O resumo, não as amostras: a margem basta para julgar depois. */
+({ Medicao: ResumoDasRepeticoes_Serialize }) & { Mudanca?: never } | ({ Mudanca: {
+	nome: string,
+	aplicada: boolean,
+} }) & { Medicao?: never };
+
+export type Experimento = Experimento_Serialize | Experimento_Deserialize;
+
+export type Experimento_Deserialize = {
+	grupo: Grupo,
+	letra: string,
+	nome: string,
+	descricao: string,
+	itens: string[],
+	exige_reinicio: boolean,
+	fase: FaseExperimento,
+	decisao: DecisaoExperimento,
+	veredito?: VereditoRegressao_Deserialize | null,
+};
+
+export type Experimento_Serialize = {
+	grupo: Grupo,
+	letra: string,
+	nome: string,
+	descricao: string,
+	itens: string[],
+	exige_reinicio: boolean,
+	fase: FaseExperimento,
+	decisao: DecisaoExperimento,
+	veredito: VereditoRegressao_Serialize | null,
+};
 
 export type Fabricante = "Nvidia" | "Amd" | "Intel" | "Desconhecido";
 
 export type FabricanteDaCpu = "Intel" | "Amd" | "Outro";
+
+export type FabricanteMotorenergia = "Intel" | "Amd" | "Outro";
 
 export type FaixaDasPartidas = {
 	partidas: number,
@@ -889,8 +2396,16 @@ export type FaixaDasPartidas = {
 	maior_fps: number | null,
 };
 
+export type FaixaMetricas = {
+	minimo: number | null,
+	maximo: number | null,
+	origem: OrigemMetricas,
+};
+
 /**  A família decide o que o driver oferece (Smooth Motion só em RTX 40/50, AFMF só em RX 6000 em diante). */
 export type Familia = "Rtx50" | "Rtx40" | "Rtx30" | "Rtx20" | "GtxOuAnterior" | "Rx9000" | "Rx7000" | "Rx6000" | "RxAnterior" | "Arc" | "IntelIntegrada" | "Desconhecida";
+
+export type Fase = "UsarOQueTem" | "Documentado" | "ExigeTeste" | "NaoOrientamos" | "UltimoRecurso";
 
 export type FaseDaFila = FaseDaFila_Serialize | FaseDaFila_Deserialize;
 
@@ -918,6 +2433,24 @@ export type FaseDaFila_Serialize = {
 	classe: ClasseDaFila | null,
 };
 
+export type FaseExperimento = { fase: "FaltaOAntes" } | { fase: "ProntoParaAplicar"; amostras_antes: number } | { fase: "EsperandoODepois"; amostras_depois: number; faltam: number } | { fase: "Concluido" };
+
+export type Ficha = Ficha_Serialize | Ficha_Deserialize;
+
+export type Ficha_Deserialize = {
+	leitura: LeituraFichabios_Deserialize,
+	defeitos: Defeito[],
+	/**  Processador de notebook: o fabricante costuma travar a maior parte do menu da BIOS. */
+	notebook?: boolean,
+};
+
+export type Ficha_Serialize = {
+	leitura: LeituraFichabios_Serialize,
+	defeitos: Defeito[],
+	/**  Processador de notebook: o fabricante costuma travar a maior parte do menu da BIOS. */
+	notebook: boolean,
+};
+
 export type FilaMedida = FilaMedida_Serialize | FilaMedida_Deserialize;
 
 export type FilaMedida_Deserialize = {
@@ -942,7 +2475,104 @@ export type FimDaTroca =
 /**  Voltou ao modo anterior (pedido da pessoa). */
 { estado: "Voltou"; hz: number };
 
+export type FindingSeverity = "Critical" | "Important" | 
+/**  Dizer o que está certo evita vender conserto de coisa boa. */
+"Ok";
+
 export type Firmeza = "Firme" | "Oscilou" | "Perdeu";
+
+export type FiveMFolder = FiveMFolder_Serialize | FiveMFolder_Deserialize;
+
+export type FiveMFolder_Deserialize = {
+	id: string,
+	name: string,
+	path: string,
+	bytes: number,
+	formatted: string,
+	cleanable: boolean,
+	explanation: string,
+	/**  Nunca é omitido. */
+	tradeoff?: string | null,
+};
+
+export type FiveMFolder_Serialize = {
+	id: string,
+	name: string,
+	path: string,
+	bytes: number,
+	formatted: string,
+	cleanable: boolean,
+	explanation: string,
+	/**  Nunca é omitido. */
+	tradeoff: string | null,
+};
+
+export type FiveMReport = FiveMReport_Serialize | FiveMReport_Deserialize;
+
+export type FiveMReport_Deserialize = {
+	installed: boolean,
+	running: boolean,
+	game_running: boolean,
+	folders: FiveMFolder_Deserialize[],
+	cleanable_bytes: number,
+	protected_bytes: number,
+	note: string,
+};
+
+export type FiveMReport_Serialize = {
+	installed: boolean,
+	running: boolean,
+	game_running: boolean,
+	folders: FiveMFolder_Serialize[],
+	cleanable_bytes: number,
+	protected_bytes: number,
+	note: string,
+};
+
+/**  Para o produto não fingir que conserta o que só se resolve trocando peça ou na BIOS. */
+export type FixLocation = "Software" | "Bios" | "Hardware" | "None";
+
+export type Flags = Flags_Serialize | Flags_Deserialize;
+
+export type Flags_Deserialize = {
+	/**  Barra superior nova, com Início, Jogos, Boost, Lab e Ajustes. */
+	novo_shell?: boolean,
+	nova_inicio?: boolean,
+	biblioteca?: boolean,
+	lab?: boolean,
+	/**  Escolha automática do melhor gerador de quadros legítimo. */
+	frame_boost_auto?: boolean,
+	overlay?: boolean,
+	/**  Escreve no perfil do driver NVIDIA um ajuste que NÃO está no cabeçalho público. Desligado sempre por padrão. */
+	smooth_motion_drs?: boolean,
+	/**
+	 *  Vibração digital da NVIDIA pelo NVAPI (números fora do cabeçalho público). Provada numa GTX 1650 (driver 617.14): ligada,
+	 *  e se o driver não responder à leitura o Otimiza cai sozinho para a rampa de gama.
+	 */
+	vibracao_nvidia?: boolean,
+	/**  R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão. */
+	prioridade_na_rede?: boolean,
+};
+
+export type Flags_Serialize = {
+	/**  Barra superior nova, com Início, Jogos, Boost, Lab e Ajustes. */
+	novo_shell: boolean,
+	nova_inicio: boolean,
+	biblioteca: boolean,
+	lab: boolean,
+	/**  Escolha automática do melhor gerador de quadros legítimo. */
+	frame_boost_auto: boolean,
+	overlay: boolean,
+	/**  Escreve no perfil do driver NVIDIA um ajuste que NÃO está no cabeçalho público. Desligado sempre por padrão. */
+	smooth_motion_drs: boolean,
+	/**
+	 *  Vibração digital da NVIDIA pelo NVAPI (números fora do cabeçalho público). Provada numa GTX 1650 (driver 617.14): ligada,
+	 *  e se o driver não responder à leitura o Otimiza cai sozinho para a rampa de gama.
+	 */
+	vibracao_nvidia: boolean,
+	/**  R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão. */
+	prioridade_na_rede: boolean,
+};
 
 export type FonteDaNativa = 
 /**  Temporização preferida da EDID. */
@@ -950,7 +2580,14 @@ export type FonteDaNativa =
 /**  Sem EDID: a maior resolução que o Windows lista. Quase sempre é a nativa, mas é dedução. */
 "MaiorModoListado";
 
+/**  De onde vieram os quadros: o PresentMon separa quadro do jogo de quadro gerado; o canal antigo não. */
+export type FonteMedicoes = "PresentMon" | "CanalAntigo";
+
 export type Forca = "Causa" | "Hipotese";
+
+export type ForcaTravadas = "Media" | "Alta";
+
+export type FormatoMotorenergia = "Desktop" | "Notebook";
 
 export type Fov = 
 /**  O jogo não deixa mudar, ou o servidor manda. */
@@ -967,6 +2604,22 @@ export type GPUMetrics = {
 	temperature: number | null,
 	fan_speed: number | null,
 	power_draw: number | null,
+};
+
+export type GameModeStatus = GameModeStatus_Serialize | GameModeStatus_Deserialize;
+
+export type GameModeStatus_Deserialize = {
+	game_running: boolean,
+	game?: string | null,
+	active: boolean,
+	applied: string[],
+};
+
+export type GameModeStatus_Serialize = {
+	game_running: boolean,
+	game: string | null,
+	active: boolean,
+	applied: string[],
 };
 
 export type Ganho = 
@@ -1013,7 +2666,55 @@ export type GeracaoNaPartida = "NenhumaVisivel" | "OtimizaFg" |
 /**  Três estados: com o processador autônomo o "estado mínimo" é quase decorativo e governa o EPP. Só LÊ. */
 export type GovernoDoProcessador = "OProcessador" | "OWindows" | "NaoDeuParaLer";
 
+export type GpuPrefFinding = {
+	id: string,
+	title: string,
+	measured: string,
+	advice: string,
+	severity: FindingSeverity,
+	fix_location: FixLocation,
+};
+
+export type GpuPrefReport = GpuPrefReport_Serialize | GpuPrefReport_Deserialize;
+
+export type GpuPrefReport_Deserialize = {
+	placas: string[],
+	tem_placa_dupla: boolean,
+	definidos: ([string, Preferencia])[],
+	findings: GpuPrefFinding[],
+	/**  Aí `definidos` vazio NÃO quer dizer "nenhum jogo fixado". */
+	erro_de_leitura?: string | null,
+};
+
+export type GpuPrefReport_Serialize = {
+	placas: string[],
+	tem_placa_dupla: boolean,
+	definidos: ([string, Preferencia])[],
+	findings: GpuPrefFinding[],
+	/**  Aí `definidos` vazio NÃO quer dizer "nenhum jogo fixado". */
+	erro_de_leitura: string | null,
+};
+
+/**
+ *  RAZÃO sobre a mediana E ATRASO ABSOLUTO: só a razão acusaria todo quadro a 400 FPS; só o absoluto nunca
+ *  acusaria nada a 30 FPS. Os ms seguem o quadro de 60 Hz (16,7 ms).
+ */
+export type Gravidade = "Micro" | "Perceptivel" | "Severo" | "Extremo";
+
 export type GravidadeDoWifi = "Bom" | "Info" | "Atencao";
+
+export type Grupo = "Energia" | "Agendamento" | "Video" | "Memoria" | "Rede" | "Fundo" | "Visual" | "Boot" | 
+/**  Não promete quadro: está aqui para poder ser descartado como suspeito. */
+"Higiene";
+
+export type Hipotese = { tipo: "Processo"; nome: string } | { tipo: "Disco" } | { tipo: "Paginacao" } | { tipo: "Vram" } | { tipo: "NucleoSaturado" } | 
+/**
+ *  A máquina inteira ocupada (≥ 90%): o jogo disputa com tudo, não com um programa só. Achado no laboratório de
+ *  28/09/2026: as travadas acompanhavam a carga total, e nenhum processo sozinho.
+ */
+{ tipo: "ProcessadorCheio" };
+
+export type Historico = Historico_Serialize | Historico_Deserialize;
 
 export type HistoricoDaRede = HistoricoDaRede_Serialize | HistoricoDaRede_Deserialize;
 
@@ -1035,6 +2736,18 @@ export type HistoricoDaRede_Serialize = {
 
 export type HistoricoNaTela = HistoricoNaTela_Serialize | HistoricoNaTela_Deserialize;
 
+export type HistoricoNaTelaMonitor = HistoricoNaTelaMonitor_Serialize | HistoricoNaTelaMonitor_Deserialize;
+
+export type HistoricoNaTelaMonitor_Deserialize = {
+	historico: Historico_Deserialize,
+	regressoes: Regressao_Deserialize[],
+};
+
+export type HistoricoNaTelaMonitor_Serialize = {
+	historico: Historico_Serialize,
+	regressoes: Regressao_Serialize[],
+};
+
 export type HistoricoNaTela_Deserialize = {
 	leitura: LeituraDoHistorico_Deserialize,
 	/**  Do mais novo ao mais antigo. */
@@ -1047,6 +2760,155 @@ export type HistoricoNaTela_Serialize = {
 	mudancas: MudancaNaTela_Serialize[],
 };
 
+export type Historico_Deserialize = {
+	schema_version?: number,
+	registros?: Registro_Deserialize[],
+	/**  Sem isto, "nenhuma mudança entre as medições" seria indistinguível de "o arquivo encheu". */
+	descartados?: number,
+};
+
+export type Historico_Serialize = {
+	schema_version: number,
+	registros: Registro_Serialize[],
+	/**  Sem isto, "nenhuma mudança entre as medições" seria indistinguível de "o arquivo encheu". */
+	descartados: number,
+};
+
+/**  Sem isto, trocar placa, driver ou plano por fora vira mérito do Otimiza por acidente. */
+export type Identidade = Identidade_Serialize | Identidade_Deserialize;
+
+/**  Sem isto, trocar placa, driver ou plano por fora vira mérito do Otimiza por acidente. */
+export type Identidade_Deserialize = {
+	cpu: string,
+	gpu: string,
+	nucleos_logicos: number,
+	ram_gb: number | null,
+	windows_build: number,
+	plano_de_energia?: string | null,
+	/**  Separa "antes" de "depois" quando o resto é igual. */
+	mudancas_aplicadas: number,
+};
+
+/**  Sem isto, trocar placa, driver ou plano por fora vira mérito do Otimiza por acidente. */
+export type Identidade_Serialize = {
+	cpu: string,
+	gpu: string,
+	nucleos_logicos: number,
+	ram_gb: number | null,
+	windows_build: number,
+	plano_de_energia: string | null,
+	/**  Separa "antes" de "depois" quando o resto é igual. */
+	mudancas_aplicadas: number,
+};
+
+export type Ignorado = {
+	alias: string,
+	motivo: MotivoIgnorado,
+};
+
+export type Impressao = Impressao_Serialize | Impressao_Deserialize;
+
+export type Impressao_Deserialize = {
+	cpu: string,
+	fabricante: FabricanteMotorenergia,
+	arquitetura: ArquiteturaMotorenergia,
+	controle: Controle,
+	cpuid: Cpuid,
+	topologia: TopologiaMotorenergia,
+	formato: FormatoMotorenergia,
+	na_tomada?: boolean | null,
+	build_do_windows: number,
+	modern_standby: boolean,
+	plano_ativo?: string | null,
+	plano_ativo_nome?: string | null,
+};
+
+export type Impressao_Serialize = {
+	cpu: string,
+	fabricante: FabricanteMotorenergia,
+	arquitetura: ArquiteturaMotorenergia,
+	controle: Controle,
+	cpuid: Cpuid,
+	topologia: TopologiaMotorenergia,
+	formato: FormatoMotorenergia,
+	na_tomada: boolean | null,
+	build_do_windows: number,
+	modern_standby: boolean,
+	plano_ativo: string | null,
+	plano_ativo_nome: string | null,
+};
+
+export type Inicio = "Desativado" | "Ativo" | "NaoExiste" | 
+/**  Não deu para ler: NÃO conta como desativado. */
+"NaoConsegui";
+
+export type Investigacao = {
+	travadas: Travada[],
+	pistas: Pista[],
+	sem_causa_visivel: number,
+};
+
+export type InvestigacaoCausadatravada = InvestigacaoCausadatravada_Serialize | InvestigacaoCausadatravada_Deserialize;
+
+export type InvestigacaoCausadatravada_Deserialize = {
+	segundos: number | null,
+	quadros: number,
+	fps_mediano?: number | null,
+	episodios: Episodio[],
+	por_minuto: number | null,
+	severidades: Severidades,
+	/**  Com ≥ 1.000 quadros. */
+	p99_ms?: number | null,
+	/**  Com ≥ 10.000 quadros. */
+	p999_ms?: number | null,
+	lado_processador: number,
+	lado_placa: number,
+	/**  Da mais forte para a mais fraca; `NaoMedido` no fim. */
+	avaliacoes: Avaliacao_Deserialize[],
+	/**  Episódios cobertos sem nenhuma hipótese Moderada ou Forte ligada. */
+	sem_causa: number,
+	/**  `Some`: o motor não aponta nada, e diz por quê. */
+	abstencao?: string | null,
+	conclusao: string,
+};
+
+export type InvestigacaoCausadatravada_Serialize = {
+	segundos: number | null,
+	quadros: number,
+	fps_mediano: number | null,
+	episodios: Episodio[],
+	por_minuto: number | null,
+	severidades: Severidades,
+	/**  Com ≥ 1.000 quadros. */
+	p99_ms: number | null,
+	/**  Com ≥ 10.000 quadros. */
+	p999_ms: number | null,
+	lado_processador: number,
+	lado_placa: number,
+	/**  Da mais forte para a mais fraca; `NaoMedido` no fim. */
+	avaliacoes: Avaliacao_Serialize[],
+	/**  Episódios cobertos sem nenhuma hipótese Moderada ou Forte ligada. */
+	sem_causa: number,
+	/**  `Some`: o motor não aponta nada, e diz por quê. */
+	abstencao: string | null,
+	conclusao: string,
+};
+
+export type InvestigacaoCausas = {
+	/**  Vazio quando nada foi encontrado, e a tela diz isso com palavras. */
+	suspeitos: SuspeitoCausas[],
+	/**  Suspeito ausente NÃO significa máquina limpa. */
+	lacunas: string[],
+};
+
+export type Item = {
+	id: string,
+	nome: string,
+	estado: EstadoGuardiao,
+	/**  Retirado do catálogo: o caminho é desfazer, não refazer. */
+	retirado: boolean,
+};
+
 export type ItemDaLimpeza = {
 	id: string,
 	nome: string,
@@ -1055,6 +2917,12 @@ export type ItemDaLimpeza = {
 	arquivos: number,
 	precisa_admin: boolean,
 };
+
+export type ItemProntojogo = ItemProntojogo_Serialize | ItemProntojogo_Deserialize;
+
+export type ItemProntojogo_Deserialize = { tipo: "MonitorAbaixo"; hz_atual: number; hz_maximo: number; monitor: string } | { tipo: "LimitesEscondidos"; quantos: number } | { tipo: "SegundoPlanoPesado"; programas: ([string, number | null])[] } | { tipo: "MemoriaApertada"; livre_mb: number | null; commit_pct?: number | null; maiores: ([string, number | null])[] } | { tipo: "ModoJogoDesligado" };
+
+export type ItemProntojogo_Serialize = { tipo: "MonitorAbaixo"; hz_atual: number; hz_maximo: number; monitor: string } | { tipo: "LimitesEscondidos"; quantos: number } | { tipo: "SegundoPlanoPesado"; programas: ([string, number | null])[] } | { tipo: "MemoriaApertada"; livre_mb: number | null; commit_pct: number | null; maiores: ([string, number | null])[] } | { tipo: "ModoJogoDesligado" };
 
 export type JogoAberto = JogoAberto_Serialize | JogoAberto_Deserialize;
 
@@ -1103,13 +2971,133 @@ export type JogoDaLoja_Serialize = {
 	gb: number | null,
 };
 
+export type JogoNaTela = JogoNaTela_Serialize | JogoNaTela_Deserialize;
+
+export type JogoNaTela_Deserialize = {
+	id: string,
+	nome: string,
+	arquivo?: string | null,
+	aberto: boolean,
+	previsao: Previsao[],
+	/**  O arquivo existe mas não deu para ler: a tela diz isso em vez de "nada a mudar". */
+	ilegivel?: string | null,
+	ficha: string,
+};
+
+export type JogoNaTela_Serialize = {
+	id: string,
+	nome: string,
+	arquivo: string | null,
+	aberto: boolean,
+	previsao: Previsao[],
+	/**  O arquivo existe mas não deu para ler: a tela diz isso em vez de "nada a mudar". */
+	ilegivel: string | null,
+	ficha: string,
+};
+
+export type Julgamento = { estado: "Caiu"; queda: Deriva } | 
+/**  O FPS médio das partidas comparadas não caiu além da margem de erro (só o FPS médio, só a janela da deriva). */
+{ estado: "NaoCaiu" } | { estado: "PoucasPartidas"; comparaveis: number; precisa: number };
+
+export type JulgamentoTestedatravada = JulgamentoTestedatravada_Serialize | JulgamentoTestedatravada_Deserialize;
+
+export type JulgamentoTestedatravada_Deserialize = {
+	janelas: ResumoDaJanela_Deserialize[],
+	travadas_normal: number,
+	minutos_normal: number | null,
+	travadas_acalmado: number,
+	minutos_acalmado: number | null,
+	/**  Razão de taxas acalmado / normal: 0,4 = 60% menos travadas. */
+	razao?: number | null,
+	/**  IC com o z da olhada: já corrigido pelas três olhadas. */
+	ic?: [number | null, number | null] | null,
+	/**  φ: variação entre janelas além do Poisson (1 = nenhuma). */
+	dispersao: number | null,
+	/**  Variação média do FPS acalmado sobre o normal, pareada por bloco. */
+	variacao_do_fps?: number | null,
+	decisao: DecisaoTestedatravada,
+	frase: string,
+};
+
+export type JulgamentoTestedatravada_Serialize = {
+	janelas: ResumoDaJanela_Serialize[],
+	travadas_normal: number,
+	minutos_normal: number | null,
+	travadas_acalmado: number,
+	minutos_acalmado: number | null,
+	/**  Razão de taxas acalmado / normal: 0,4 = 60% menos travadas. */
+	razao: number | null,
+	/**  IC com o z da olhada: já corrigido pelas três olhadas. */
+	ic: [number | null, number | null] | null,
+	/**  φ: variação entre janelas além do Poisson (1 = nenhuma). */
+	dispersao: number | null,
+	/**  Variação média do FPS acalmado sobre o normal, pareada por bloco. */
+	variacao_do_fps: number | null,
+	decisao: DecisaoTestedatravada,
+	frase: string,
+};
+
+/**  O jogo vai junto: "o disco está lento" sem dizer qual jogo não se confere. */
+export type LaboratorioNaTela = LaboratorioNaTela_Serialize | LaboratorioNaTela_Deserialize;
+
+/**  O jogo vai junto: "o disco está lento" sem dizer qual jogo não se confere. */
+export type LaboratorioNaTela_Deserialize = {
+	analise: AnaliseStreaming_Deserialize,
+	jogo?: OndeMora_Deserialize | null,
+	lacunas: string[],
+};
+
+/**  O jogo vai junto: "o disco está lento" sem dizer qual jogo não se confere. */
+export type LaboratorioNaTela_Serialize = {
+	analise: AnaliseStreaming_Serialize,
+	jogo: OndeMora_Serialize | null,
+	lacunas: string[],
+};
+
+export type Lado = "Processador" | "Placa" | "Indefinido";
+
 export type LadoDaProva = "SemOtimiza" | "ComOtimiza";
 
 export type LadoDoLab = "Antes" | "Depois";
 
+export type LadoDoTeste = "Normal" | "Acalmado";
+
+export type LadoRegressao = {
+	fps: number | null,
+	low_1pct: number | null,
+	amostras: number,
+};
+
 export type Lancamento = {
 	jogo: string,
 	caminho: Caminho,
+};
+
+export type LeituraBios = LeituraBios_Serialize | LeituraBios_Deserialize;
+
+export type LeituraBios_Deserialize = {
+	placa_mae?: string | null,
+	versao_da_bios?: string | null,
+	data_da_bios?: string | null,
+	/**  `None` é não sei. */
+	uefi?: boolean | null,
+	secure_boot?: boolean | null,
+	lacunas: string[],
+};
+
+export type LeituraBios_Serialize = {
+	placa_mae: string | null,
+	versao_da_bios: string | null,
+	data_da_bios: string | null,
+	/**  `None` é não sei. */
+	uefi: boolean | null,
+	secure_boot: boolean | null,
+	lacunas: string[],
+};
+
+export type LeituraCrashes = {
+	pista: PistaCrashes,
+	frase: string,
 };
 
 /**  Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela. */
@@ -1130,6 +3118,52 @@ export type LeituraDoHistorico_Serialize = { estado: "Ok" } |
  *  truncado.
  */
 { estado: "Ilegivel"; motivo: string; guardado_em: string | null };
+
+export type LeituraFichabios = LeituraFichabios_Serialize | LeituraFichabios_Deserialize;
+
+export type LeituraFichabios_Deserialize = {
+	cpu?: string | null,
+	/**
+	 *  O modelo do chip no CPUID ("Intel64 Family 6 Model 183 Stepping 1" →
+	 *  183). É ele, e não o nome comercial, que diz qual silício é.
+	 */
+	modelo?: number | null,
+	/**
+	 *  A revisão do microcódigo carregada agora (Intel: a palavra alta do
+	 *  "Update Revision" do registro).
+	 */
+	microcodigo?: number | null,
+	/**  A Integridade de Memória (HVCI) está rodando. */
+	integridade_de_memoria?: boolean | null,
+	/**
+	 *  Quanto o firmware levou no último boot, em segundos ("Último tempo do
+	 *  BIOS" do Gerenciador de Tarefas).
+	 */
+	tempo_da_bios_s?: number | null,
+	lacunas: string[],
+};
+
+export type LeituraFichabios_Serialize = {
+	cpu: string | null,
+	/**
+	 *  O modelo do chip no CPUID ("Intel64 Family 6 Model 183 Stepping 1" →
+	 *  183). É ele, e não o nome comercial, que diz qual silício é.
+	 */
+	modelo: number | null,
+	/**
+	 *  A revisão do microcódigo carregada agora (Intel: a palavra alta do
+	 *  "Update Revision" do registro).
+	 */
+	microcodigo: number | null,
+	/**  A Integridade de Memória (HVCI) está rodando. */
+	integridade_de_memoria: boolean | null,
+	/**
+	 *  Quanto o firmware levou no último boot, em segundos ("Último tempo do
+	 *  BIOS" do Gerenciador de Tarefas).
+	 */
+	tempo_da_bios_s: number | null,
+	lacunas: string[],
+};
 
 /**  O que deu para ler do Wi-Fi. Cada "não deu" tem nome: a tela explica em vez de mostrar zero. */
 export type LeituraWifi = LeituraWifi_Serialize | LeituraWifi_Deserialize;
@@ -1156,6 +3190,26 @@ vizinhanca: Vizinhanca_Serialize | null } |
 /**  O serviço do Wi-Fi (WLAN AutoConfig) não está rodando ou a placa não está na wlanapi. */
 { estado: "nao_li"; motivo: string };
 
+export type Lembranca = Lembranca_Serialize | Lembranca_Deserialize;
+
+export type Lembranca_Deserialize = {
+	estrategia: Estrategia,
+	jogo: string,
+	resultado: Resultado,
+	quando: number,
+	/**  Driver e Windows da última medição antes da decisão. `None`: não havia medição com ambiente. */
+	ambiente?: Ambiente_Deserialize | null,
+};
+
+export type Lembranca_Serialize = {
+	estrategia: Estrategia,
+	jogo: string,
+	resultado: Resultado,
+	quando: number,
+	/**  Driver e Windows da última medição antes da decisão. `None`: não havia medição com ambiente. */
+	ambiente: Ambiente_Serialize | null,
+};
+
 /**  Por onde a rota sai agora. */
 export type LigacaoDeRede = LigacaoDeRede_Serialize | LigacaoDeRede_Deserialize;
 
@@ -1168,6 +3222,35 @@ export type LigacaoDeRede_Deserialize = { tipo: "cabo"; placa: string; velocidad
 export type LigacaoDeRede_Serialize = { tipo: "cabo"; placa: string; velocidade_mbps: number | null } | { tipo: "wi_fi"; placa: string; leitura: LeituraWifi_Serialize } | { tipo: "virtual"; placa: string } | { tipo: "outra"; placa: string } | 
 /**  Nenhuma rota para a internet. */
 { tipo: "sem_rede" };
+
+export type Limitacao = 
+/**  O monitor está abaixo do que aceita: é FPS visível de graça, o Otimiza ajusta (Sistema → Monitor). */
+{ tipo: "MonitorAbaixoDoMaximo"; atual: number; maximo: number } | 
+/**  Monitor de até 75 Hz: FPS acima disso não aparece na tela. */
+{ tipo: "MonitorLimitaATela"; hz: number } | { tipo: "PoucaMemoria"; gb: number | null } | { tipo: "PoucosNucleos"; nucleos: number } | { tipo: "PoucaMemoriaDeVideo"; gb: number | null } | 
+/**  Só vídeo integrado (menos de 1 GB dedicado): a placa usa a memória do sistema. */
+{ tipo: "VideoIntegrado" } | { tipo: "SistemaEmHd" } | 
+/**  Notebook: energia e calor limitam, e na bateria o Windows corta desempenho. */
+{ tipo: "Notebook" };
+
+export type Limite = "CpuUmNucleo" | "CpuTodos" | "Gpu" | "MemoriaVideo" | "MemoriaRam" | "Disco" | "NaoIdentificado" | "SemCarga";
+
+export type LimiteNaTela = {
+	executavel: string,
+	fps: number,
+	historico: string,
+};
+
+export type LinhaDoJogo = {
+	jogo: string,
+	/**  Do mais novo para o mais antigo. */
+	marcos: Marco[],
+	/**  Pelo critério de `deriva`, só com as partidas comparáveis. "Poucas" não é "não caiu": não houve julgamento. */
+	julgamento: Julgamento,
+	partidas: number,
+	/**  Mudanças do Otimiza aplicadas antes da primeira partida medida deste jogo: já valiam em todas. */
+	otimiza_antes_da_primeira: number,
+};
 
 export type LinhaDoLab = LinhaDoLab_Serialize | LinhaDoLab_Deserialize;
 
@@ -1220,7 +3303,70 @@ export type MaquinaDeEnergia = {
 	windows11: boolean,
 };
 
+export type Marco = { tipo: "Partida"; quando: number; fps: number | null; low_1pct: number | null; fonte: FonteMedicoes; 
+/**  Com gerador de quadros na partida: não entra em comparação nenhuma (`medicoes::comparavel`). */
+comparavel: boolean } | 
+/**  Algo em volta da máquina trocou entre duas partidas; `quando` é o da primeira partida já com a troca. */
+{ tipo: "Troca"; quando: number; troca: Troca } | 
+/**  Uma mudança do Otimiza que continua aplicada. */
+{ tipo: "Otimiza"; quando: number; nome: string };
+
+export type Memoria = Memoria_Serialize | Memoria_Deserialize;
+
+/**
+ *  O dado cru para desenhar os slots (o relatório só devolve achados): três encaixes vazios explicam canal único
+ *  melhor que uma frase.
+ */
+export type MemoriaInstalada = MemoriaInstalada_Serialize | MemoriaInstalada_Deserialize;
+
+/**
+ *  O dado cru para desenhar os slots (o relatório só devolve achados): três encaixes vazios explicam canal único
+ *  melhor que uma frase.
+ */
+export type MemoriaInstalada_Deserialize = {
+	slots?: number | null,
+	pentes_gb: (number | null)[],
+	/**  Canal único com slots livres: o achado mais comum em PC de jogo montado barato. */
+	canais: number,
+	mhz?: number | null,
+};
+
+/**
+ *  O dado cru para desenhar os slots (o relatório só devolve achados): três encaixes vazios explicam canal único
+ *  melhor que uma frase.
+ */
+export type MemoriaInstalada_Serialize = {
+	slots: number | null,
+	pentes_gb: (number | null)[],
+	/**  Canal único com slots livres: o achado mais comum em PC de jogo montado barato. */
+	canais: number,
+	mhz: number | null,
+};
+
+export type Memoria_Deserialize = {
+	total_gb: number | null,
+	livre_gb: number | null,
+	pesados: Pesado_Deserialize[],
+};
+
+export type Memoria_Serialize = {
+	total_gb: number | null,
+	livre_gb: number | null,
+	pesados: Pesado_Serialize[],
+};
+
 export type Metric = Metric_Serialize | Metric_Deserialize;
+
+export type MetricDelta = {
+	key: string,
+	label: string,
+	unit: string,
+	before: number | null,
+	after: number | null,
+	change_percent: number | null,
+	verdict: Verdict,
+	explanation: string,
+};
 
 export type Metric_Deserialize = {
 	/**  `None` sempre que UNKNOWN: é o campo que impede o zero inventado. */
@@ -1254,6 +3400,36 @@ export type Metric_Serialize = {
 	age_ms: number | null,
 };
 
+/**  Espelha `windows::discodojogo::Midia` em vez de importar: o laboratório é puro e roda em qualquer sistema. */
+export type Midia = "Ssd" | "Mecanico" | "NaoDeuParaLer";
+
+/**  Três estados: chamar de SSD um disco ilegível absolveria a causa procurada. */
+export type MidiaDiscodojogo = "Ssd" | "Mecanico" | "NaoDeuParaLer";
+
+export type Mira = Mira_Serialize | Mira_Deserialize;
+
+export type Mira_Deserialize = {
+	estilo: string,
+	cor: string,
+	tamanho: number | null,
+	espessura: number | null,
+	abertura: number | null,
+	opacidade: number | null,
+	contorno: boolean,
+	esconder_ao_mirar?: boolean,
+};
+
+export type Mira_Serialize = {
+	estilo: string,
+	cor: string,
+	tamanho: number | null,
+	espessura: number | null,
+	abertura: number | null,
+	opacidade: number | null,
+	contorno: boolean,
+	esconder_ao_mirar: boolean,
+};
+
 export type ModoDaSobreposicao = "Desligado" | "Minimo" | "Detalhado";
 
 /**
@@ -1273,6 +3449,12 @@ export type ModoDeVideo = {
 	y: number,
 };
 
+/**  `LIVRES`. Quantas sessões seguidas caíram e se as tarefas automáticas estão paradas por isso. */
+export type ModoSeguro = {
+	ativo: boolean,
+	quedas_seguidas: number,
+};
+
 export type MomentoDoCs2 = 
 /**  Menu principal (sem mapa). */
 "menu" | 
@@ -1282,6 +3464,58 @@ export type MomentoDoCs2 =
 "jogando" | 
 /**  Morto ou assistindo outro jogador. */
 "assistindo";
+
+export type MonitorVrr = MonitorVrr_Serialize | MonitorVrr_Deserialize;
+
+export type MonitorVrr_Deserialize = {
+	/**  Nome gravado no próprio monitor (descritor 0xFC), quando há. */
+	nome?: string | null,
+	/**  Faixa vertical do descritor de limites (0xFD). */
+	min_hz?: number | null,
+	max_hz?: number | null,
+	vrr: VrrVrr,
+};
+
+export type MonitorVrr_Serialize = {
+	/**  Nome gravado no próprio monitor (descritor 0xFC), quando há. */
+	nome: string | null,
+	/**  Faixa vertical do descritor de limites (0xFD). */
+	min_hz: number | null,
+	max_hz: number | null,
+	vrr: VrrVrr,
+};
+
+export type MotivoIgnorado = 
+/**  Este Windows não expõe o ajuste. */
+"NaoExiste" | 
+/**  O valor não está na faixa que o Windows publica para ele. */
+"ForaDaFaixa" | 
+/**  A CPU não tem o recurso (EPP sem HWP/CPPC, autonomia sem hardware). */
+"CpuNaoSuporta";
+
+export type MotivoMotorenergia = "EppDoCandidato" | "EppNucleosDeEficienciaPreservado" | "AutonomiaPeloHardware" | "BoostAgressivoEmTeste" | "SobeMaisCedo" | "SobeSemEsperarJanela" | "SobeDireto" | "DesceEmDegraus" | "DesceSemPressa" | "ReservaDeNucleosAcordada" | "NucleosAcordamRapido" | "NucleosDormemDevagar" | "TodosOsNucleosEmTeste" | "DicaDeLatenciaAcordaNucleos" | "DicaDeLatenciaDesempenho" | "PreferirNucleosDeDesempenho" | "MinimoEmCpuSemControleDeHardware" | "TetoNaoPodeLimitar" | "PcieEconomiaDesligadaEmTeste" | "UsbSuspensaoDesligadaEmTeste";
+
+export type MudancaMotorenergia = MudancaMotorenergia_Serialize | MudancaMotorenergia_Deserialize;
+
+export type MudancaMotorenergia_Deserialize = {
+	alias: string,
+	subgrupo: string,
+	guid: string,
+	/**  `None` = não mexer neste lado. No notebook, a bateria é sempre `None`. */
+	ac?: number | null,
+	dc?: number | null,
+	motivo: MotivoMotorenergia,
+};
+
+export type MudancaMotorenergia_Serialize = {
+	alias: string,
+	subgrupo: string,
+	guid: string,
+	/**  `None` = não mexer neste lado. No notebook, a bateria é sempre `None`. */
+	ac: number | null,
+	dc: number | null,
+	motivo: MotivoMotorenergia,
+};
 
 export type MudancaNaTela = MudancaNaTela_Serialize | MudancaNaTela_Deserialize;
 
@@ -1315,6 +3549,13 @@ export type MudancaNaTela_Serialize = {
 	desfazivel: boolean,
 };
 
+export type NaoFazemos = {
+	id: string,
+	nome: string,
+	natureza: Natureza,
+	porque: string,
+};
+
 export type NaoVerificado = {
 	classe: string,
 	falta: string,
@@ -1325,6 +3566,8 @@ export type Nativa = {
 	altura: number,
 	fonte: FonteDaNativa,
 };
+
+export type Natureza = "Placebo" | "Redundante" | "Prejudicial";
 
 export type NetworkMetrics = NetworkMetrics_Serialize | NetworkMetrics_Deserialize;
 
@@ -1342,6 +3585,8 @@ export type NetworkMetrics_Serialize = {
 	total_transmitted_gb: number | null,
 };
 
+export type Nivel = "Seguro" | "Competitivo" | "Experimental";
+
 export type NivelDeEscala = "UltraQualidade" | "Qualidade" | "Equilibrado" | "Desempenho";
 
 export type NivelDoDpc = "Saudavel" | 
@@ -1350,10 +3595,87 @@ export type NivelDoDpc = "Saudavel" |
 /**  Dois ou mais eventos acima de 1 ms, ou qualquer um acima de 2 ms. */
 "Pico";
 
+export type NivelNaTela = {
+	id: string,
+	nome: string,
+	promessa: string,
+	/**  Parte do contrato, não nota de rodapé. */
+	exigencia: string,
+	itens: string[],
+	acrescenta: string[],
+	/**  Falso no Experimental: aplicar tudo de uma vez derrubou o FPS de um cliente. */
+	aplica_de_uma_vez: boolean,
+};
+
+export type Nota = { estado: "Calculada"; nota: number; fps_medio: number | null; low_1pct: number | null; 
+/**  Para a tela mostrar POR QUE a nota é essa. */
+pontos_do_um_por_cento: number | null; pontos_da_media: number | null } | 
+/**  NÃO é nota zero: zero seria afirmar algo sobre uma máquina que não foi medida. */
+{ estado: "SemAmostra" };
+
 export type NotaDoCandidato = {
 	rotulo: string,
 	nota: number | null,
 	vencedor: boolean,
+};
+
+export type NotaMotorenergia = NotaMotorenergia_Serialize | NotaMotorenergia_Deserialize;
+
+export type NotaMotorenergia_Deserialize = {
+	/**  100 = igual ao padrão do Windows. */
+	total: number | null,
+	low_1?: number | null,
+	p99?: number | null,
+	fps?: number | null,
+	resposta?: number | null,
+	clock?: number | null,
+	termica?: number | null,
+	estabilidade?: number | null,
+};
+
+export type NotaMotorenergia_Serialize = {
+	/**  100 = igual ao padrão do Windows. */
+	total: number | null,
+	low_1: number | null,
+	p99: number | null,
+	fps: number | null,
+	resposta: number | null,
+	clock: number | null,
+	termica: number | null,
+	estabilidade: number | null,
+};
+
+export type NucleoLogico = {
+	indice: number,
+	/**  Dois lógicos no mesmo físico são irmãos de SMT. */
+	fisico: number,
+	classe: ClasseNucleos,
+};
+
+export type NucleosNaTela = NucleosNaTela_Serialize | NucleosNaTela_Deserialize;
+
+export type NucleosNaTela_Deserialize = {
+	topologia: Topologia,
+	conselho: ConselhoNucleos,
+	fisicos: number,
+	/**  TEXTO: uma máscara de 64 bits perde os bits altos no número do JavaScript. */
+	mascara_de_desempenho?: string | null,
+	jogo_nome?: string | null,
+	jogo_pid?: number | null,
+	jogo_mascara?: string | null,
+	jogo_exe?: string | null,
+};
+
+export type NucleosNaTela_Serialize = {
+	topologia: Topologia,
+	conselho: ConselhoNucleos,
+	fisicos: number,
+	/**  TEXTO: uma máscara de 64 bits perde os bits altos no número do JavaScript. */
+	mascara_de_desempenho: string | null,
+	jogo_nome: string | null,
+	jogo_pid: number | null,
+	jogo_mascara: string | null,
+	jogo_exe: string | null,
 };
 
 export type NumerosDoPeriodo = NumerosDoPeriodo_Serialize | NumerosDoPeriodo_Deserialize;
@@ -1380,12 +3702,54 @@ export type NumerosDoPeriodo_Serialize = {
 	com_problema: number,
 };
 
+/**  TRÊS casos: sem placa NVIDIA (permanente) e DLL que não responde (pede driver novo) têm conselhos opostos. */
+export type Nvapi = "Disponivel" | "SemPlacaNvidia" | "NaoCarregou";
+
+export type OQueMudou = { tipo: "Driver"; de: string; para: string } | { tipo: "Windows"; de: string; para: string } | { tipo: "Nada" };
+
 /**  Quatro coisas diferentes: tratá-las como uma só entregou "otimização" que derrubou FPS. */
 export type OQuePodeCustar = "FpsMedio" | 
 /**  Pode cair com a média intacta, e é o que a pessoa SENTE. */
 "UmPorCentoPior" | "Engasgo" | 
 /**  Só aparece em carga longa: o mais difícil de perceber. */
 "Boost";
+
+export type Oferta = { estado: "Oferecer" } | 
+/**  Já piorou este jogo nesta máquina. */
+{ estado: "NaoOferecer"; quando: number; contexto: ContextoReceita } | 
+/**  Piorou antes, mas o driver ou o Windows mudou desde então, e o Otimiza prova de novo. */
+{ estado: "ProvarDeNovo"; quando: number } | 
+/**  Já provou ganho ou ficou sem diferença: a tela mostra, e o cliente decide. */
+{ estado: "JaProvado"; resultado: Resultado; quando: number };
+
+export type OndeMora = OndeMora_Serialize | OndeMora_Deserialize;
+
+export type OndeMora_Deserialize = {
+	jogo: string,
+	caminho: string,
+	/**  `None` fora de letra de unidade (caminho de rede, por exemplo). */
+	unidade?: string | null,
+	midia: MidiaDiscodojogo,
+	/**  Vai para a tela mesmo sem a mídia: um modelo de disco a pessoa consegue pesquisar. */
+	modelo?: string | null,
+};
+
+export type OndeMora_Serialize = {
+	jogo: string,
+	caminho: string,
+	/**  `None` fora de letra de unidade (caminho de rede, por exemplo). */
+	unidade: string | null,
+	midia: MidiaDiscodojogo,
+	/**  Vai para a tela mesmo sem a mídia: um modelo de disco a pessoa consegue pesquisar. */
+	modelo: string | null,
+};
+
+/**  Um nível com a resolução em que o jogo deve rodar nele, para a tela oferecer. */
+export type OpcaoEscala = {
+	nivel: NivelDeEscala,
+	largura: number,
+	altura: number,
+};
 
 export type OptimizationInfo = OptimizationInfo_Serialize | OptimizationInfo_Deserialize;
 
@@ -1504,8 +3868,30 @@ export type Orcamento_Serialize = {
 	observacoes: string[],
 };
 
+export type OrigemMetricas = "Medido" | "Estimado" | "Desconhecido";
+
 /**  Para a tela. */
 export type Painel = Painel_Serialize | Painel_Deserialize;
+
+export type PainelAmd = PainelAmd_Serialize | PainelAmd_Deserialize;
+
+export type PainelAmd_Deserialize = {
+	estado: string,
+	nota: string,
+	ajustes?: AjustesAmddriver_Deserialize | null,
+	sensores?: Sensores_Deserialize | null,
+	/**  Ids que o OTIMIZA aplicou e não desfez: o que a pessoa ligou à mão não aparece aqui. */
+	aplicados: string[],
+};
+
+export type PainelAmd_Serialize = {
+	estado: string,
+	nota: string,
+	ajustes: AjustesAmddriver_Serialize | null,
+	sensores: Sensores_Serialize | null,
+	/**  Ids que o OTIMIZA aplicou e não desfez: o que a pessoa ligou à mão não aparece aqui. */
+	aplicados: string[],
+};
 
 export type PainelDaBanda = PainelDaBanda_Serialize | PainelDaBanda_Deserialize;
 
@@ -1552,6 +3938,34 @@ export type PainelDaEnergiaDeJogo_Serialize = {
 	o_que_muda: string | null,
 };
 
+export type PainelDeEnergia = PainelDeEnergia_Serialize | PainelDeEnergia_Deserialize;
+
+export type PainelDeEnergia_Deserialize = {
+	impressao: Impressao_Deserialize,
+	bateria: Bateria_Deserialize,
+	ppm_atual: Configuracao_Deserialize[],
+	plano_otimiza_ativo: boolean,
+	backup?: Backup_Deserialize | null,
+	perfis_de_jogo: PerfilDeJogoMotorenergiaMaquina_Deserialize[],
+	dinamico: boolean,
+	elevado: boolean,
+	/**  Normalmente por falta de administrador. */
+	teste_interrompido: boolean,
+};
+
+export type PainelDeEnergia_Serialize = {
+	impressao: Impressao_Serialize,
+	bateria: Bateria_Serialize,
+	ppm_atual: Configuracao_Serialize[],
+	plano_otimiza_ativo: boolean,
+	backup: Backup_Serialize | null,
+	perfis_de_jogo: PerfilDeJogoMotorenergiaMaquina_Serialize[],
+	dinamico: boolean,
+	elevado: boolean,
+	/**  Normalmente por falta de administrador. */
+	teste_interrompido: boolean,
+};
+
 export type PainelDoCs2 = PainelDoCs2_Serialize | PainelDoCs2_Deserialize;
 
 export type PainelDoCs2_Deserialize = {
@@ -1568,6 +3982,13 @@ export type PainelDoCs2_Serialize = {
 	ligado: boolean,
 	/**  O que o CS2 contou nos últimos 30 s (com o jogo aberto e a integração ligada). */
 	estado: EstadoDoCs2_Serialize | null,
+};
+
+export type PainelDoDriver = {
+	estado: Nvapi,
+	nota: string,
+	ajustes: AjusteNaTela[],
+	limites: LimiteNaTela[],
 };
 
 /**  Para a tela. */
@@ -1621,6 +4042,98 @@ export type PainelDoTurbo_Serialize = {
 	ritmo: RitmoDoJogo | null,
 };
 
+export type PainelFovFivem = PainelFovFivem_Serialize | PainelFovFivem_Deserialize;
+
+export type PainelFovFivem_Deserialize = {
+	/**  A posição no arquivo agora (`None` sem o arquivo ou sem a linha: o jogo usa o padrão dele). */
+	atual?: number | null,
+	pedido?: number | null,
+	pendente: boolean,
+	fivem_aberto: boolean,
+	/**  O Otimiza trocou e ainda guarda o de antes. */
+	alterado: boolean,
+	maximo: number,
+};
+
+export type PainelFovFivem_Serialize = {
+	/**  A posição no arquivo agora (`None` sem o arquivo ou sem a linha: o jogo usa o padrão dele). */
+	atual: number | null,
+	pedido: number | null,
+	pendente: boolean,
+	fivem_aberto: boolean,
+	/**  O Otimiza trocou e ainda guarda o de antes. */
+	alterado: boolean,
+	maximo: number,
+};
+
+export type PainelFrameboost = PainelFrameboost_Serialize | PainelFrameboost_Deserialize;
+
+export type PainelFrameboost_Deserialize = {
+	jogo?: string | null,
+	/**  O que o automático escolhe: o do jogo, depois o do driver, depois o do Otimiza. */
+	recomendado?: RecursoAvaliado | null,
+	opcoes: RecursoAvaliado[],
+	/**  Só os que cabem no monitor (2× sempre). */
+	multiplicadores: number[],
+	hz?: number | null,
+	estimativas: Estimativa[],
+	ativo?: Ativo_Deserialize | null,
+	/**  Por que o gerador desligou sozinho, para a tela dizer. */
+	aviso?: string | null,
+	/**  O teto do FPS base que o Otimiza gravou para este jogo (`base_do_jogo`). */
+	base?: BaseTravada | null,
+	/**  O que aconteceu com o FPS base ao ligar (travou, já estava, falta medir). */
+	nota_da_base?: string | null,
+	/**  A pessoa destravou o FPS base deste jogo: o Frame Boost não trava de novo sozinho. */
+	base_solta?: boolean,
+	/**  Gerador desligado: como foi a última vez. */
+	ultima_sessao?: UltimaSessao_Deserialize | null,
+	/**  O monitor onde o jogo está e, para cada nível de escala, a resolução em que o jogo deve rodar. */
+	monitor?: [number, number] | null,
+	escalas?: OpcaoEscala[],
+};
+
+export type PainelFrameboost_Serialize = {
+	jogo: string | null,
+	/**  O que o automático escolhe: o do jogo, depois o do driver, depois o do Otimiza. */
+	recomendado: RecursoAvaliado | null,
+	opcoes: RecursoAvaliado[],
+	/**  Só os que cabem no monitor (2× sempre). */
+	multiplicadores: number[],
+	hz: number | null,
+	estimativas: Estimativa[],
+	ativo: Ativo_Serialize | null,
+	/**  Por que o gerador desligou sozinho, para a tela dizer. */
+	aviso: string | null,
+	/**  O teto do FPS base que o Otimiza gravou para este jogo (`base_do_jogo`). */
+	base: BaseTravada | null,
+	/**  O que aconteceu com o FPS base ao ligar (travou, já estava, falta medir). */
+	nota_da_base: string | null,
+	/**  A pessoa destravou o FPS base deste jogo: o Frame Boost não trava de novo sozinho. */
+	base_solta: boolean,
+	/**  Gerador desligado: como foi a última vez. */
+	ultima_sessao: UltimaSessao_Serialize | null,
+	/**  O monitor onde o jogo está e, para cada nível de escala, a resolução em que o jogo deve rodar. */
+	monitor: [number, number] | null,
+	escalas: OpcaoEscala[],
+};
+
+export type PainelIntel = PainelIntel_Serialize | PainelIntel_Deserialize;
+
+export type PainelIntel_Deserialize = {
+	estado: string,
+	nota: string,
+	ajustes?: Ajustes_Deserialize | null,
+	aplicados: string[],
+};
+
+export type PainelIntel_Serialize = {
+	estado: string,
+	nota: string,
+	ajustes: Ajustes_Serialize | null,
+	aplicados: string[],
+};
+
 /**  Para a tela. */
 export type Painel_Deserialize = {
 	ligado: boolean,
@@ -1637,6 +4150,55 @@ export type Painel_Serialize = {
 	agindo_em: string | null,
 	/**  Por que não vai agir aqui (no cabo, por exemplo). Não impede de ligar: vale quando a pessoa estiver no Wi-Fi. */
 	observacao: string | null,
+};
+
+/**  O papel do candidato na bateria de testes. */
+export type Papel = "PadraoWindows" | 
+/**  No notebook: "PLUGGED COMPETITIVE". */
+"A" | 
+/**  No notebook: "PLUGGED BALANCED". */
+"B" | "C" | 
+/**
+ *  "Resposta máxima": o estilo dos planos de concorrente — tudo no máximo.
+ *  Só em desktop, e só como candidato MEDIDO: se ganhar nesta máquina, é
+ *  escolhido; se não, não.
+ */
+"D" | 
+/**  Vizinho do vencedor, testado na segunda etapa do autoajuste. */
+"Refino" | "Epp" | "Dispositivo";
+
+export type Parametros = Parametros_Serialize | Parametros_Deserialize;
+
+export type Parametros_Deserialize = {
+	/**  EPP na escala do processador (0–255). `None` mantém o do plano base. */
+	epp_bruto?: number | null,
+	estacionamento: Estacionamento,
+	boost: BoostMotorenergia,
+	autonomia: Autonomia,
+	resposta: Resposta,
+	/**
+	 *  Estado mínimo do processador. Só oferecido em CPU sem controle por
+	 *  hardware, onde ele governa de verdade.
+	 */
+	minimo?: number | null,
+	pcie: PoliticaDeDispositivo,
+	usb: PoliticaDeDispositivo,
+};
+
+export type Parametros_Serialize = {
+	/**  EPP na escala do processador (0–255). `None` mantém o do plano base. */
+	epp_bruto: number | null,
+	estacionamento: Estacionamento,
+	boost: BoostMotorenergia,
+	autonomia: Autonomia,
+	resposta: Resposta,
+	/**
+	 *  Estado mínimo do processador. Só oferecido em CPU sem controle por
+	 *  hardware, onde ele governa de verdade.
+	 */
+	minimo: number | null,
+	pcie: PoliticaDeDispositivo,
+	usb: PoliticaDeDispositivo,
 };
 
 export type Parcela = Parcela_Serialize | Parcela_Deserialize;
@@ -1691,6 +4253,39 @@ export type Partida_Serialize = {
 	frametime_ms: number | null,
 	/**  Mediana do clique do mouse até a tela, pelo PresentMon (só com cliques bastantes na partida). */
 	clique_ms: number | null,
+};
+
+export type PassoBios = {
+	id: string,
+	fase: Fase,
+	titulo: string,
+	/**  "Costuma": o nome muda de placa para placa. */
+	onde: string,
+	o_que_faz: string,
+	/**  Nunca vazio. */
+	risco_e_volta: string,
+	/**  Verdadeiro quando o Otimiza MEDIU algo que torna o passo relevante aqui, e não só uma boa ideia genérica. */
+	medido_aqui: boolean,
+};
+
+export type PassoReceita = PassoReceita_Serialize | PassoReceita_Deserialize;
+
+export type PassoReceita_Deserialize = {
+	ajuste: AjusteDoctor,
+	/**  `None`: ajuste que o Otimiza não aplica (limite de FPS, refrigeração, SSD, resolução). */
+	estrategia?: Estrategia | null,
+	aplicado: boolean,
+	oferta: Oferta,
+	como_provar: ComoProvar,
+};
+
+export type PassoReceita_Serialize = {
+	ajuste: AjusteDoctor,
+	/**  `None`: ajuste que o Otimiza não aplica (limite de FPS, refrigeração, SSD, resolução). */
+	estrategia: Estrategia | null,
+	aplicado: boolean,
+	oferta: Oferta,
+	como_provar: ComoProvar,
 };
 
 export type PcsParecidos = PcsParecidos_Serialize | PcsParecidos_Deserialize;
@@ -1749,7 +4344,56 @@ export type PerfilDeHardware_Serialize = {
 	lido_em: number,
 };
 
+export type PerfilDeJogoMotorenergiaMaquina = PerfilDeJogoMotorenergiaMaquina_Serialize | PerfilDeJogoMotorenergiaMaquina_Deserialize;
+
+export type PerfilDeJogoMotorenergiaMaquina_Deserialize = {
+	executavel: string,
+	parametros: Parametros_Deserialize,
+	escolha?: EscolhaMotorenergia_Deserialize | null,
+	quando: number,
+};
+
+export type PerfilDeJogoMotorenergiaMaquina_Serialize = {
+	executavel: string,
+	parametros: Parametros_Serialize,
+	escolha: EscolhaMotorenergia_Serialize | null,
+	quando: number,
+};
+
 export type PerfilDoJogo = PerfilDoJogo_Serialize | PerfilDoJogo_Deserialize;
+
+/**
+ *  O perfil gráfico do jogo pelo cartão do Turbo: se ele é oferecido para o jogo aberto, o pedido pendente e o que o
+ *  histórico diz que já está aplicado. `LIVRES`: só lê.
+ */
+export type PerfilDoJogoNoTurbo = PerfilDoJogoNoTurbo_Serialize | PerfilDoJogoNoTurbo_Deserialize;
+
+/**
+ *  O perfil gráfico do jogo pelo cartão do Turbo: se ele é oferecido para o jogo aberto, o pedido pendente e o que o
+ *  histórico diz que já está aplicado. `LIVRES`: só lê.
+ */
+export type PerfilDoJogoNoTurbo_Deserialize = {
+	oferece: boolean,
+	pendente?: string | null,
+	aplicado?: string | null,
+};
+
+/**
+ *  O perfil gráfico do jogo pelo cartão do Turbo: se ele é oferecido para o jogo aberto, o pedido pendente e o que o
+ *  histórico diz que já está aplicado. `LIVRES`: só lê.
+ */
+export type PerfilDoJogoNoTurbo_Serialize = {
+	oferece: boolean,
+	pendente: string | null,
+	aplicado: string | null,
+};
+
+/**  Os perfis gráficos do FiveM/GTA V (`config_jogo_<perfil>`), do mais leve ao que só tira o limite. */
+export type PerfilDoJogoReceita = 
+/**  Só tira o limite de FPS: não deixa o gráfico mais leve. */
+"SemTeto" | "Equilibrado" | 
+/**  Também reduz distância de visão e população (LOD), que é o que alivia o processador. */
+"Competitivo";
 
 export type PerfilDoJogo_Deserialize = {
 	id: string,
@@ -1804,6 +4448,28 @@ export type PerfilDoTurbo_Serialize = {
 	prova: DesfechoDaProva | null,
 };
 
+export type PerfilPerfil = {
+	/**  Da mais importante para a menos. */
+	limitacoes: Limitacao[],
+	/**  O que não deu para ler, em nome curto ("memória de vídeo", "monitor"...). */
+	nao_lido: string[],
+};
+
+/**  O ajuste salvo de cada jogo (pela chave do catálogo) e se ele liga sozinho quando o jogo abre. */
+export type Perfis = Perfis_Serialize | Perfis_Deserialize;
+
+/**  O ajuste salvo de cada jogo (pela chave do catálogo) e se ele liga sozinho quando o jogo abre. */
+export type Perfis_Deserialize = {
+	por_jogo?: { [key in string]: Ajuste },
+	so_com_jogo?: boolean,
+};
+
+/**  O ajuste salvo de cada jogo (pela chave do catálogo) e se ele liga sozinho quando o jogo abre. */
+export type Perfis_Serialize = {
+	por_jogo: { [key in string]: Ajuste },
+	so_com_jogo: boolean,
+};
+
 export type PerformanceMetrics = PerformanceMetrics_Serialize | PerformanceMetrics_Deserialize;
 
 export type PerformanceMetrics_Deserialize = {
@@ -1842,6 +4508,26 @@ export type PerformanceMetrics_Serialize = {
 
 export type Periodo = "madrugada" | "manha" | "tarde" | "noite";
 
+export type Pesado = Pesado_Serialize | Pesado_Deserialize;
+
+export type Pesado_Deserialize = {
+	/**  Nome do executável, sem `.exe` (o que a pessoa reconhece: brave, DiscordCanary). */
+	nome: string,
+	mb: number,
+	processos: number,
+	/**  O que se perde ao fechar (voz, música), quando há. */
+	aviso?: string | null,
+};
+
+export type Pesado_Serialize = {
+	/**  Nome do executável, sem `.exe` (o que a pessoa reconhece: brave, DiscordCanary). */
+	nome: string,
+	mb: number,
+	processos: number,
+	/**  O que se perde ao fechar (voz, música), quando há. */
+	aviso: string | null,
+};
+
 /**  Um pico com carimbo, no relógio da sessão (QPC): a causa da travada cruza com os quadros pelo mesmo relógio. */
 export type PicoDeDriver = {
 	inicio_qpc: number,
@@ -1851,7 +4537,55 @@ export type PicoDeDriver = {
 	duracao_us: number | null,
 };
 
+export type Pista = {
+	suspeito: Suspeito,
+	forca: ForcaTravadas,
+	travadas: number,
+};
+
+export type PistaCrashes = 
+/**  O mesmo hash em dois ou mais crashes: um defeito que se repete no mesmo ponto do jogo. */
+"MesmoDefeito" | 
+/**  Um limite do motor do jogo (pool) estourou: depende do servidor, não do Windows. */
+"PoolCheio" | 
+/**  Memória ou paginação no limite no instante do crash. */
+"MemoriaNoLimite" | 
+/**  O mesmo veículo em dois ou mais crashes: item adicionado pelo servidor. */
+"MesmoVeiculo" | 
+/**  Crash anterior à primeira mudança do Otimiza nesta máquina. */
+"JaAcontecia";
+
 export type Placa = Placa_Serialize | Placa_Deserialize;
+
+export type PlacaDeVideo = PlacaDeVideo_Serialize | PlacaDeVideo_Deserialize;
+
+export type PlacaDeVideo_Deserialize = {
+	marca: string,
+	nome?: string | null,
+	driver?: string | null,
+	driver_data?: string | null,
+	driver_dias?: number | null,
+	driver_origem?: string | null,
+	driver_generico: boolean,
+	vram_gb: number | null,
+};
+
+export type PlacaDeVideo_Serialize = {
+	marca: string,
+	nome: string | null,
+	driver: string | null,
+	driver_data: string | null,
+	driver_dias: number | null,
+	driver_origem: string | null,
+	driver_generico: boolean,
+	vram_gb: number | null,
+};
+
+export type PlacaTelemetria = {
+	nome: string,
+	luid: string,
+	vram_total_mb: number | null,
+};
 
 export type Placa_Deserialize = {
 	nome: string,
@@ -1866,6 +4600,86 @@ export type Placa_Serialize = {
 	familia: Familia,
 	driver: string | null,
 };
+
+export type PlanoJogoLiso = PlanoJogoLiso_Serialize | PlanoJogoLiso_Deserialize;
+
+export type PlanoJogoLiso_Deserialize = {
+	/**  FPS que o jogo entrega (mediana medida agora). */
+	fps_agora: number | null,
+	hz: number,
+	/**  O teto escolhido, ou `None` se o jogo já roda liso / passa do monitor. */
+	teto?: number | null,
+	multiplicador_do_boost: number,
+	/**  Trancos por minuto agora (a dor que o teto ataca). */
+	trancos_por_minuto: number | null,
+	motivo: string,
+	/**  O teto que o driver USA neste jogo agora (lido pelo caminho do executável aberto); `None` sem leitura. */
+	teto_no_driver?: number | null,
+	/**  Um teto gravado pelo Otimiza que não chega ao jogo. */
+	aviso_do_teto?: string | null,
+	/**  Como o quadro chegou à tela na medição, e o que fazer se for o caminho caro. */
+	tela?: TelaJogoLiso_Deserialize | null,
+};
+
+export type PlanoJogoLiso_Serialize = {
+	/**  FPS que o jogo entrega (mediana medida agora). */
+	fps_agora: number | null,
+	hz: number,
+	/**  O teto escolhido, ou `None` se o jogo já roda liso / passa do monitor. */
+	teto: number | null,
+	multiplicador_do_boost: number,
+	/**  Trancos por minuto agora (a dor que o teto ataca). */
+	trancos_por_minuto: number | null,
+	motivo: string,
+	/**  O teto que o driver USA neste jogo agora (lido pelo caminho do executável aberto); `None` sem leitura. */
+	teto_no_driver: number | null,
+	/**  Um teto gravado pelo Otimiza que não chega ao jogo. */
+	aviso_do_teto: string | null,
+	/**  Como o quadro chegou à tela na medição, e o que fazer se for o caminho caro. */
+	tela: TelaJogoLiso_Serialize | null,
+};
+
+export type PoliticaDeDispositivo = "Windows" | 
+/**  Economia desligada NA TOMADA. Só entra como variação testada. */
+"Desligada";
+
+export type PoolAjustado = PoolAjustado_Serialize | PoolAjustado_Deserialize;
+
+export type PoolAjustado_Deserialize = {
+	nome: string,
+	aumento: number,
+	/**  `None`: fora do recorte estático, não conferido aqui. */
+	teto_conhecido?: number | null,
+};
+
+export type PoolAjustado_Serialize = {
+	nome: string,
+	aumento: number,
+	/**  `None`: fora do recorte estático, não conferido aqui. */
+	teto_conhecido: number | null,
+};
+
+/**
+ *  `tag = "status"` para a tela decidir por campo, nunca pela prosa; a guarda
+ *  `a_tela_nao_decide_cor_comparando_texto_do_backend` (`commands/mod.rs`) cobra isso.
+ */
+export type PoolSizesIncrease = PoolSizesIncrease_Serialize | PoolSizesIncrease_Deserialize;
+
+/**
+ *  `tag = "status"` para a tela decidir por campo, nunca pela prosa; a guarda
+ *  `a_tela_nao_decide_cor_comparando_texto_do_backend` (`commands/mod.rs`) cobra isso.
+ */
+export type PoolSizesIncrease_Deserialize = { status: "Vazio" } | { status: "Configurado"; pools: PoolAjustado_Deserialize[] } | 
+/**  Dito explicitamente: tratar como vazio esconderia um arquivo num formato que não se entende. */
+{ status: "Invalido"; bruto: string };
+
+/**
+ *  `tag = "status"` para a tela decidir por campo, nunca pela prosa; a guarda
+ *  `a_tela_nao_decide_cor_comparando_texto_do_backend` (`commands/mod.rs`) cobra isso.
+ */
+export type PoolSizesIncrease_Serialize = { status: "Vazio" } | { status: "Configurado"; pools: PoolAjustado_Serialize[] } | 
+/**  Dito explicitamente: tratar como vazio esconderia um arquivo num formato que não se entende. */
+{ status: "Invalido"; bruto: string };
 
 export type Preferences = Preferences_Serialize | Preferences_Deserialize;
 
@@ -1897,6 +4711,8 @@ export type Preferences_Serialize = {
 	comunidade: boolean,
 };
 
+export type Preferencia = "Automatica" | "Economia" | "Desempenho";
+
 /**  O que o vigia conta para a tela quando o jogo que o "Jogar" abriu aparece (`partida:preparada`). */
 export type Preparada = Preparada_Serialize | Preparada_Deserialize;
 
@@ -1922,12 +4738,47 @@ export type Preparada_Serialize = {
 	recusa: string | null,
 };
 
+export type Previsao = {
+	chave: string,
+	antes: string,
+	depois: string,
+	por_que: string,
+};
+
 export type ProblemaDaRota = "perda" | "variacao";
+
+export type ProcessImpact = {
+	name: string,
+	/**  Porcentagem da CPU TOTAL da máquina, não de um núcleo. */
+	cpu_percent: number | null,
+	ram_mb: number | null,
+	instances: number,
+	in_startup: boolean,
+};
+
+export type ProcessoNaAmostra = {
+	nome: string,
+	cpu: number | null,
+};
 
 export type ProgramaNaRede = {
 	programa: string,
 	envio_mbps: number | null,
 	recebe_mbps: number | null,
+};
+
+export type ProntidaoProntojogo = ProntidaoProntojogo_Serialize | ProntidaoProntojogo_Deserialize;
+
+export type ProntidaoProntojogo_Deserialize = {
+	pronto: boolean,
+	itens: ItemProntojogo_Deserialize[],
+	conferido: string[],
+};
+
+export type ProntidaoProntojogo_Serialize = {
+	pronto: boolean,
+	itens: ItemProntojogo_Serialize[],
+	conferido: string[],
 };
 
 export type ProvaDaPlaca = ProvaDaPlaca_Serialize | ProvaDaPlaca_Deserialize;
@@ -1969,6 +4820,8 @@ export type RAMMetrics_Serialize = {
 	cached_gb: number | null,
 	usage_percent: number | null,
 };
+
+export type Receita = Receita_Serialize | Receita_Deserialize;
 
 export type ReceitaDaComunidade = ReceitaDaComunidade_Serialize | ReceitaDaComunidade_Deserialize;
 
@@ -2018,6 +4871,26 @@ export type ReceitaMedida = {
 	explicacao: string,
 };
 
+export type Receita_Deserialize = {
+	/**  O diagnóstico inteiro, com as hipóteses, para a tela não pedir duas vezes. */
+	diagnostico: DiagnosticoDoctor_Deserialize,
+	/**  Um bloco por causa do diagnóstico, na mesma ordem; hipótese não entra. */
+	por_causa: ([Causa, PassoReceita_Deserialize[]])[],
+	lembrancas: Lembranca_Deserialize[],
+	/**  O registro das provas não pôde ser lido: sem ele não se sabe o que já piorou. */
+	memoria_ilegivel?: string | null,
+};
+
+export type Receita_Serialize = {
+	/**  O diagnóstico inteiro, com as hipóteses, para a tela não pedir duas vezes. */
+	diagnostico: DiagnosticoDoctor_Serialize,
+	/**  Um bloco por causa do diagnóstico, na mesma ordem; hipótese não entra. */
+	por_causa: ([Causa, PassoReceita_Serialize[]])[],
+	lembrancas: Lembranca_Serialize[],
+	/**  O registro das provas não pôde ser lido: sem ele não se sabe o que já piorou. */
+	memoria_ilegivel: string | null,
+};
+
 export type Recurso = 
 /**  A geração do próprio jogo (DLSS, FSR ou XeSS com geração de quadros). */
 "FrameBoostDoJogo" | 
@@ -2042,6 +4915,8 @@ export type RedeDaPartida = {
 	firmeza: Firmeza,
 	frase: string,
 };
+
+export type Registro = Registro_Serialize | Registro_Deserialize;
 
 export type RegistroDaRota = RegistroDaRota_Serialize | RegistroDaRota_Deserialize;
 
@@ -2085,6 +4960,40 @@ export type RegistroDaRota_Serialize = {
 	operadora: string | null,
 };
 
+export type Registro_Deserialize = {
+	quando: number,
+	/**  Em CADA registro: trocar placa ou plano no meio do histórico é o que explica uma queda. */
+	identidade: Identidade_Deserialize,
+	evento: Evento_Deserialize,
+};
+
+export type Registro_Serialize = {
+	quando: number,
+	/**  Em CADA registro: trocar placa ou plano no meio do histórico é o que explica uma queda. */
+	identidade: Identidade_Serialize,
+	evento: Evento_Serialize,
+};
+
+export type Regressao = Regressao_Serialize | Regressao_Deserialize;
+
+export type Regressao_Deserialize = {
+	id: string,
+	anterior: ResumoDasRepeticoes_Deserialize,
+	atual: ResumoDasRepeticoes_Deserialize,
+	diferenca: DiferencaMedida_Deserialize,
+	piorou: boolean,
+	suspeitos: Suspeitos,
+};
+
+export type Regressao_Serialize = {
+	id: string,
+	anterior: ResumoDasRepeticoes_Serialize,
+	atual: ResumoDasRepeticoes_Serialize,
+	diferenca: DiferencaMedida_Serialize,
+	piorou: boolean,
+	suspeitos: Suspeitos,
+};
+
 /**  O que o vigia fez nesta abertura, para o log e para a tela (`estabilidade:aviso`). */
 export type RelatoDeEstabilidade = {
 	frase: string,
@@ -2093,6 +5002,32 @@ export type RelatoDeEstabilidade = {
 };
 
 export type Relatorio = Relatorio_Serialize | Relatorio_Deserialize;
+
+export type RelatorioCrashes = RelatorioCrashes_Serialize | RelatorioCrashes_Deserialize;
+
+export type RelatorioCrashes_Deserialize = {
+	/**  Do mais novo para o mais velho. */
+	crashes: Crash_Deserialize[],
+	leituras: LeituraCrashes[],
+	/**  Primeira mudança do Otimiza registrada nesta máquina. */
+	primeira_mudanca?: number | null,
+	antes_do_otimiza: number,
+	depois_do_otimiza: number,
+	/**  Pasta de crashes do FiveM não existe: não há o que ler (e não é "zero crashes"). */
+	sem_fivem: boolean,
+};
+
+export type RelatorioCrashes_Serialize = {
+	/**  Do mais novo para o mais velho. */
+	crashes: Crash_Serialize[],
+	leituras: LeituraCrashes[],
+	/**  Primeira mudança do Otimiza registrada nesta máquina. */
+	primeira_mudanca: number | null,
+	antes_do_otimiza: number,
+	depois_do_otimiza: number,
+	/**  Pasta de crashes do FiveM não existe: não há o que ler (e não é "zero crashes"). */
+	sem_fivem: boolean,
+};
 
 export type RelatorioDaPartida = RelatorioDaPartida_Serialize | RelatorioDaPartida_Deserialize;
 
@@ -2188,6 +5123,18 @@ export type RelatorioDeTetos_Serialize = {
 	lacunas: string[],
 };
 
+export type RelatorioDiscodojogo = RelatorioDiscodojogo_Serialize | RelatorioDiscodojogo_Deserialize;
+
+export type RelatorioDiscodojogo_Deserialize = {
+	jogos: OndeMora_Deserialize[],
+	lacunas: string[],
+};
+
+export type RelatorioDiscodojogo_Serialize = {
+	jogos: OndeMora_Serialize[],
+	lacunas: string[],
+};
+
 export type RelatorioDoPlano = RelatorioDoPlano_Serialize | RelatorioDoPlano_Deserialize;
 
 export type RelatorioDoPlano_Deserialize = {
@@ -2218,6 +5165,12 @@ export type RelatorioDoPlano_Serialize = {
 	nao_suportados: number,
 	falhas: number,
 	desfecho: DesfechoDoPlano,
+};
+
+export type RelatorioDoRbar = {
+	estado: EstadoDoRbar,
+	modelo: string,
+	nota: string,
 };
 
 export type RelatorioDpc = RelatorioDpc_Serialize | RelatorioDpc_Deserialize;
@@ -2294,6 +5247,18 @@ export type RelogioDoDpc =
 /**  Hora do sistema: resolução ruim, o relatório avisa. */
 "Sistema" | "Ciclos" | "Desconhecido";
 
+export type ReportSaved = {
+	path: string,
+	is_pdf: boolean,
+	optimizations: number,
+	changes: number,
+	note: string,
+};
+
+export type Resposta = "Windows" | 
+/**  Sobe cedo e direto; desce em degraus, sem pressa. */
+"Rapida";
+
 export type RespostaDoOti = RespostaDoOti_Serialize | RespostaDoOti_Deserialize;
 
 export type RespostaDoOti_Deserialize = {
@@ -2322,6 +5287,34 @@ export type RestoreStatus = {
 	available: boolean,
 	message: string,
 	points: RestorePoint[],
+};
+
+export type Resultado = "Ganhou" | "Piorou" | "SemDiferenca";
+
+export type ResultadoCpuSet = ResultadoCpuSet_Serialize | ResultadoCpuSet_Deserialize;
+
+export type ResultadoCpuSet_Deserialize = {
+	executavel: string,
+	quando: number,
+	escolha: Escolha,
+	fps_todos: number | null,
+	fps_desempenho: number | null,
+	low_todos: number | null,
+	low_desempenho: number | null,
+	diferenca_fps: DiferencaMedida_Deserialize,
+	diferenca_low: DiferencaMedida_Deserialize,
+};
+
+export type ResultadoCpuSet_Serialize = {
+	executavel: string,
+	quando: number,
+	escolha: Escolha,
+	fps_todos: number | null,
+	fps_desempenho: number | null,
+	low_todos: number | null,
+	low_desempenho: number | null,
+	diferenca_fps: DiferencaMedida_Serialize,
+	diferenca_low: DiferencaMedida_Serialize,
 };
 
 export type ResultadoDaBanda = ResultadoDaBanda_Serialize | ResultadoDaBanda_Deserialize;
@@ -2398,6 +5391,28 @@ export type ResultadoDaCaptura_Serialize = { estado: "Medido"; relatorio: Relato
  *  sessões de sistema abertas.
  */
 { estado: "SessaoOcupada"; texto: string } | { estado: "JaEmAndamento"; texto: string } | { estado: "NaoSuportado"; texto: string } | { estado: "Falhou"; etapa: string; codigo: number; texto: string };
+
+export type ResultadoDaInvestigacao = ResultadoDaInvestigacao_Serialize | ResultadoDaInvestigacao_Deserialize;
+
+export type ResultadoDaInvestigacao_Deserialize = {
+	jogo: string,
+	investigacao: InvestigacaoCausadatravada_Deserialize,
+	custo: Custo_Deserialize,
+	/**  O programa que o teste ativo pode acalmar, quando a política deixa. */
+	teste_possivel?: string | null,
+	/**  Por que não há teste ativo, quando havia hipótese para ele. */
+	motivo_sem_teste?: string | null,
+};
+
+export type ResultadoDaInvestigacao_Serialize = {
+	jogo: string,
+	investigacao: InvestigacaoCausadatravada_Serialize,
+	custo: Custo_Serialize,
+	/**  O programa que o teste ativo pode acalmar, quando a política deixa. */
+	teste_possivel: string | null,
+	/**  Por que não há teste ativo, quando havia hipótese para ele. */
+	motivo_sem_teste: string | null,
+};
 
 export type ResultadoDaLimpeza = {
 	bytes_liberados: number,
@@ -2517,6 +5532,26 @@ export type ResultadoDoLab_Serialize = {
 	descartadas: number,
 };
 
+export type ResultadoDoTeste = ResultadoDoTeste_Serialize | ResultadoDoTeste_Deserialize;
+
+export type ResultadoDoTeste_Deserialize = {
+	processo: string,
+	julgamento: JulgamentoTestedatravada_Deserialize,
+	/**  O programa ficou acalmado (até o jogo fechar ou "Devolver agora"). */
+	mantido: boolean,
+	/**  Falhou devolver algum processo: a tela diz, e a abertura seguinte tenta de novo. */
+	aviso?: string | null,
+};
+
+export type ResultadoDoTeste_Serialize = {
+	processo: string,
+	julgamento: JulgamentoTestedatravada_Serialize,
+	/**  O programa ficou acalmado (até o jogo fechar ou "Devolver agora"). */
+	mantido: boolean,
+	/**  Falhou devolver algum processo: a tela diz, e a abertura seguinte tenta de novo. */
+	aviso: string | null,
+};
+
 /**
  *  O antes × depois da última vez que o Turbo ficou ligado com o Frame Boost. NÃO é prova A-B: o "antes" são os 10 s
  *  da medida e o "depois" a média da sessão (cenas diferentes). A tela diz isso; o compartilhar fica para a prova.
@@ -2553,6 +5588,26 @@ export type ResultadoDoTurbo_Serialize = {
 	na_tela_medido: boolean,
 	minutos: number | null,
 	escala: NivelDeEscala | null,
+};
+
+export type ResumoDaJanela = ResumoDaJanela_Serialize | ResumoDaJanela_Deserialize;
+
+export type ResumoDaJanela_Deserialize = {
+	lado: LadoDoTeste,
+	travadas: number,
+	minutos: number | null,
+	fps?: number | null,
+	valida: boolean,
+	motivo?: string | null,
+};
+
+export type ResumoDaJanela_Serialize = {
+	lado: LadoDoTeste,
+	travadas: number,
+	minutos: number | null,
+	fps: number | null,
+	valida: boolean,
+	motivo: string | null,
 };
 
 export type ResumoDaRede = ResumoDaRede_Serialize | ResumoDaRede_Deserialize;
@@ -2622,6 +5677,44 @@ export type ResumoDoJogo_Serialize = {
 	ganho_low: Ganho,
 	melhor_fps: number | null,
 };
+
+export type ResumoGpu = ResumoGpu_Serialize | ResumoGpu_Deserialize;
+
+export type ResumoGpu_Deserialize = {
+	amostras: number,
+	temperatura_max_c?: number | null,
+	temperatura_media_c?: number | null,
+	clock_medio_mhz?: number | null,
+	potencia_media_w?: number | null,
+	limite_w?: number | null,
+	uso_medio_pct?: number | null,
+	pct_termico: number | null,
+	pct_teto_de_energia: number | null,
+	pct_freio_de_hardware: number | null,
+	motivos_lidos: boolean,
+};
+
+export type ResumoGpu_Serialize = {
+	amostras: number,
+	temperatura_max_c: number | null,
+	temperatura_media_c: number | null,
+	clock_medio_mhz: number | null,
+	potencia_media_w: number | null,
+	limite_w: number | null,
+	uso_medio_pct: number | null,
+	pct_termico: number | null,
+	pct_teto_de_energia: number | null,
+	pct_freio_de_hardware: number | null,
+	motivos_lidos: boolean,
+};
+
+export type Risco = 
+/**  Não muda o que a pessoa vê, e volta inteiro. */
+"Baixo" | 
+/**  Muda comportamento que a pessoa nota, ou depende da máquina. */
+"Medio" | 
+/**  Pode custar quadro, ou não volta por aqui. */
+"Alto";
 
 /**
  *  O rótulo sai do Rust JÁ ESCOLHIDO: montá-lo na tela pelo nome da variante é o que
@@ -2727,6 +5820,99 @@ export type SaltoDaRota_Serialize = {
 	operadora: string | null,
 };
 
+export type SaudeDosQuadros = SaudeDosQuadros_Serialize | SaudeDosQuadros_Deserialize;
+
+export type SaudeDosQuadros_Deserialize = {
+	quadros: number,
+	duracao_s: number | null,
+	fps_medio: number | null,
+	frametime_mediano_ms: number | null,
+	frametime_desvio_ms?: number | null,
+	frametime_cv?: number | null,
+	p95_ms?: number | null,
+	p99_ms?: number | null,
+	low_1pct_fps?: number | null,
+	low_01pct_fps?: number | null,
+	engasgos: ContagemDeEngasgos,
+	engasgos_graves_por_minuto: number | null,
+	/**  DERIVADO dos números acima (`indice_de_fluidez`), e nunca aparece sem eles do lado. */
+	indice_de_fluidez?: number | null,
+};
+
+export type SaudeDosQuadros_Serialize = {
+	quadros: number,
+	duracao_s: number | null,
+	fps_medio: number | null,
+	frametime_mediano_ms: number | null,
+	frametime_desvio_ms: number | null,
+	frametime_cv: number | null,
+	p95_ms: number | null,
+	p99_ms: number | null,
+	low_1pct_fps: number | null,
+	low_01pct_fps: number | null,
+	engasgos: ContagemDeEngasgos,
+	engasgos_graves_por_minuto: number | null,
+	/**  DERIVADO dos números acima (`indice_de_fluidez`), e nunca aparece sem eles do lado. */
+	indice_de_fluidez: number | null,
+};
+
+export type ScheduledTask = {
+	name: string,
+	path: string,
+	author: string,
+	enabled: boolean,
+	microsoft: boolean,
+};
+
+export type Sensores = Sensores_Serialize | Sensores_Deserialize;
+
+export type Sensores_Deserialize = {
+	uso_pct?: number | null,
+	temperatura_c?: number | null,
+	ponto_quente_c?: number | null,
+	clock_mhz?: number | null,
+	potencia_w?: number | null,
+	vram_usada_mb?: number | null,
+};
+
+export type Sensores_Serialize = {
+	uso_pct: number | null,
+	temperatura_c: number | null,
+	ponto_quente_c: number | null,
+	clock_mhz: number | null,
+	potencia_w: number | null,
+	vram_usada_mb: number | null,
+};
+
+export type ServiceEntry = ServiceEntry_Serialize | ServiceEntry_Deserialize;
+
+export type ServiceEntry_Deserialize = {
+	name: string,
+	display_name: string,
+	path: string,
+	start_mode: StartMode,
+	running: boolean,
+	/**  Serviço em `svchost` compartilhado não se mede separado: fica em branco, sem chute. */
+	ram_mb?: number | null,
+	protected?: string | null,
+};
+
+export type ServiceEntry_Serialize = {
+	name: string,
+	display_name: string,
+	path: string,
+	start_mode: StartMode,
+	running: boolean,
+	/**  Serviço em `svchost` compartilhado não se mede separado: fica em branco, sem chute. */
+	ram_mb: number | null,
+	protected: string | null,
+};
+
+export type ServicoEssencial = {
+	servico: string,
+	inicio: Inicio,
+};
+
 export type ServidorMedido = ServidorMedido_Serialize | ServidorMedido_Deserialize;
 
 export type ServidorMedido_Deserialize = {
@@ -2755,13 +5941,80 @@ export type ServidorMedido_Serialize = {
 	erro: string | null,
 };
 
+export type Severidade = "Leve" | "Moderada" | "Severa" | "Extrema";
+
+export type Severidades = {
+	leve: number,
+	moderada: number,
+	severa: number,
+	extrema: number,
+};
+
+export type ShaderCache = ShaderCache_Serialize | ShaderCache_Deserialize;
+
+export type ShaderCache_Deserialize = {
+	id: string,
+	name: string,
+	path: string,
+	bytes: number,
+	formatted: string,
+	files: number,
+	oldest?: string | null,
+	stale: boolean,
+};
+
+export type ShaderCache_Serialize = {
+	id: string,
+	name: string,
+	path: string,
+	bytes: number,
+	formatted: string,
+	files: number,
+	oldest: string | null,
+	stale: boolean,
+};
+
+export type ShaderReport = ShaderReport_Serialize | ShaderReport_Deserialize;
+
+export type ShaderReport_Deserialize = {
+	caches: ShaderCache_Deserialize[],
+	total_bytes: number,
+	total_formatted: string,
+	gpu?: string | null,
+	driver_version?: string | null,
+	driver_date?: string | null,
+	driver_age_days?: number | null,
+	note: string,
+};
+
+export type ShaderReport_Serialize = {
+	caches: ShaderCache_Serialize[],
+	total_bytes: number,
+	total_formatted: string,
+	gpu: string | null,
+	driver_version: string | null,
+	driver_date: string | null,
+	driver_age_days: number | null,
+	note: string,
+};
+
 export type SinalDoWifi = "Forte" | "Bom" | "Fraco" | "MuitoFraco";
+
+export type Situacao = "Parado" | "ProcurandoJanela" | "Gerando" | "SemQuadros" | "Erro" | "DesligadoPorPerdaDeFps";
+
+export type SituacaoFeedback = 
+/**  Sem licença (o portão de compra cuida) ou sem `api` publicada. */
+{ situacao: "NaoSeAplica" } | { situacao: "Contando"; restante_segundos: number } | { situacao: "Liberado"; verificado_em: string } | 
+/**  `apagado`: havia feedback e o bot avisou que a mensagem sumiu. */
+{ situacao: "Exigido"; apagado: boolean };
 
 /**
  *  Janela por cima do jogo (mira na tela, gerador do Otimiza). `Barrada` nunca abre; `Desaconselhada` abre só se a
  *  pessoa confirmar, com o motivo na tela.
  */
 export type Sobreposicao = "Segura" | ({ Desaconselhada: string }) & { Barrada?: never } | ({ Barrada: string }) & { Desaconselhada?: never };
+
+export type StartMode = "Automatic" | "Manual" | "Disabled" | "Kernel";
 
 export type StartupEntry = {
 	name: string,
@@ -2784,9 +6037,39 @@ export type Summary = {
 	total: number,
 };
 
+/**  O que cada caminho sabe mudar. A tela desliga o controle que não vale. */
+export type Suporta = {
+	saturacao: boolean,
+	brilho: boolean,
+	contraste: boolean,
+	gama: boolean,
+	matiz: boolean,
+};
+
 export type Suporte = { estado: "Suportado" } | 
 /**  Funciona com condição ou ainda sem prova em hardware real; o motivo diz qual. */
 { estado: "Parcial"; motivo: string } | { estado: "NaoSuportado"; motivo: string } | { estado: "PrecisaAtualizar"; motivo: string };
+
+export type Suspeito = { tipo: "Disco" } | { tipo: "Paginacao" } | { tipo: "Vram" } | { tipo: "ThreadPrincipal" } | { tipo: "SegundoPlano"; processo: string };
+
+export type SuspeitoCausas = {
+	id: string,
+	titulo: string,
+	/**  Nunca vazio: afirmação sem número medido é o que este produto não faz. */
+	medido: string,
+	porque: string,
+	como_confirmar: string,
+	confianca: Confianca,
+};
+
+export type Suspeitos = {
+	mudancas: string[],
+	/**  Quando não está vazia, costuma pesar mais que tudo o que o produto fez. */
+	maquina_mudou: string[],
+	descartados: number,
+	aviso: string,
+	como_provar: string,
+};
 
 export type TaxaDoMouse = TaxaDoMouse_Serialize | TaxaDoMouse_Deserialize;
 
@@ -2821,6 +6104,26 @@ export type Tela = {
 	hz_atual: number,
 	hz_maximo: number,
 	vrr: Vrr,
+};
+
+export type TelaJogoLiso = TelaJogoLiso_Serialize | TelaJogoLiso_Deserialize;
+
+export type TelaJogoLiso_Deserialize = {
+	apresentacao: Apresentacao,
+	/**  O texto do PresentMon, ex. "Composed: Copy with GPU GDI". */
+	modo: string,
+	/**  Programas com janela sempre por cima no monitor do jogo. */
+	por_cima: string[],
+	aviso?: string | null,
+};
+
+export type TelaJogoLiso_Serialize = {
+	apresentacao: Apresentacao,
+	/**  O texto do PresentMon, ex. "Composed: Copy with GPU GDI". */
+	modo: string,
+	/**  Programas com janela sempre por cima no monitor do jogo. */
+	por_cima: string[],
+	aviso: string | null,
 };
 
 export type Telemetry = Telemetry_Serialize | Telemetry_Deserialize;
@@ -2890,6 +6193,10 @@ export type Terminada_Serialize = {
 	pelo_jogar: boolean,
 };
 
+export type TesteCausadatravada = 
+/**  Acalmar o processo (prioridade abaixo do normal + EcoQoS) em janelas alternadas: o teste ativo do slice. */
+{ tipo: "AcalmarProcesso"; processo: string } | { tipo: "Recomendacao"; texto: string } | { tipo: "Nenhum" };
+
 export type TetoEscondido = TetoEscondido_Serialize | TetoEscondido_Deserialize;
 
 export type TetoEscondido_Deserialize = { tipo: "LimiteGlobalNvidia"; fps: number } | { tipo: "VsyncForcadoNvidia" } | { tipo: "Rtss" } | { tipo: "LimiteNoJogo"; jogo: string; fps: number; arquivo: string } | { tipo: "VsyncNoJogo"; jogo: string; arquivo: string } | 
@@ -2906,11 +6213,52 @@ export type TetoEscondido_Serialize = { tipo: "LimiteGlobalNvidia"; fps: number 
  */
 { tipo: "RobloxLimitado"; fps: number | null; arquivo: string };
 
+export type Tipo = 
+/**  O último a rodar ganha: o resultado depende da ORDEM. */
+"MesmoLugar" | "SeAnulam" | "DependeDoOutro" | "JuntosCustamCaro";
+
+export type TipoDeCausa = 
+/**  O processador monta os quadros no limite; a placa sobra. */
+"Processador" | 
+/**  A placa de vídeo trabalha o quadro inteiro. */
+"PlacaDeVideo" | 
+/**  O FPS ficou colado na taxa do monitor: V-Sync ou limite na taxa. Mais FPS aqui não aparece na tela. */
+"PresoNaTaxaDoMonitor" | 
+/**  Nenhum dos dois no limite e um teto de FPS encontrado (ou suspeito). */
+"LimiteDeFps" | 
+/**  A placa freou por calor ou energia durante as janelas. */
+"CalorOuEnergia" | 
+/**  Os trancos coincidem com o disco ocupado: carregamento, não FPS médio. */
+"DiscoNosTrancos" | 
+/**  O Windows copia cada quadro antes de mostrar: mais atraso até a tela. */
+"QuadroCopiado";
+
 export type TipoDeRotina = 
 /**  DPC comum, de temporizador ou "threaded". */
 "Dpc" | 
 /**  Rotina de interrupção (ISR), inclusive MSI. */
 "Isr";
+
+export type Topologia = {
+	nucleos: NucleoLogico[],
+	hibrido: boolean,
+};
+
+export type TopologiaMotorenergia = {
+	nucleos_fisicos: number,
+	processadores_logicos: number,
+	/**
+	 *  Núcleos físicos por classe de eficiência. Em CPU não híbrida, uma
+	 *  classe só. Na híbrida, a classe MAIOR é a dos núcleos de desempenho.
+	 */
+	classes: ([number, number])[],
+};
+
+export type Travada = {
+	instante_ms: number | null,
+	duracao_ms: number | null,
+	gravidade: Gravidade,
+};
 
 export type TrechoDaRota = "casa" | 
 /**  Dentro do túnel da VPN: a VPN ou a conexão por baixo dela, sem como separar daqui. */
@@ -2919,6 +6267,12 @@ export type TrechoDaRota = "casa" |
 "internet" | "caminho" | "servidor" | 
 /**  O roteador nunca respondeu. */
 "sem_resposta";
+
+export type Troca = {
+	campo: Campo,
+	de: string,
+	para: string,
+};
 
 /**  A troca aplicada, para a tela mostrar "Manter? 15 s". */
 export type TrocaAplicada = {
@@ -2935,10 +6289,71 @@ export type TrocaComOti = {
 	texto: string,
 };
 
+/**  O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando). */
+export type UltimaSessao = UltimaSessao_Serialize | UltimaSessao_Deserialize;
+
+/**  O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando). */
+export type UltimaSessao_Deserialize = {
+	jogo: string,
+	minutos: number | null,
+	fps_do_jogo: number | null,
+	fps_na_tela: ValorMetricas_Deserialize,
+	manteve_pct?: number | null,
+	comparacoes: number,
+	desligou_por_perda: boolean,
+};
+
+/**  O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando). */
+export type UltimaSessao_Serialize = {
+	jogo: string,
+	minutos: number | null,
+	fps_do_jogo: number | null,
+	fps_na_tela: ValorMetricas_Serialize,
+	manteve_pct: number | null,
+	comparacoes: number,
+	desligou_por_perda: boolean,
+};
+
 /**  Tipo, não texto: milissegundo comparado com segundo não dá erro, dá conclusão errada. */
 export type Unit = "percent" | "megahertz" | "hertz" | "celsius" | "gigabytes" | "megabytes_per_second" | "milliseconds" | "fps" | "watts" | "hours" | "count" | 
 /**  Para "está em throttling?" poder ser UNKNOWN: um `bool` obrigaria a responder sem medir. */
 "boolean";
+
+export type ValorGuardado = ValorGuardado_Serialize | ValorGuardado_Deserialize;
+
+export type ValorGuardado_Deserialize = {
+	plano: string,
+	subgrupo: string,
+	ajuste: string,
+	alias?: string | null,
+	ac?: number | null,
+	dc?: number | null,
+};
+
+export type ValorGuardado_Serialize = {
+	plano: string,
+	subgrupo: string,
+	ajuste: string,
+	alias: string | null,
+	ac: number | null,
+	dc: number | null,
+};
+
+export type ValorMetricas = ValorMetricas_Serialize | ValorMetricas_Deserialize;
+
+export type ValorMetricas_Deserialize = {
+	valor?: number | null,
+	origem: OrigemMetricas,
+};
+
+export type ValorMetricas_Serialize = {
+	valor: number | null,
+	origem: OrigemMetricas,
+};
+
+export type Verdict = "Improved" | "Worsened" | "NoMeasurableChange" | 
+/**  Oscila demais para atribuir variação à otimização: a CPU ociosa variou 244% sem nada mudar. */
+"TooNoisyToJudge";
 
 export type VereditoDaRota = VereditoDaRota_Serialize | VereditoDaRota_Deserialize;
 
@@ -2989,6 +6404,34 @@ export type VereditoDoDpc_Serialize =
 /**  Resultado bom e válido. */
 { tipo: "NenhumPico"; texto: string; observacao: string | null } | { tipo: "DriversComPico"; culpados: string[]; texto: string };
 
+export type VereditoRegressao = VereditoRegressao_Serialize | VereditoRegressao_Deserialize;
+
+export type VereditoRegressao_Deserialize = {
+	jogo: string,
+	desfecho: DesfechoRegressao,
+	/**  `None` quando faltou amostra: a tela não inventa número. */
+	antes?: LadoRegressao | null,
+	depois?: LadoRegressao | null,
+	variacao_fps_pct?: number | null,
+	/**  Descreve o engasgo, e por isso decide junto com o FPS. */
+	variacao_low_pct?: number | null,
+};
+
+export type VereditoRegressao_Serialize = {
+	jogo: string,
+	desfecho: DesfechoRegressao,
+	/**  `None` quando faltou amostra: a tela não inventa número. */
+	antes: LadoRegressao | null,
+	depois: LadoRegressao | null,
+	variacao_fps_pct: number | null,
+	/**  Descreve o engasgo, e por isso decide junto com o FPS. */
+	variacao_low_pct: number | null,
+};
+
+export type VereditoStreaming = "SemMedicao" | "SemEngasgos" | 
+/**  Fecha a porta do disco e devolve a pergunta ao gargalo. */
+"NaoEODisco" | "TrocaDeMemoria" | "AssetsDeMidiaLenta" | "OutraCoisaNoDisco";
+
 export type VersaoDoApp = {
 	/**  Semver do executável: é o que o atualizador e o instalador comparam. */
 	interna: string,
@@ -3000,6 +6443,14 @@ export type VersaoDoApp = {
 	 *  1.1).
 	 */
 	oficial: boolean,
+};
+
+export type Vistoria = {
+	itens: Item[],
+	/**  Aplicadas que o guardião não relê, pelo nome. */
+	fora_da_vistoria: string[],
+	/**  Política de grupo nesta máquina: o que ela desfaz, ela desfaz de novo depois de refeito. */
+	com_politica_de_grupo: boolean,
 };
 
 /**  LEITURA PURA. */
@@ -3034,6 +6485,14 @@ export type Vizinhanca_Serialize = {
 };
 
 export type Vrr = "Anunciado" | "Provavel" | "NaoAnunciado" | "Desconhecido";
+
+export type VrrVrr = 
+/**  O bloco da AMD (FreeSync) está no EDID: o monitor faz taxa variável. */
+"Anunciado" | 
+/**  Faixa larga no descritor de limites (ex.: 48–144 Hz). Quase sempre é VRR, mas o EDID não jura. */
+"Provavel" | 
+/**  Faixa estreita ou sem faixa: taxa fixa. */
+"NaoAnunciado";
 
 /**
  *  UM WINDOWS MODIFICADO ("lite", "anti-lag", "gamer OS"): a imagem se apresenta no próprio registro, no dono e na

@@ -17,6 +17,8 @@ pub const MAXIMO: u8 = 10;
 /// O que o Otimiza lembra para devolver.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoFovFivem"))]
 pub struct Estado {
     /// A posição pedida; `None` = devolver a de antes.
     pub pedido: Option<u8>,
@@ -27,6 +29,8 @@ pub struct Estado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PainelFovFivem"))]
 pub struct Painel {
     /// A posição no arquivo agora (`None` sem o arquivo ou sem a linha: o jogo usa o padrão dele).
     pub atual: Option<u8>,

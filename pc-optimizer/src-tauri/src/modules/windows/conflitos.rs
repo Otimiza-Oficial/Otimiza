@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::grupos::{grupo_de, Grupo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Tipo {
     /// O último a rodar ganha: o resultado depende da ORDEM.
     MesmoLugar,
@@ -27,6 +28,7 @@ impl Tipo {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Conflito {
     pub id: &'static str,
     pub um: &'static str,

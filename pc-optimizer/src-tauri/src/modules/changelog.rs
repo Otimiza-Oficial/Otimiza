@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum PreviousValue {
     Absent,
     /// Reverter apaga o valor E a chave criada.

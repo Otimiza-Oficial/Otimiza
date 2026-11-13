@@ -20,6 +20,7 @@ pub struct AmostraGpu {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResumoGpu {
     pub amostras: usize,
     pub temperatura_max_c: Option<u32>,

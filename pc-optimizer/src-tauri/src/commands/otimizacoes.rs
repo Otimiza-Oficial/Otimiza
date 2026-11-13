@@ -43,6 +43,7 @@ pub fn descartar_pendencia() -> Result<(), String> {
 /// `LIVRES`: definição montada do catálogo; aplicar é `optimize_now`. Perfis respondem "para que você usa"; níveis,
 /// "o que você aceita trocar": perguntas independentes.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
     use crate::modules::windows::niveis::{acrescenta, aplica_de_uma_vez, itens_do_nivel, Nivel};
 
@@ -64,6 +65,7 @@ pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct NivelNaTela {
     pub id: String,
     pub nome: String,
@@ -116,6 +118,7 @@ fn coletar_para_relatorio() -> crate::modules::report::ReportData {
 
 /// A comparação vem da interface: refazer o benchmark mediria outro momento.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn export_report(
     state: State<'_, AppState>,
     comparison: Option<BenchmarkComparison>,
@@ -131,6 +134,7 @@ pub async fn export_report(
 
 /// `LIVRES`: só lê o histórico.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn exportar_alteracoes(state: State<'_, AppState>) -> Result<String, String> {
     let log = state.changes.lock().await;
     let csv = crate::modules::report::csv_das_alteracoes(&log, valor_novo_da_alteracao);
@@ -245,6 +249,7 @@ pub async fn set_persistent_priority(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn game_mode_status(state: State<'_, AppState>) -> Result<GameModeStatus, String> {
     #[cfg(target_os = "windows")]
     {
@@ -260,6 +265,7 @@ pub async fn game_mode_status(state: State<'_, AppState>) -> Result<GameModeStat
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn set_game_mode(active: bool, state: State<'_, AppState>) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
 
@@ -427,6 +433,7 @@ pub async fn apply_optimization(
 /// Guardião (`modules::windows::guardiao`): relê cada ajuste do catálogo que o histórico diz estar aplicado.
 /// Só leitura, `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn vistoriar_mudancas(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::guardiao::Vistoria, String> {
@@ -457,6 +464,7 @@ pub async fn vistoriar_mudancas(
 
 /// Desfaz e aplica de novo o que não está mais como o Otimiza deixou. `EXIGEM_LICENCA`, como aplicar.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn refazer_mudanca(
     id: String,
     state: State<'_, AppState>,
@@ -478,12 +486,14 @@ pub async fn refazer_mudanca(
 
 /// `LIVRES`. Quantas sessões seguidas caíram e se as tarefas automáticas estão paradas por isso.
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ModoSeguro {
     pub ativo: bool,
     pub quedas_seguidas: u32,
 }
 
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn modo_seguro() -> ModoSeguro {
     ModoSeguro {
         ativo: crate::utils::diagnostico::modo_seguro(),
@@ -493,6 +503,7 @@ pub fn modo_seguro() -> ModoSeguro {
 
 /// `LIVRES`: só religa o que o próprio Otimiza parou.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn sair_do_modo_seguro() {
     crate::utils::diagnostico::sair_do_modo_seguro();
     crate::utils::Logger::info("modo seguro: desligado pela pessoa; tarefas automáticas religadas");
@@ -500,6 +511,7 @@ pub fn sair_do_modo_seguro() {
 
 /// `LIVRES`: não impede nada (há casos legítimos). Diferente de `detect_conflicts`, que é entre PROGRAMAS.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn conflitos_entre_ajustes(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::modules::windows::conflitos::Conflito>, String> {
@@ -520,12 +532,14 @@ pub async fn conflitos_entre_ajustes(
 
 /// `LIVRES`. O cliente compara com vídeos de "50 tweaks" sem saber que metade não faz nada.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn o_que_nao_fazemos() -> Vec<crate::modules::windows::naofazemos::NaoFazemos> {
     crate::modules::windows::naofazemos::LISTA.to_vec()
 }
 
 #[cfg(target_os = "windows")]
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn o_que_o_otimiza_altera() -> Vec<crate::modules::windows::registro::Alteracao> {
     crate::modules::windows::registro::todas()
 }
@@ -533,6 +547,7 @@ pub fn o_que_o_otimiza_altera() -> Vec<crate::modules::windows::registro::Altera
 /// Antes contra depois, pelo histórico do vigia (na 2.1.0 os dois números estavam no disco e ninguém comparou).
 /// `Err` quando não se lê: lista vazia afirmaria que nenhum jogo piorou.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn conferir_o_proprio_trabalho(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::modules::regressao::Veredito>, String> {
@@ -567,13 +582,14 @@ pub async fn revert_optimization(
 
 /// `only` restringe a uma lista de ids (perfis); os filtros de segurança valem igual.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn optimize_now(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     only: Option<Vec<String>>,
     nivel: Option<crate::modules::windows::niveis::Nivel>,
 ) -> Result<Vec<OptimizationOutcome>, String> {
     crate::modules::licenca::exigir()?;
+    let app = crate::aplicativo()?;
 
     #[cfg(target_os = "windows")]
     {
@@ -755,6 +771,7 @@ pub async fn restaurar_tudo<R: tauri::Runtime>(
 /// Só leitura, antes do "Otimizar agora" e dos perfis: com esses serviços desligados, programa trava com ou sem
 /// otimização. Ver `essenciais.rs`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn checar_essenciais() -> Result<Checagem, String> {
     #[cfg(target_os = "windows")]
     {
@@ -789,6 +806,7 @@ pub async fn checar_essenciais() -> Result<Checagem, String> {
 
 /// `EXIGEM_LICENCA`. O "Desfazer" os devolve a desligados.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn religar_essenciais(state: State<'_, AppState>) -> Result<OptimizationOutcome, String> {
     crate::modules::licenca::exigir()?;
 

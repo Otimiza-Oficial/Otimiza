@@ -167,6 +167,8 @@ impl Guardado {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "situacao")]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "SituacaoFeedback"))]
 pub enum Situacao {
     /// Sem licença (o portão de compra cuida) ou sem `api` publicada.
     NaoSeAplica,
@@ -319,6 +321,8 @@ async fn perguntar_ao_bot(api: &str, maquina: &str) -> Resposta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoFeedback"))]
 pub struct Estado {
     #[serde(flatten)]
     pub situacao: Situacao,

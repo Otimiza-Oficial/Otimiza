@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoWifiVarredura"))]
 pub struct Estado {
     pub ligado: bool,
 }

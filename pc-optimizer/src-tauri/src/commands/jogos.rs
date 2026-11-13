@@ -22,6 +22,7 @@ pub fn running_game_executable() -> Option<String> {
 
 /// SÓ LEITURA e não sugere aumentar nada (ver `modules::windows::citizenfx`).
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn analyze_citizenfx() -> Result<CitizenFxReport, String> {
     #[cfg(target_os = "windows")]
     {
@@ -35,6 +36,7 @@ pub async fn analyze_citizenfx() -> Result<CitizenFxReport, String> {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn analyze_fivem() -> Result<FiveMReport, String> {
     #[cfg(target_os = "windows")]
     {
@@ -51,6 +53,7 @@ pub async fn analyze_fivem() -> Result<FiveMReport, String> {
 
 /// Recusa pasta protegida e jogo aberto. Sem volta.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
     crate::modules::licenca::exigir()?;
 
@@ -125,6 +128,7 @@ pub fn capa_larga_do_jogo(appid: u32) -> Result<Option<String>, String> {
 
 /// `LIVRES`: descobrir de graça que o MSAA custa 40% é o que faz querer a chave.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn analyze_game_config(
 ) -> Result<crate::modules::windows::configjogo::ConfigJogoReport, String> {
     #[cfg(target_os = "windows")]
@@ -140,6 +144,7 @@ pub async fn analyze_game_config(
 
 /// `LIVRES`: só lê os relatórios do FiveM e o histórico.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn crashes_do_jogo(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::crashes::Relatorio, String> {
@@ -167,6 +172,7 @@ pub async fn crashes_do_jogo(
 
 /// `LIVRES`. 60% no 1% pior e 40% na média: ninguém sente média.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
     let medicoes = crate::modules::medicoes::ler()?;
 
@@ -184,6 +190,7 @@ pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
 
 /// `LIVRES`: com SSD pequeno e HD grande o jogo quase sempre está no HD.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn onde_os_jogos_moram() -> Result<crate::modules::windows::discodojogo::Relatorio, String> {
     #[cfg(target_os = "windows")]
     {
@@ -198,6 +205,7 @@ pub fn onde_os_jogos_moram() -> Result<crate::modules::windows::discodojogo::Rel
 
 /// `LIVRES`: chave por chave antes de decidir.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn preview_game_profile(
     perfil: String,
 ) -> Result<Vec<(String, String, String, String)>, String> {
@@ -248,6 +256,7 @@ pub(super) fn perfil_por_nome(
 
 /// Um jogo da configuração por motor, com o que o Otimiza já aplicou nele.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ConfigDoJogoNaTela {
     #[serde(flatten)]
     pub jogo: crate::modules::windows::configmotor::JogoNaTela,
@@ -257,6 +266,7 @@ pub struct ConfigDoJogoNaTela {
 
 /// A configuração por motor (Fortnite, CS2, Apex): o arquivo achado e o que o perfil mudaria. `LIVRES`: só lê.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn config_motor_painel(
     state: State<'_, AppState>,
 ) -> Result<Vec<ConfigDoJogoNaTela>, String> {
@@ -288,6 +298,7 @@ pub async fn config_motor_painel(
 /// `EXIGEM_LICENCA`: escreve o perfil leve no arquivo de configuração do jogo (fechado). O arquivo inteiro de antes
 /// vai para o histórico: o `revert_optimization` devolve byte a byte.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn config_motor_aplicar(
     jogo: String,
     state: State<'_, AppState>,
@@ -339,6 +350,7 @@ pub async fn config_motor_aplicar(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn apply_game_profile(
     perfil: String,
     state: State<'_, AppState>,
@@ -412,6 +424,7 @@ fn aplicar_perfil_do_jogo(
 /// O perfil gráfico do jogo pelo cartão do Turbo: se ele é oferecido para o jogo aberto, o pedido pendente e o que o
 /// histórico diz que já está aplicado. `LIVRES`: só lê.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PerfilDoJogoNoTurbo {
     pub oferece: bool,
     pub pendente: Option<String>,
@@ -419,6 +432,7 @@ pub struct PerfilDoJogoNoTurbo {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn turbo_perfil_do_jogo(state: State<'_, AppState>) -> Result<PerfilDoJogoNoTurbo, String> {
     #[cfg(target_os = "windows")]
     {
@@ -442,6 +456,7 @@ pub async fn turbo_perfil_do_jogo(state: State<'_, AppState>) -> Result<PerfilDo
 
 /// `EXIGEM_LICENCA`: pede o perfil gráfico do jogo (aplicado quando ele fechar; `None` cancela o pedido).
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn turbo_perfil_do_jogo_pedir(
     perfil: Option<String>,
     state: State<'_, AppState>,

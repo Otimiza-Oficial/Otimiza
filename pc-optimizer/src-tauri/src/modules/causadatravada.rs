@@ -49,6 +49,7 @@ const PROCESSO_MIN: f64 = 0.08;
 const PROCESSADOR_CHEIO_PCT: f64 = 90.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Severidade {
     Leve,
     Moderada,
@@ -69,6 +70,7 @@ fn severidade(excesso_ms: f64) -> Severidade {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Lado {
     Processador,
     Placa,
@@ -76,6 +78,7 @@ pub enum Lado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Episodio {
     /// O pior quadro do episódio (`CPUStartQPC` dele).
     pub qpc: i64,
@@ -198,6 +201,7 @@ pub fn detectar_episodios(quadros: &[QuadroDoJogo], frequencia: i64) -> Vec<Epis
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Hipotese {
     Processo {
         nome: String,
@@ -235,6 +239,8 @@ impl Hipotese {
 
 /// Ordem crescente de força.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConfiancaCausadatravada"))]
 pub enum Confianca {
     /// O contador não respondeu: nunca vira "ausente".
     NaoMedido,
@@ -247,6 +253,8 @@ pub enum Confianca {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TesteCausadatravada"))]
 pub enum Teste {
     /// Acalmar o processo (prioridade abaixo do normal + EcoQoS) em janelas alternadas: o teste ativo do slice.
     AcalmarProcesso {
@@ -259,6 +267,7 @@ pub enum Teste {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Avaliacao {
     pub hipotese: Hipotese,
     pub confianca: Confianca,
@@ -278,6 +287,7 @@ pub struct Avaliacao {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Severidades {
     pub leve: usize,
     pub moderada: usize,
@@ -286,6 +296,8 @@ pub struct Severidades {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "InvestigacaoCausadatravada"))]
 pub struct Investigacao {
     pub segundos: f64,
     pub quadros: usize,

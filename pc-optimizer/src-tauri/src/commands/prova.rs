@@ -22,6 +22,7 @@ pub async fn diagnostico_rapido() -> Result<Veredito, String> {
 /// "O que mudou?" por jogo (`modules::linhadotempo`): partidas, trocas em volta da máquina e mudanças do Otimiza.
 /// Só leitura.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn o_que_mudou(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::modules::linhadotempo::LinhaDoJogo>, String> {
@@ -43,6 +44,7 @@ pub async fn o_que_mudou(
 /// "Por que meu jogo roda assim?" (`modules::doctor`): a última partida medida e os limites de FPS escondidos.
 /// Só leitura, `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn diagnostico_da_partida() -> Result<crate::modules::doctor::Diagnostico, String> {
     tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| diagnosticar_agora(&m)))
         .await
@@ -99,6 +101,7 @@ fn diagnosticar_agora(
 /// A receita (`modules::receita`): o ajuste de cada causa, se já está aplicado, como se prova, e o que já piorou
 /// este jogo nesta máquina. Só leitura, `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn receita_da_partida(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::receita::Receita, String> {
@@ -195,6 +198,7 @@ pub async fn resultado_para_compartilhar() -> Result<String, String> {
 /// O perfil do PC para a primeira abertura (`modules::perfil`): o que esta máquina pode esperar, sem porcentagem.
 /// Só leitura, `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn perfil_do_pc() -> Result<crate::modules::perfil::Perfil, String> {
     #[cfg(target_os = "windows")]
     {
@@ -234,6 +238,7 @@ pub async fn relatorio_da_ultima_partida(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
     tokio::task::spawn_blocking(|| {
         crate::modules::medicoes::ler_para_comparar().map(|m| crate::modules::deriva::procurar(&m))
@@ -243,6 +248,7 @@ pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::Prontidao, String> {
     tokio::task::spawn_blocking(crate::modules::windows::prontojogo::verificar)
         .await
@@ -464,6 +470,7 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
 /// `LIVRES`. Aplicar é `optimize_now`; desfazer é `revert`. Por jogo: FPS de jogos diferentes não se compara;
 /// sem jogo, o mais medido.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn protocolo_de_grupos(
     state: State<'_, AppState>,
     jogo: Option<String>,
@@ -521,6 +528,7 @@ fn jogo_mais_medido(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) ->
 
 /// `LIVRES`. Com a regressão medida: se o Otimiza pode ser a causa, é o PRIMEIRO suspeito.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn por_que_o_fps_esta_baixo(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::causas::Investigacao, String> {

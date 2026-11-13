@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use super::achados::Confianca;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "SuspeitoCausas"))]
 pub struct Suspeito {
     pub id: String,
     pub titulo: String,
@@ -18,6 +20,8 @@ pub struct Suspeito {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "InvestigacaoCausas"))]
 pub struct Investigacao {
     /// Vazio quando nada foi encontrado, e a tela diz isso com palavras.
     pub suspeitos: Vec<Suspeito>,

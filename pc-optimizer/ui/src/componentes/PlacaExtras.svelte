@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O resto da placa de vídeo (trazido da interface antiga, `src/main.ts`): em notebook com duas placas, qual delas
   // cada jogo usa (o maior ganho que o produto dá ali, sem administrador nem reinício); o cache de shader do driver
   // (apagar só o velho, nunca o que está em uso); e o Resizable BAR lido do Windows.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Pref = "Automatica" | "Economia" | "Desempenho";
   type GpuPref = { placas: string[]; tem_placa_dupla: boolean; definidos: [string, Pref][]; findings: { id: string; title: string; measured: string; advice: string }[]; erro_de_leitura: string | null };
@@ -27,7 +28,7 @@
       rbar = { estado: "DesligadoESuportado", modelo: "RTX 3050 Laptop", nota: "A placa suporta Resizable BAR, mas ele está desligado na BIOS (veja a aba BIOS)." };
       return;
     }
-    const [g, s, r] = await Promise.allSettled([invoke<GpuPref>("analyze_gpu_preference"), invoke<Shaders>("analyze_shaders"), invoke<Rbar>("analyze_rbar")]);
+    const [g, s, r] = await Promise.allSettled([como<GpuPref>(commands.analyzeGpuPreference()), como<Shaders>(commands.analyzeShaders()), como<Rbar>(commands.analyzeRbar())]);
     gpu = g.status === "fulfilled" ? g.value : null;
     shaders = s.status === "fulfilled" ? s.value : null;
     rbar = r.status === "fulfilled" ? r.value : null;
@@ -64,7 +65,7 @@
         <div class="linha">
           <div><span>{exe(caminho)}</span><p class="apoio pequeno">{PREF[pref]}</p></div>
           {#if pref !== "Desempenho"}
-            <button class="btn" disabled={ocupado !== null} onclick={() => agir(caminho, () => (noTauri ? invoke("set_gpu_preference", { caminho, desempenho: true }) : Promise.resolve({ message: "Demonstração: feito." })))}>Passar para a placa de desempenho</button>
+            <button class="btn" disabled={ocupado !== null} onclick={() => agir(caminho, () => (noTauri ? commands.setGpuPreference(caminho, true) : Promise.resolve({ message: "Demonstração: feito." })))}>Passar para a placa de desempenho</button>
           {/if}
         </div>
       {/each}
@@ -80,7 +81,7 @@
         <div class="linha">
           <div><span>{c.name} · {c.formatted}</span><p class="apoio pequeno">{c.files} arquivos{c.stale ? " · velho" : ""}</p></div>
           {#if c.stale && c.bytes > 0}
-            <button class="btn" disabled={ocupado !== null} onclick={() => confirm(`Apagar ${c.name}? O primeiro minuto dos jogos pode dar trancos enquanto o driver refaz.`) && agir(c.id, () => (noTauri ? invoke("clean_shader_cache", { id: c.id }) : Promise.resolve({ message: "Demonstração: apagado." })))}>Limpar</button>
+            <button class="btn" disabled={ocupado !== null} onclick={() => confirm(`Apagar ${c.name}? O primeiro minuto dos jogos pode dar trancos enquanto o driver refaz.`) && agir(c.id, () => (noTauri ? commands.cleanShaderCache(c.id) : Promise.resolve({ message: "Demonstração: apagado." })))}>Limpar</button>
           {/if}
         </div>
       {/each}

@@ -51,6 +51,7 @@ impl Recurso {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum ModoDeTela {
     TelaCheia,
     SemBordas,
@@ -88,6 +89,8 @@ impl Suporte {
 
 /// Tudo o que as regras precisam saber. Montado por quem chama (hardware em cache, jogo detectado, anticheat).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ContextoCompat"))]
 pub struct Contexto {
     pub fabricante: Fabricante,
     pub familia: Familia,

@@ -35,6 +35,7 @@ use gpu::Gpu;
 use ritmo::{Apresentacao, Contadores, Fase, Intervalo, Retangulo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Situacao {
     Parado,
     ProcurandoJanela,
@@ -45,6 +46,8 @@ pub enum Situacao {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "EstadoGeracao"))]
 pub struct Estado {
     pub situacao: Situacao,
     pub processo: String,
@@ -355,6 +358,8 @@ pub fn estado() -> Estado {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConfiguracaoGeracao"))]
 pub struct Configuracao {
     pub processo: String,
     pub multiplicador: u8,

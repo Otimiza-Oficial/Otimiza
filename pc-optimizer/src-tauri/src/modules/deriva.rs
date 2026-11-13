@@ -10,6 +10,7 @@ use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 /// O que cerca a partida e não é o jogo nem o Otimiza decidindo: gravado em cada medição automática. Os campos
 /// depois de `windows` vieram com a identidade da máquina (MASTER-PLAN, item 4); medição antiga os tem vazios.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ambiente {
     pub driver: Option<String>,
     pub windows: Option<String>,
@@ -25,6 +26,7 @@ pub struct Ambiente {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Campo {
     Driver,
     Windows,
@@ -34,6 +36,7 @@ pub enum Campo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Troca {
     pub campo: Campo,
     pub de: String,
@@ -80,6 +83,7 @@ impl Ambiente {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum OQueMudou {
     Driver { de: String, para: String },
     Windows { de: String, para: String },
@@ -87,6 +91,7 @@ pub enum OQueMudou {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Deriva {
     pub jogo: String,
     pub mudou: OQueMudou,

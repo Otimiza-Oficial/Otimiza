@@ -48,6 +48,7 @@ pub fn maior_e_melhor(id: &str) -> Option<bool> {
 pub const LIMITE_DE_REGISTROS: usize = 500;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Evento {
     /// O resumo, não as amostras: a margem basta para julgar depois.
     Medicao(Resumo),
@@ -58,6 +59,7 @@ pub enum Evento {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Registro {
     pub quando: u64,
     /// Em CADA registro: trocar placa ou plano no meio do histórico é o que explica uma queda.
@@ -66,6 +68,7 @@ pub struct Registro {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Historico {
     #[serde(default = "versao_antiga")]
     pub schema_version: u32,
@@ -91,6 +94,7 @@ impl Default for Historico {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Suspeitos {
     pub mudancas: Vec<String>,
     /// Quando não está vazia, costuma pesar mais que tudo o que o produto fez.
@@ -101,6 +105,7 @@ pub struct Suspeitos {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Regressao {
     pub id: String,
     pub anterior: Resumo,

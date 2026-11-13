@@ -9,6 +9,7 @@ use super::fluidez::{gravidade, Gravidade};
 use super::telemetria::Amostra;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Travada {
     pub instante_ms: f64,
     pub duracao_ms: f64,
@@ -44,6 +45,7 @@ pub fn localizar(intervalos_ms: &[f64]) -> Vec<Travada> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(tag = "tipo")]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Suspeito {
     Disco,
     Paginacao,
@@ -53,12 +55,15 @@ pub enum Suspeito {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ForcaTravadas"))]
 pub enum Forca {
     Media,
     Alta,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Pista {
     pub suspeito: Suspeito,
     pub forca: Forca,
@@ -66,6 +71,7 @@ pub struct Pista {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Investigacao {
     pub travadas: Vec<Travada>,
     pub pistas: Vec<Pista>,

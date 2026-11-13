@@ -30,6 +30,8 @@ pub fn nota_do_estado(estado: Igcl) -> &'static str {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "OpcaoInteldriver"))]
 pub enum Opcao {
     BaixaLatencia,
     LimiteDeFps(i32),
@@ -105,6 +107,7 @@ pub fn registro(opcao: Opcao, anterior: Anterior) -> ChangeRecord {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Ajustes {
     /// 0 desligado, 1 ligado, 2 ligado com boost.
     pub baixa_latencia: Option<u32>,

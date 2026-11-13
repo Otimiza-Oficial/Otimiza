@@ -12,6 +12,7 @@ pub const MINIMO_S: f64 = 30.0;
 pub const COBERTURA_MEDIDA: f64 = 0.9;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Acumulado {
     pub segundos: f64,
     soma_do_jogo: f64,

@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Grupo {
     Energia,
     Agendamento,

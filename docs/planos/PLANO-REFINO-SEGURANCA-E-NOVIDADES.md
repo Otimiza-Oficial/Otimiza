@@ -388,6 +388,8 @@ deixa isso:
 - FB3 FPS alvo no Auto do Frame Boost: a tela chega no alvo (60 a 240, abaixo do monitor) e a base trava numa fração dele.
 - 6.2 "Jogar": Epic pelo inicializador dela, Roblox pela página inicial.
 - 6.3 MSI em português (`wix.language = pt-BR`).
+- 2.1.1 Dívida de tipos paga: os 115 comandos que a tela chamava com `invoke` solto entraram no contrato gerado
+  (`invoke-solto.json` vazio). O tipo de cada resposta continua o da área, pelo `como<T>` de `ui/src/lib/contrato.ts`.
 - 2.2.4 Esqueleto de carregamento no lugar do "Lendo…" solto (17 lugares, parado com jogo aberto).
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - 6.1 Investigado no PC do dono: nenhum pânico no log e nenhum arquivo em `falhas/`; toda sessão sem fechamento normal

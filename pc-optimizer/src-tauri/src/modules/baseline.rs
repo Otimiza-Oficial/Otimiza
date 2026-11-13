@@ -22,6 +22,7 @@ pub const IDADE_FIRME_MS: u64 = 5_000;
 /// Não detectado sozinho: a carga diz o que a máquina faz, não o que se QUIS medir, e retrato rotulado errado
 /// autoriza uma comparação que não devia existir.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Perfil {
     Ocioso,
     AreaDeTrabalho,
@@ -46,6 +47,7 @@ impl Perfil {
 
 /// Sem isto, trocar placa, driver ou plano por fora vira mérito do Otimiza por acidente.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Identidade {
     pub cpu: String,
     pub gpu: String,

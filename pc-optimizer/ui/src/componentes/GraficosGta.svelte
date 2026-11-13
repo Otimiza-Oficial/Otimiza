@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // A configuração gráfica do GTA V / FiveM (`settings.xml`), trazida de `src/main.ts`: o que custa caro no arquivo
   // (com o ganho medido por terceiros, dito assim), e três perfis com a prévia chave por chave antes de aplicar. Aplicar
   // entra no histórico e se desfaz de lá.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Relatorio = { arquivo: string | null; jogo: string; caros: { chave: string; valor: string; onde: string; ganho: string }[]; findings: { id: string; title: string; measured: string; advice: string }[] };
   const PERFIS = [
@@ -21,7 +22,7 @@
 
   onMount(async () => {
     rel = noTauri
-      ? await invoke<Relatorio>("analyze_game_config").catch(() => null)
+      ? await como<Relatorio>(commands.analyzeGameConfig()).catch(() => null)
       : { arquivo: "settings.xml", jogo: "GTA V / FiveM", caros: [{ chave: "MSAA", valor: "4", onde: "Gráficos › MSAA", ganho: "até 40% de FPS a menos (medido por Digital Foundry)" }], findings: [] };
   });
 
@@ -30,7 +31,7 @@
     recado = null;
     try {
       previa = noTauri
-        ? await invoke<[string, string, string, string][]>("preview_game_profile", { perfil: id })
+        ? await como<[string, string, string, string][]>(commands.previewGameProfile(id))
         : [["MSAA", "4", "0", "o anti-serrilhado mais caro do jogo"], ["Grass", "3", "1", "grama alta pesa nas áreas abertas"]];
     } catch (e) {
       previa = null;
@@ -42,7 +43,7 @@
     if (!escolhido) return;
     ocupado = true;
     try {
-      const r = noTauri ? await invoke<string[]>("apply_game_profile", { perfil: escolhido }) : ["MSAA: 4 → 0"];
+      const r = noTauri ? await como<string[]>(commands.applyGameProfile(escolhido)) : ["MSAA: 4 → 0"];
       recado = r.length ? `Aplicado: ${r.join("; ")}. Vale ao abrir o jogo de novo; desfaz pelo Histórico.` : "Nada a mudar: o arquivo já estava assim.";
       previa = null;
     } catch (e) {

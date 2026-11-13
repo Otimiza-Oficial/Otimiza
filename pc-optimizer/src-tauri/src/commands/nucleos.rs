@@ -7,6 +7,7 @@ use super::*;
 /// FAZER, escrito (um botão ali seria um jeito de piorar).
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
     use crate::modules::nucleos;
     use crate::modules::windows::{afinidade, deteccao, topologia};
@@ -50,6 +51,7 @@ pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
 
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct NucleosNaTela {
     pub topologia: crate::modules::nucleos::Topologia,
     pub conselho: crate::modules::nucleos::Conselho,
@@ -66,6 +68,7 @@ pub struct NucleosNaTela {
 /// processo que não existe. O desfazer é o botão ao lado, ou fechar o jogo.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
 
@@ -101,6 +104,7 @@ pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String,
 /// Auto CPU Set (2.9): mede o jogo em todos os núcleos e só nos de desempenho, alternando, e fica com o que rendeu.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn cpuset_testar(
     pid: u32,
     executavel: String,
@@ -119,6 +123,7 @@ pub async fn cpuset_testar(
 /// `LIVRES`: só mede (PresentMon e contadores do Windows); nada é alterado. Motor V2 da causa da travada.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn investigar_travadas(
     segundos: u32,
 ) -> Result<crate::modules::windows::investigacao::ResultadoDaInvestigacao, String> {
@@ -132,11 +137,12 @@ pub async fn investigar_travadas(
 /// demonstrada, e até o jogo fechar.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn testar_causa_da_travada(
     processo: String,
-    app: tauri::AppHandle,
 ) -> Result<crate::modules::windows::investigacao::ResultadoDoTeste, String> {
     crate::modules::licenca::exigir()?;
+    let app = crate::aplicativo()?;
     tokio::task::spawn_blocking(move || {
         use tauri::Emitter;
         crate::modules::windows::investigacao::testar(&processo, &|frase| {
@@ -150,6 +156,7 @@ pub async fn testar_causa_da_travada(
 /// `LIVRES`: só desfaz o que o teste deixou acalmado.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn devolver_teste_da_travada() -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(crate::modules::windows::investigacao::devolver_mantido)
         .await
@@ -158,6 +165,7 @@ pub async fn devolver_teste_da_travada() -> Result<Option<String>, String> {
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn cpuset_resultados(
 ) -> Result<Vec<crate::modules::windows::cpuset::ResultadoCpuSet>, String> {
     Ok(crate::modules::windows::cpuset::ler()
@@ -168,6 +176,7 @@ pub async fn cpuset_resultados(
 /// `LIVRES`: só tira.
 #[cfg(target_os = "windows")]
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn cpuset_esquecer(executavel: String) -> Result<(), String> {
     crate::modules::windows::cpuset::esquecer(&executavel)
 }

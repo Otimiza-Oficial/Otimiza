@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Natureza {
     Placebo,
     Redundante,
@@ -22,6 +23,7 @@ impl Natureza {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct NaoFazemos {
     pub id: &'static str,
     pub nome: &'static str,

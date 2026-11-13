@@ -4,13 +4,14 @@
 </script>
 
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O pedido de feedback (trazido da interface 3.3/3.6, `src/v33/app.ts`, "feedback"): depois de 10 minutos de uso as
   // correções pausam até chegar o feedback no canal do Discord; medir, ver o diagnóstico e desfazer continuam livres.
   // Sem esta tela, um cliente no estado "Exigido" veria as correções falharem sem saber por quê. O Rust decide a
   // situação (`feedback_estado`, evento `feedback:situacao`); aqui só se mostra e se confere (`feedback_verificar`).
   import { onDestroy, onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { listen } from "@tauri-apps/api/event";
+    import { listen } from "@tauri-apps/api/event";
   import { noTauri } from "../lib/ponte";
 
   type Situacao =
@@ -45,7 +46,7 @@
     clearInterval(vigia);
     if (estado.situacao === "Contando" && noTauri) {
       vigia = setInterval(async () => {
-        const novo = await invoke<Estado>("feedback_estado").catch(() => null);
+        const novo = await como<Estado>(commands.feedbackEstado()).catch(() => null);
         if (novo) aplicar(novo);
       }, 30000);
     }
@@ -63,7 +64,7 @@
       if (new URLSearchParams(location.search).has("feedback")) aplicar({ situacao: "Exigido", apagado: false, maquina: "OTZ-7F3A-91C2", canal: null, canal_id: "", aviso: null });
       return;
     }
-    const s = await invoke<Estado>("feedback_estado").catch(() => null);
+    const s = await como<Estado>(commands.feedbackEstado()).catch(() => null);
     if (s) aplicar(s);
     deixar = await listen<Situacao>("feedback:situacao", (e) => aplicar(e.payload));
   });
@@ -85,7 +86,7 @@
   }
 
   async function abrirCanal() {
-    const alvo = estado?.canal ?? (noTauri ? await invoke<string>("convite_do_discord", { embutido: CONVITE }).catch(() => CONVITE) : CONVITE);
+    const alvo = estado?.canal ?? (noTauri ? await como<string>(commands.conviteDoDiscord(CONVITE)).catch(() => CONVITE) : CONVITE);
     if (noTauri) {
       const { openUrl } = await import("@tauri-apps/plugin-opener");
       await openUrl(alvo).catch(() => {});
@@ -96,7 +97,7 @@
     conferindo = true;
     recado = { tom: null, texto: "Conferindo com o bot…" };
     try {
-      const s = noTauri ? await invoke<Estado>("feedback_verificar") : ({ ...estado!, situacao: "Liberado", verificado_em: "agora" } as Estado);
+      const s = noTauri ? await como<Estado>(commands.feedbackVerificar()) : ({ ...estado!, situacao: "Liberado", verificado_em: "agora" } as Estado);
       aplicar(s);
       if (s.situacao === "Liberado") {
         recado = { tom: "ok", texto: "Feedback encontrado. As correções estão liberadas." };

@@ -75,6 +75,7 @@ pub enum Action {
 
 /// Desligar efeito visual muda pouco num PC forte e muito num de 4 GB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Boost {
     LowRam,
     MechanicalDisk,
@@ -138,6 +139,7 @@ pub const FORA_DO_LOTE: &[&str] = &["windowed_game_optimizations"];
 // modo Expert, nunca em lote). `toda_classe_aponta_para_um_item_do_catalogo` pega id errado.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Condicao {
     GameDvrLigado,
     /// `AutoGameModeEnabled = 0`: alguém (ou outro otimizador) desligou o Modo de Jogo, que o Windows traz ligado.

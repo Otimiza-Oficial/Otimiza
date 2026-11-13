@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
+  import { commands } from "../lib/tipos";
   // O perfil gráfico do GTA/FiveM pelo Turbo (trazido da interface 3.3/3.6, `perfilDoJogoNoTurbo`). O jogo reescreve a
   // configuração ao sair, então o pedido espera ele fechar e o Otimiza aplica sozinho, com o arquivo de antes no
   // histórico. Só aparece quando o Rust oferece o perfil para o jogo aberto (`turbo_perfil_do_jogo`).
-  import { invoke } from "@tauri-apps/api/core";
-  import { noTauri } from "../lib/ponte";
+    import { noTauri } from "../lib/ponte";
 
   type Perfil = { oferece: boolean; pendente: string | null; aplicado: string | null };
 
@@ -23,7 +24,7 @@
       p = { oferece: true, pendente: null, aplicado: null };
       return;
     }
-    invoke<Perfil>("turbo_perfil_do_jogo")
+    como<Perfil>(commands.turboPerfilDoJogo())
       .then((r) => (p = r))
       .catch(() => (p = null));
   });
@@ -32,7 +33,7 @@
     ocupado = true;
     erro = null;
     try {
-      p = noTauri ? await invoke<Perfil>("turbo_perfil_do_jogo_pedir", { perfil }) : { oferece: true, pendente: perfil, aplicado: null };
+      p = noTauri ? await como<Perfil>(commands.turboPerfilDoJogoPedir(perfil)) : { oferece: true, pendente: perfil, aplicado: null };
     } catch (e) {
       erro = String(e);
     } finally {

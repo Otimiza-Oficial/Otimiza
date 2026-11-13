@@ -1,10 +1,10 @@
 <script lang="ts">
+  import { como } from "../lib/contrato";
   // Energia por jogo (trazido da interface antiga, `src/energia.ts`): o vencedor da calibração guardado para o jogo
   // aberto, a lista dos jogos com perfil e o modo dinâmico — ligado, o Otimiza troca para o perfil do jogo quando ele
   // abre e volta ao plano de antes quando ele fecha.
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { commands } from "../lib/tipos";
+    import { commands } from "../lib/tipos";
   import { noTauri } from "../lib/ponte";
 
   type Painel = { perfis_de_jogo: { executavel: string; quando: number }[]; dinamico: boolean };
@@ -21,7 +21,7 @@
       return;
     }
     try {
-      const p = await invoke<Painel>("energia_painel");
+      const p = await como<Painel>(commands.energiaPainel());
       perfis = p.perfis_de_jogo.map((x) => x.executavel);
       dinamico = p.dinamico;
     } catch (e) {
@@ -52,7 +52,7 @@
         recado = "Guardado para FiveM_GTAProcess.exe.";
         return;
       }
-      const j = await invoke<{ executavel: string } | null>("jogo_aberto");
+      const j = await como<{ executavel: string } | null>(commands.jogoAberto());
       if (!j) throw "Abra o jogo para guardar o perfil dele.";
       await commands.energiaSalvarCalibradoParaOJogo(j.executavel);
       recado = `Guardado para ${j.executavel}.${dinamico ? "" : " Ligue o modo dinâmico para ele entrar sozinho."}`;
@@ -74,7 +74,7 @@
       </div>
       <button class="interruptor" role="switch" aria-checked={dinamico} aria-label="Modo dinâmico" disabled={ocupado}
         onclick={() => agir(async () => {
-          if (noTauri) await invoke("energia_modo_dinamico", { ligado: !dinamico });
+          if (noTauri) await commands.energiaModoDinamico(!dinamico);
           else dinamico = !dinamico;
         })}></button>
     </div>
@@ -82,7 +82,7 @@
       <div class="linha">
         <span>{exe}</span>
         <button class="btn quieto" disabled={ocupado} onclick={() => agir(async () => {
-          if (noTauri) await invoke("energia_remover_perfil_de_jogo", { executavel: exe });
+          if (noTauri) await commands.energiaRemoverPerfilDeJogo(exe);
           else perfis = perfis.filter((x) => x !== exe);
         })}>Tirar</button>
       </div>
