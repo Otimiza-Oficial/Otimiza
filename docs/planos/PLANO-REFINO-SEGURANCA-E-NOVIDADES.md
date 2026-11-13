@@ -409,6 +409,8 @@ deixa isso:
   série de tempo de quadro inteira não é guardada de propósito (milhares de carimbos por janela); o gráfico usa as janelas.
 - 2.3.4 Prints automáticos: `node scripts/prints-nova.mjs` grava as 20 telas nos três modos (60 prints, em
   `prints-nova/`, fora do Git). Revisados o escuro e o "sem fundo" em todas: nada destoando depois dos tokens únicos.
+- 2.3.5 O Oti com a cara da última partida quando não está falando (feliz acima da faixa das anteriores, preocupado
+  abaixo); o ícone da bandeja já acompanhava o humor dele.
 - 6.1 Investigado no PC do dono: nenhum pânico no log e nenhum arquivo em `falhas/`; toda sessão sem fechamento normal
   foi encerramento forçado (testes de desenvolvimento e o instalador fechando o Otimiza), e a abertura já não conta
   reinício do Windows nem atualização como queda.
@@ -422,4 +424,4 @@ deixa isso:
 do jogo o atraso só se estima); FB4 (cópia entre placas duas vezes por quadro, sem como medir aqui); VRR do FB7 (a
 cadeia de troca da sobreposição, por DirectComposition, não aceita o modo sem sincronia).
 
-**Falta**: 2.1.2 (dados reais nos testes), 2.3.5; atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).
+**Falta**: 2.1.2 (dados reais nos testes); atestado C e D (decisão do dono, seção 8, item 3). **Do dono**: seção 8, mais publicar o `convite.json` (canal de feedback novo e a lista de desligados).

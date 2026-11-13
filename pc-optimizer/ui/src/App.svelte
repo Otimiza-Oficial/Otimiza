@@ -133,7 +133,18 @@
     ...lerAvisos(hardware, metricas, jogo !== null),
   ]);
   const area = $derived(areas.find((a) => a.id === aberta) ?? areas[0]);
-  const humor = $derived<Humor>(reacao ?? (jogo ? "jogando" : digitando ? "falando" : (fala?.humor ?? "atento")));
+  /** Sem conversa, o Oti fica com a cara da última partida (Plano de refino 2.3.5): feliz acima da faixa das anteriores,
+   *  preocupado abaixo. O ícone da bandeja acompanha (logo abaixo). */
+  const humorDaPartida = $derived<Humor>(
+    cartao?.medido && cartao.comparacao
+      ? cartao.comparacao.sentido === "acima"
+        ? "feliz"
+        : cartao.comparacao.sentido === "abaixo"
+          ? "preocupado"
+          : "atento"
+      : "atento",
+  );
+  const humor = $derived<Humor>(reacao ?? (jogo ? "jogando" : digitando ? "falando" : (fala?.humor ?? humorDaPartida)));
   // O ícone da bandeja acompanha o humor; 1,5 s parado antes de trocar (falando/pensando passam rápido).
   $effect(() => {
     const h = humor;
