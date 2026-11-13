@@ -1225,15 +1225,11 @@
     --bloco: rgb(255 255 255 / 0.36);
     --bloco-solto: rgb(255 255 255 / 0.5);
     --bloco-2: rgb(255 255 255 / 0.55);
-    --texto: #1d1d1f;
-    --sec: #5d5d63;
     --ativo: #ffffff;
     --ativo-texto: #1d1d1f;
     --verde: #34c759;
     /* Barra que pede atenção (memória cheia, tela abaixo do máximo). */
     --laranja: #c2730f;
-    /* O botão principal é a cor do texto com a letra do avesso: preto no claro, branco no escuro. */
-    --contra: #ffffff;
     /* O interruptor das áreas (`tokens.css`) fica verde aqui, como os blocos. */
     --ligado: #34c759;
     position: relative;
@@ -1248,12 +1244,9 @@
     --bloco: rgb(255 255 255 / 0.08);
     --bloco-solto: rgb(38 38 42 / 0.62);
     --bloco-2: rgb(255 255 255 / 0.14);
-    --texto: #f5f5f7;
-    --sec: #a1a1a8;
     --ativo: #f5f5f7;
     --ativo-texto: #1d1d1f;
     --laranja: #ffa53a;
-    --contra: #1d1d1f;
   }
   /* Janela transparente: o cômodo some e a área de trabalho aparece entre os cards. O desfoque não alcança o que
      está fora da janela, então o vidro fica mais firme (e sem desfoque, que ali só gastaria placa). */
@@ -2260,24 +2253,15 @@
     max-width: 860px;
     margin: 0 auto;
     padding: 6px 10px;
-    /* As áreas usam os tokens de `tokens.css`: aqui eles viram vidro. */
+    /* As áreas usam os tokens de `tokens.css` (os mesmos tons da casca); aqui só as superfícies viram vidro. */
     --superficie: rgb(255 255 255 / 0.4);
     --superficie-2: rgb(255 255 255 / 0.5);
-    --tinta: var(--texto);
-    --tinta-2: var(--sec);
-    /* O terceiro tom também neutro: o de `tokens.css` é azulado e destoava do cinza da casca. */
-    --tinta-3: #8e8e93;
-    --linha: rgb(0 0 0 / 0.08);
-    --linha-forte: rgb(0 0 0 / 0.14);
     --acao: #1d1d1f;
     --acao-forte: #000;
   }
   :global(:root[data-tema="noite"]) .area-aberta {
-    --tinta-3: #85858c;
     --superficie: rgb(255 255 255 / 0.08);
     --superficie-2: rgb(255 255 255 / 0.12);
-    --linha: rgb(255 255 255 / 0.08);
-    --linha-forte: rgb(255 255 255 / 0.16);
     --acao: #f5f5f7;
     --acao-forte: #fff;
   }

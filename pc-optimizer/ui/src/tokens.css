@@ -15,10 +15,15 @@
 }
 
 :root {
-  /* Texto: três tons. O apoio é mais claro, não menor. */
-  --tinta: #16213f;
-  --tinta-2: #56617e;
-  --tinta-3: #8b94ab;
+  /* Texto: três tons neutros, os mesmos do painel (Plano de refino 2.1.3: uma camada só de tokens). O apoio é mais
+     claro, não menor. `--texto`, `--sec` e `--contra` são os nomes que a casca usa para os mesmos tons. */
+  --tinta: #1d1d1f;
+  --tinta-2: #5d5d63;
+  --tinta-3: #8e8e93;
+  --texto: var(--tinta);
+  --sec: var(--tinta-2);
+  /* A letra do botão principal: o avesso do texto. */
+  --contra: #ffffff;
 
   /* A ação é a cor do texto (preto no claro, branco no escuro), como no painel: o app não tem uma cor de marca no
      botão. O verde é de "ligado"; o âmbar, de "medido". */
@@ -36,14 +41,14 @@
 
   /* Superfícies claras e quase opacas: o vidro é do mascote, não de cada caixa. */
   --superficie: rgb(255 255 255 / 0.88);
-  --superficie-2: rgb(243 246 252 / 0.95);
+  --superficie-2: rgb(245 245 247 / 0.95);
   --superficie-menu: rgb(255 255 255 / 0.62);
-  --linha: rgb(22 33 63 / 0.08);
-  --linha-forte: rgb(22 33 63 / 0.16);
+  --linha: rgb(0 0 0 / 0.08);
+  --linha-forte: rgb(0 0 0 / 0.14);
 
-  --sombra-1: 0 1px 2px rgb(22 33 63 / 0.06);
-  --sombra-2: 0 1px 2px rgb(22 33 63 / 0.05), 0 6px 16px rgb(22 40 90 / 0.08);
-  --sombra-3: 0 2px 6px rgb(22 40 90 / 0.06), 0 28px 64px rgb(22 40 90 / 0.18);
+  --sombra-1: 0 1px 2px rgb(0 0 0 / 0.06);
+  --sombra-2: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 16px rgb(0 0 0 / 0.08);
+  --sombra-3: 0 2px 6px rgb(0 0 0 / 0.06), 0 28px 64px rgb(0 0 0 / 0.18);
   --desfoque: blur(24px) saturate(1.3);
 
   --segmento-ativo: #ffffff;
@@ -65,9 +70,10 @@
 }
 
 :root[data-tema="noite"] {
-  --tinta: #e7ebf7;
-  --tinta-2: #a2abc5;
-  --tinta-3: #6f7894;
+  --tinta: #f5f5f7;
+  --tinta-2: #a1a1a8;
+  --tinta-3: #85858c;
+  --contra: #1d1d1f;
   --acao: #f5f5f7;
   --acao-forte: #ffffff;
   --acao-suave: rgb(255 255 255 / 0.08);
@@ -76,9 +82,10 @@
   --perigo: #ec7a73;
   --ambar: #f1c48a;
   --ambar-fundo: rgb(241 196 138 / 0.14);
-  --superficie: rgb(20 21 44 / 0.96);
-  --superficie-2: rgb(30 31 62 / 0.95);
-  --superficie-menu: rgb(16 22 48 / 0.6);
+  /* Cinza neutro, como o vidro escuro do painel: o azul-marinho de antes destoava dele. */
+  --superficie: rgb(28 28 31 / 0.96);
+  --superficie-2: rgb(40 40 44 / 0.95);
+  --superficie-menu: rgb(30 30 34 / 0.6);
   --linha: rgb(255 255 255 / 0.07);
   --linha-forte: rgb(255 255 255 / 0.14);
   --sombra-1: 0 1px 2px rgb(0 0 0 / 0.25);
@@ -92,11 +99,11 @@
 :root.jogo-aberto {
   --desfoque: none;
   --superficie: rgb(255 255 255 / 0.97);
-  --superficie-menu: rgb(236 242 252 / 0.97);
+  --superficie-menu: rgb(242 242 245 / 0.97);
 }
 :root.jogo-aberto[data-tema="noite"] {
-  --superficie: rgb(22 30 62 / 0.98);
-  --superficie-menu: rgb(16 22 48 / 0.98);
+  --superficie: rgb(30 30 34 / 0.98);
+  --superficie-menu: rgb(30 30 34 / 0.98);
 }
 
 * {

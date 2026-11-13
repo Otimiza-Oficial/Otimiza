@@ -390,6 +390,8 @@ deixa isso:
 - 6.3 MSI em português (`wix.language = pt-BR`).
 - 2.1.1 Dívida de tipos paga: os 115 comandos que a tela chamava com `invoke` solto entraram no contrato gerado
   (`invoke-solto.json` vazio). O tipo de cada resposta continua o da área, pelo `como<T>` de `ui/src/lib/contrato.ts`.
+- 2.1.3 Tokens únicos: `tokens.css` é a única fonte, com os tons neutros do painel nos dois temas (o azul-marinho
+  saiu); `--texto`/`--sec`/`--contra` viraram apelidos dos mesmos tons, e a casca não redefine mais nada.
 - 2.2.4 Esqueleto de carregamento no lugar do "Lendo…" solto (17 lugares, parado com jogo aberto).
 - 6.4 A primeira partida sem receita mede o jogo (2 e 8 min) e guarda a receita para o próximo "Jogar".
 - 6.1 Investigado no PC do dono: nenhum pânico no log e nenhum arquivo em `falhas/`; toda sessão sem fechamento normal
