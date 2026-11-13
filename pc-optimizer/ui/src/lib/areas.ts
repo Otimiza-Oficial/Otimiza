@@ -125,3 +125,24 @@ export const areas: Area[] = [
     onda: 2,
   },
 ];
+
+/** As 4 abas (Plano de refino 2.2.1, a proposta da "Partida de respeito" 5.1): a pessoa escolhe a intenção no trilho, e
+ *  a área dentro dela nas abas de baixo. Toda área mora em uma aba só. */
+export type IdDoGrupo = "jogar" | "meu_pc" | "prova" | "ajustes";
+
+export interface Grupo {
+  id: IdDoGrupo;
+  nome: string;
+  areas: IdDaArea[];
+}
+
+export const grupos: Grupo[] = [
+  { id: "jogar", nome: "Jogar", areas: ["inicio", "jogos", "turbo", "mira", "cores"] },
+  { id: "meu_pc", nome: "Meu PC", areas: ["tela", "energia", "rede", "latencia", "sistema"] },
+  { id: "prova", nome: "Prova", areas: ["prova", "historico"] },
+  { id: "ajustes", nome: "Ajustes", areas: ["ajustes"] },
+];
+
+export function grupoDe(area: IdDaArea): Grupo {
+  return grupos.find((g) => g.areas.includes(area)) ?? grupos[0];
+}

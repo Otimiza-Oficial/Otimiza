@@ -141,53 +141,40 @@ const r = await cdp("Runtime.evaluate", {
     if (blocos < 7) falhas.push('a tela inicial montou só ' + blocos + ' blocos');
     visitadas.push('Início');
 
-    // As abas de baixo.
-    const abas = [...document.querySelectorAll('nav.abas .aba')].map((b) => b.textContent.trim());
-    for (const nome of abas.slice(1)) {
-      [...document.querySelectorAll('nav.abas .aba')].find((b) => b.textContent.trim() === nome).click();
-      await pausa(700);
-      conferirArea(nome);
-      visitadas.push(nome);
-    }
+    // As 4 abas do trilho e, em cada uma, as áreas da barra de baixo.
+    const rotulos = [...document.querySelectorAll('.trilho-botao[aria-label]')].map((b) => b.getAttribute('aria-label'));
+    if (rotulos.length !== 4) falhas.push('o trilho mostrou ' + rotulos.length + ' abas, e são 4');
+    for (const rotulo of rotulos) {
+      document.querySelector('.trilho-botao[aria-label="' + rotulo + '"]').click();
+      await pausa(500);
+      const areasDaAba = [...document.querySelectorAll('nav.abas .aba')].map((b) => b.textContent.trim());
+      if (!areasDaAba.length) falhas.push('a aba ' + rotulo + ' não mostrou nenhuma área embaixo');
+      for (const nome of areasDaAba) {
+        if (nome === 'Visão geral') continue;
+        [...document.querySelectorAll('nav.abas .aba')].find((b) => b.textContent.trim() === nome).click();
+        await pausa(700);
+        conferirArea(nome);
+        visitadas.push(nome);
 
-    // As áreas do "+".
-    document.querySelector('.aba-mais').click();
-    await pausa(300);
-    const outras = [...document.querySelectorAll('.mais button')].map((b) => b.textContent.trim());
-    if (outras.length < 8) falhas.push('o "+" mostrou só ' + outras.length + ' áreas');
-    document.querySelector('.aba-mais').click();
-    await pausa(200);
-    for (const nome of outras) {
-      document.querySelector('.aba-mais').click();
-      await pausa(250);
-      const b = [...document.querySelectorAll('.mais button')].find((x) => x.textContent.trim() === nome);
-      if (!b) { falhas.push('o "+" perdeu ' + nome); continue; }
-      b.click();
-      await pausa(700);
-      conferirArea(nome);
-      visitadas.push(nome);
-
-      // O Sistema tem abas internas: cada uma abre com conteúdo.
-      if (nome === 'Sistema') {
-        for (const t of [...document.querySelectorAll('.abas-internas [role=tab]')].map((x) => x.textContent.trim())) {
-          [...document.querySelectorAll('.abas-internas [role=tab]')].find((x) => x.textContent.trim() === t).click();
-          await pausa(500);
-          const corpo = document.querySelector('.area-corpo')?.textContent.trim() ?? '';
-          if (corpo.length < 40) falhas.push('Sistema/' + t + ' abriu vazia');
-          visitadas.push('Sistema/' + t);
+        // O Sistema tem abas internas: cada uma abre com conteúdo.
+        if (nome === 'Sistema') {
+          for (const t of [...document.querySelectorAll('.abas-internas [role=tab]')].map((x) => x.textContent.trim())) {
+            [...document.querySelectorAll('.abas-internas [role=tab]')].find((x) => x.textContent.trim() === t).click();
+            await pausa(500);
+            const corpo = document.querySelector('.area-corpo')?.textContent.trim() ?? '';
+            if (corpo.length < 40) falhas.push('Sistema/' + t + ' abriu vazia');
+            visitadas.push('Sistema/' + t);
+          }
         }
       }
     }
 
-    // O trilho da esquerda leva aos mesmos lugares.
-    for (const b of document.querySelectorAll('.trilho-botao[aria-label]')) {
-      if (b.getAttribute('aria-label') === 'Mais áreas') continue;
-      b.click();
-      await pausa(300);
-    }
-    document.querySelector('.trilho-botao[aria-label="Início"]')?.click();
+    // De volta ao Jogar, na Visão geral: a grade inteira volta.
+    document.querySelector('.trilho-botao[aria-label="Jogar"]')?.click();
+    await pausa(300);
+    [...document.querySelectorAll('nav.abas .aba')].find((b) => b.textContent.trim() === 'Visão geral')?.click();
     await pausa(400);
-    if (document.querySelectorAll('.grade .bloco').length < 7) falhas.push('voltar ao Início pelo trilho não remontou a grade');
+    if (document.querySelectorAll('.grade .bloco').length < 7) falhas.push('voltar à Visão geral não remontou a grade');
 
     // Com tudo recusado, nenhuma folha (feedback) pode ter aberto por cima.
     if (document.querySelector('.veu')) falhas.push('uma folha abriu por cima da tela sem motivo');

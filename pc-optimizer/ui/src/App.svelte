@@ -23,7 +23,7 @@
   import { porId, temporadaDe } from "./lib/temporadas";
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
-  import { areas, type IdDaArea } from "./lib/areas";
+  import { areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
   import { avisos as lerAvisos } from "./lib/clima";
   import { capaRemota, iniciais } from "./lib/capas";
   import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, receitaMedida, type Acao, type Fala } from "./lib/conversa";
@@ -54,25 +54,16 @@
   /** A apresentação já foi vista nesta máquina (ou pulada): não abre de novo sozinha. */
   const CHAVE_DAS_BOAS_VINDAS = "otimiza.boas-vindas";
 
-  // O trilho da esquerda e as abas de baixo: os mesmos destinos, como na referência.
-  const TRILHO: { id: IdDaArea; icone: NomeDoIcone }[] = [
-    { id: "inicio", icone: "casa" },
-    { id: "turbo", icone: "raio" },
-    { id: "jogos", icone: "controle" },
-    { id: "rede", icone: "wifi" },
-    { id: "latencia", icone: "cronometro" },
-    { id: "tela", icone: "monitor" },
-    { id: "historico", icone: "relogio" },
-    { id: "ajustes", icone: "ajustes" },
-  ];
-  const ABAS: { id: IdDaArea; nome: string }[] = [
-    { id: "inicio", nome: "Visão geral" },
-    { id: "rede", nome: "Rede" },
-    { id: "latencia", nome: "Latência" },
-    { id: "tela", nome: "Tela" },
-    { id: "historico", nome: "Histórico" },
-  ];
-  const OUTRAS: IdDaArea[] = ["turbo", "jogos", "energia", "mira", "cores", "sistema", "prova", "ajustes"];
+  // As 4 abas no trilho da esquerda (a intenção) e as áreas da aba ativa embaixo (o lugar): `lib/areas.ts`, `grupos`.
+  const ICONE_DO_GRUPO: Record<IdDoGrupo, NomeDoIcone> = {
+    jogar: "controle",
+    meu_pc: "monitor",
+    prova: "relogio",
+    ajustes: "ajustes",
+  };
+  /** A última área aberta em cada aba: voltar à aba volta para onde a pessoa estava. */
+  const ultimaDoGrupo: Partial<Record<IdDoGrupo, IdDaArea>> = {};
+  const nomeDaAba = (id: IdDaArea) => (id === "inicio" ? "Visão geral" : (areas.find((a) => a.id === id)?.nome ?? id));
 
   let versao = $state<VersaoDoApp | null>(null);
   let hardware = $state<Hardware | null>(null);
@@ -91,12 +82,12 @@
   let boasVindas = $state<ModoDasBoasVindas | null>(null);
   let licenca = $state<EstadoDaLicenca | null>(null);
   let aberta = $state<IdDaArea>("inicio");
+  const grupoAtivo = $derived(grupoDe(aberta));
   /** O "Ver o sistema" do bloco Agora abre o Sistema já na aba Agora; o resto entra pelos Ajustes. */
   let abaDoSistema = $state<"agora" | "ajustes">("ajustes");
   let busca = $state("");
   let filtroDeJogo = $state("");
   let mostrarAvisos = $state(false);
-  let mostrarMais = $state(false);
   let medindoDpc = $state(false);
   let recadoDpc = $state<string | null>(null);
 
@@ -463,12 +454,16 @@
   // ---------------------------------------------------------------------------------------------------------------
   // Navegação, abas e blocos
 
+  function abrirGrupo(g: Grupo) {
+    abrir(ultimaDoGrupo[g.id] ?? g.areas[0]);
+  }
+
   function abrir(id: IdDaArea, abaInterna: "agora" | "ajustes" = "ajustes") {
+    ultimaDoGrupo[grupoDe(id).id] = id;
     abaDoSistema = abaInterna;
     // Navegar fecha o balão, a não ser que a navegação tenha vindo da pergunta (ela some sozinha depois).
     if (!digitando) fala = null;
     aberta = id;
-    mostrarMais = false;
     mostrarAvisos = false;
   }
 
@@ -794,21 +789,20 @@
   {/if}
 
   <!-- Trilho -->
-  <nav class="trilho vidro" aria-label="Áreas">
-    {#each TRILHO as t (t.id)}
+  <nav class="trilho vidro" aria-label="Abas">
+    {#each grupos as g (g.id)}
       <button
         class="trilho-botao"
-        class:ativo={aberta === t.id}
-        aria-label={areas.find((a) => a.id === t.id)?.nome}
-        title={areas.find((a) => a.id === t.id)?.nome}
-        onclick={() => abrir(t.id)}
+        class:ativo={grupoAtivo.id === g.id}
+        aria-label={g.nome}
+        aria-current={grupoAtivo.id === g.id ? "page" : undefined}
+        title={g.nome}
+        onclick={() => abrirGrupo(g)}
       >
-        <Icone nome={t.icone} tamanho={20} />
+        <Icone nome={ICONE_DO_GRUPO[g.id]} tamanho={20} />
+        <span class="trilho-nome">{g.nome}</span>
       </button>
     {/each}
-    <button class="trilho-botao" aria-label="Mais áreas" title="Mais áreas" aria-expanded={mostrarMais} onclick={() => (mostrarMais = !mostrarMais)}>
-      <Icone nome="grade" tamanho={20} />
-    </button>
   </nav>
 
   <!-- Painel -->
@@ -1060,21 +1054,12 @@
     {/key}
   </main>
 
-  {#if mostrarMais}
-    <div class="mais vidro-forte" in:entrar>
-      {#each OUTRAS as id (id)}
-        <button onclick={() => abrir(id)}>{areas.find((a) => a.id === id)?.nome}</button>
-      {/each}
-    </div>
-  {/if}
-
-  <!-- Abas -->
-  <nav class="abas vidro" aria-label="Seções" bind:this={abasEl}>
+  <!-- As áreas da aba ativa -->
+  <nav class="abas vidro" aria-label={`Áreas de ${grupoAtivo.nome}`} bind:this={abasEl}>
     <span class="pilula-ativa" style:transform={`translateX(${pilula.x}px)`} style:width={`${pilula.w}px`} style:opacity={pilula.w ? 1 : 0}></span>
-    {#each ABAS as a (a.id)}
-      <button class="aba" class:ativa={aberta === a.id} onclick={() => abrir(a.id)}>{a.nome}</button>
+    {#each grupoAtivo.areas as id (id)}
+      <button class="aba" class:ativa={aberta === id} onclick={() => abrir(id)}>{nomeDaAba(id)}</button>
     {/each}
-    <button class="aba-mais" aria-label="Mais áreas" onclick={() => (mostrarMais = !mostrarMais)}><Icone nome="mais" tamanho={16} /></button>
   </nav>
 
   <PedidoDeFeedback />
@@ -1299,7 +1284,7 @@
   /* ---------- Barra de cima ---------- */
   .topo {
     position: absolute;
-    left: 84px;
+    left: 96px;
     right: 24px;
     top: 14px;
     height: 54px;
@@ -1618,10 +1603,12 @@
   .trilho-botao {
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    align-content: center;
+    gap: 3px;
+    width: 56px;
+    height: 54px;
     border: 0;
-    border-radius: 50%;
+    border-radius: 18px;
     background: transparent;
     color: var(--texto);
     cursor: pointer;
@@ -1641,11 +1628,18 @@
   .trilho-botao:focus-visible {
     outline-offset: 0;
   }
+  /* O nome da aba sob o ícone: quatro abas, e quem abre pela primeira vez lê onde está o "Jogar". */
+  .trilho-nome {
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+  }
 
   /* ---------- Painel e grade ---------- */
   .painel {
     position: absolute;
-    left: 84px;
+    left: 96px;
     right: 24px;
     top: 80px;
     bottom: 84px;
@@ -2289,34 +2283,6 @@
     padding: 16px 0;
   }
 
-  /* ---------- Mais áreas ---------- */
-  .mais {
-    position: absolute;
-    z-index: 21;
-    left: 50%;
-    bottom: 84px;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 4px;
-    padding: 6px;
-    border-radius: 22px;
-  }
-  .mais button {
-    height: 34px;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 17px;
-    background: transparent;
-    color: var(--texto);
-    font-size: 13px;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-  .mais button:hover {
-    background: var(--ativo);
-    color: var(--ativo-texto);
-  }
-
   /* ---------- Abas ---------- */
   .abas {
     position: absolute;
@@ -2358,19 +2324,6 @@
   .aba.ativa {
     color: var(--ativo-texto);
     font-weight: 600;
-  }
-  .aba-mais {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 38px;
-    height: 38px;
-    margin-left: 4px;
-    border: 0;
-    border-radius: 50%;
-    background: var(--ativo);
-    color: var(--ativo-texto);
-    cursor: pointer;
   }
 
   .pausado {
