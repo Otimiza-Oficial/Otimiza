@@ -113,6 +113,10 @@ pub struct Painel {
     pub lembrada: Option<super::fb_por_jogo::Escolha>,
     /// A mesma escolha em palavras ("Frame Boost 3×").
     pub lembrada_texto: Option<String>,
+    /// A placa de vídeo já está quase cheia com o jogo (`comecar_leve`): só gerar quadros tira FPS do jogo, e a tela
+    /// sugere a escala, que dá FPS real a mais.
+    #[serde(default)]
+    pub placa_no_limite: bool,
 }
 
 /// A frase da última vez que o Frame Boost ligou, para o painel repetir enquanto ele estiver ligado.
@@ -342,6 +346,7 @@ pub fn painel_de(
         escalas: Vec::new(),
         lembrada: None,
         lembrada_texto: None,
+        placa_no_limite: false,
     }
 }
 
@@ -446,8 +451,12 @@ pub fn painel() -> Painel {
         Some(ativo_do_driver(recurso, medicao.as_ref()))
     });
     let mut p = painel_de(jogo.as_ref(), nativo, hz, &gerador, pelo_driver);
-    if p.aviso.is_none() && jogo.is_some() {
-        p.aviso = aviso_de_folga(memoria_disponivel_gb(), uso_da_placa_pct());
+    if jogo.is_some() {
+        let placa = uso_da_placa_pct();
+        p.placa_no_limite = comecar_leve(placa);
+        if p.aviso.is_none() {
+            p.aviso = aviso_de_folga(memoria_disponivel_gb(), placa);
+        }
     }
     if let (Some(j), Some(hz)) = (jogo.as_ref(), hz) {
         p.base = super::base_do_jogo::travada(j.pid, &j.executavel, hz);
@@ -585,11 +594,11 @@ pub fn ligar(
     crate::modules::licenca::exigir()?;
     // A escala só com a pessoa permitindo (Ajustes): o Otimiza não muda a resolução do jogo por conta própria. Todo
     // caminho passa aqui (Frame Boost, Turbo, "Jogar", a escolha lembrada).
-    let escala = if super::flags::Flags::load().escala_permitida {
+    let escala = if !super::flags::Flags::load().escala_desligada {
         escala
     } else {
         if escala.is_some() && multiplicador == 1 {
-            return Err("A escala está desligada nos Ajustes: o Otimiza não muda a resolução do jogo. Para usar, ligue \"Permitir a escala\" em Ajustes.".to_string());
+            return Err("A escala está desligada nos Ajustes: o Otimiza não muda a resolução do jogo. Para usar, ligue \"Escala do Frame Boost\" em Ajustes.".to_string());
         }
         None
     };

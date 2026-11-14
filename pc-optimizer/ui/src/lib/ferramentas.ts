@@ -95,6 +95,8 @@ export interface PainelFrameBoost {
   /** O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão). */
   lembrada?: { multiplicador: number; escala: NivelDeEscala | null; alvo_fps: number | null; manteve_pct: number; quando: number } | null;
   lembrada_texto?: string | null;
+  /** A placa de vídeo já está quase cheia com o jogo: a tela sugere a escala. */
+  placa_no_limite?: boolean;
 }
 
 export function motivo(s: Suporte): string | null {
@@ -250,14 +252,13 @@ export const ferramentas = {
     noTauri
       ? como<PainelFrameBoost>(commands.frameBoostLigar(multiplicador, false, escala, alvo))
       : Promise.resolve(fbLigadoDemo(multiplicador, escala)),
-  /** A escala permitida (Ajustes)? Desligada por padrão: o Otimiza não muda a resolução do jogo sem a pessoa pedir.
-   *  Na demonstração, desligada como num PC novo. */
+  /** A escala do Frame Boost vale (Ajustes)? Ligada por padrão, como na 1.0; só quem desliga fica sem. */
   escalaPermitida: async (): Promise<boolean> =>
-    noTauri ? !!(await como<{ escala_permitida?: boolean }>(commands.flagsLer())).escala_permitida : false,
+    noTauri ? !(await como<{ escala_desligada?: boolean }>(commands.flagsLer())).escala_desligada : true,
   definirEscalaPermitida: async (permitir: boolean): Promise<boolean> => {
     if (!noTauri) return permitir;
     const atual = await como<Record<string, unknown>>(commands.flagsLer());
-    await commands.flagsGravar({ ...atual, escala_permitida: permitir } as never);
+    await commands.flagsGravar({ ...atual, escala_desligada: !permitir } as never);
     return permitir;
   },
   /** Nitidez da escala (FB6), em "stops" do FSR: 0 a mais forte, 2 a mais suave. Vale no próximo quadro. */

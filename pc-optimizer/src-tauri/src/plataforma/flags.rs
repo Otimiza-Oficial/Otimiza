@@ -25,10 +25,11 @@ pub struct Flags {
     pub vibracao_nvidia: bool,
     /// R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão.
     pub prioridade_na_rede: bool,
-    /// A escala do Frame Boost (o jogo numa janela menor, ampliada para a tela). Desligada por padrão, decisão do dono
-    /// (13/11/2026): o Otimiza não muda a resolução do jogo sem a pessoa pedir. Vale para o Frame Boost, o Turbo e o
-    /// "Jogar".
-    pub escala_permitida: bool,
+    /// A pessoa desligou a escala do Frame Boost (o jogo numa janela menor, ampliada para a tela) nos Ajustes. Ligada
+    /// por padrão, como na 1.0: em placa fraca é ela que dá FPS de verdade, e a 1.0.1 (que a desligou para todos, com a
+    /// chave `escala_permitida`) deixou o jogo menos liso. A chave antiga fica no arquivo e é ignorada. Vale para o
+    /// Frame Boost, o Turbo e o "Jogar".
+    pub escala_desligada: bool,
 }
 
 impl Default for Flags {
@@ -44,7 +45,7 @@ impl Default for Flags {
             smooth_motion_drs: false,
             vibracao_nvidia: true,
             prioridade_na_rede: false,
-            escala_permitida: false,
+            escala_desligada: false,
         }
     }
 }
@@ -123,6 +124,15 @@ mod tests {
         let lidas = Flags::ler(&caminho);
         assert!(!lidas.lab);
         assert!(lidas.novo_shell);
+    }
+
+    #[test]
+    fn a_escala_desligada_pela_1_0_1_volta_ligada() {
+        let caminho = pasta("escala-1-0-1").join("flags.json");
+        fs::write(&caminho, r#"{"lab": true, "escala_permitida": false}"#).unwrap();
+        assert!(!Flags::ler(&caminho).escala_desligada, "a chave antiga não desliga a escala");
+        fs::write(&caminho, r#"{"escala_desligada": true}"#).unwrap();
+        assert!(Flags::ler(&caminho).escala_desligada, "quem desligou nos Ajustes fica sem");
     }
 
     #[test]

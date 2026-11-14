@@ -36,8 +36,8 @@
   let escalaPedida = $state<NivelDeEscala | null>(lerEscala());
   let alvoPedido = $state<number | null>(Number(ler(CHAVE_ALVO, "")) || null);
   let nitidez = $state(Number(ler(CHAVE_NITIDEZ, "0.2")));
-  /** Sem a escala permitida nos Ajustes, as opções dela nem aparecem: o Otimiza não muda a resolução do jogo. */
-  let escalaPermitida = $state(false);
+  /** Com a escala desligada nos Ajustes, as opções dela nem aparecem: o Otimiza não muda a resolução do jogo. */
+  let escalaPermitida = $state(true);
   let relogio: ReturnType<typeof setInterval> | undefined;
 
   function ler(chave: string, padrao: string) {
@@ -325,8 +325,18 @@
           >Usar de novo</button>
         </div>
       {/if}
+      {#if doOtimiza && !a && escalaPermitida && !escala && p.placa_no_limite}
+        <!-- Placa quase cheia: só gerar quadros tira FPS do jogo; menos pixels devolve FPS de verdade -->
+        <div class="lembrada">
+          <div>
+            <span class="rotulo">A placa de vídeo está no limite</span>
+            <p>Com a escala <strong>Qualidade</strong> o jogo desenha menos pixels e ganha FPS de verdade; o gerador completa o monitor sem roubar do jogo.</p>
+          </div>
+          <button class="btn" disabled={ocupado} onclick={() => escolherEscala("Qualidade")}>Usar a escala</button>
+        </div>
+      {/if}
       {#if doOtimiza && !a && !escalaPermitida}
-        <p class="apoio pequeno">Sem escala: o Frame Boost só gera quadros e não muda a resolução do jogo. Para usar a escala, ligue "Permitir a escala" nos Ajustes.</p>
+        <p class="apoio pequeno">Sem escala: o Frame Boost só gera quadros e não muda a resolução do jogo. Para usar a escala, ligue "Escala do Frame Boost" nos Ajustes.</p>
       {/if}
       {#if doOtimiza && !a && escala}
         {@const o = p.escalas?.find((x) => x.nivel === escala)}
