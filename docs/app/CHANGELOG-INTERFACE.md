@@ -13,6 +13,8 @@ O Otimiza ganhou cara nova, sem mudar nada no que ele faz no seu PC.
 - **Rede** com o sinal do Wi-Fi em destaque.
 - **Histórico** em linha do tempo, com o desfazer em cada mudança.
 - **Visão geral**: gráfico ao vivo do processador e o Oti avisando quando está tudo certo.
+- **Turbo**: os níveis Seguro e Competitivo viraram cartões, com barra de progresso ao otimizar.
+- **Prova**: o gráfico da partida com a cor do Otimiza.
 
 **Épocas do ano**
 - Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween agora mudam o app inteiro: varal de
@@ -21,4 +23,5 @@ O Otimiza ganhou cara nova, sem mudar nada no que ele faz no seu PC.
 
 **Correções**
 - As capas de CS2, Fortnite, Roblox e Valorant não somem mais sem internet: aparece o logo do jogo.
+- Na apresentação, a ficha do PC ficava ilegível no tema escuro.
 - O Frame Boost não muda mais a resolução do seu jogo sem você permitir (opção "Permitir a escala" nos Ajustes).

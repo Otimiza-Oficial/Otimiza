@@ -69,6 +69,7 @@ principal mais claro em menos tempo de olhar.
 - [x] Frame Boost em componentes · Jogos como página de jogo · Tela com medidor de Hz · Histórico em linha do tempo
 - [x] Épocas — varal por época, partículas atrás do vidro, cor da marca e filete por época, geada no Natal
 - [x] Rede (herói do sinal), Prova (gráfico com a marca), passada no claro (Jogos)
-- [ ] Turbo (modos), Mira, Cores, Latência, Energia, Sistema e Ajustes: só a passada geral dos cartões até agora
-- [ ] Balão do Oti, apresentação, avisos
-- [ ] Passada no tema claro, prints finais, texto do changelog
+- [x] Turbo (níveis como cartões + barra de progresso), Mira e Cores em cartões; Latência, Energia, Sistema e Ajustes com a passada geral
+- [x] Apresentação: ficha do PC ilegível no escuro consertada (balão do Oti e avisos já seguem o vidro novo)
+- [x] Passada no tema claro, texto do changelog (`docs/app/CHANGELOG-INTERFACE.md`)
+- [ ] Instalador de teste para o dono conferir no PC dele
