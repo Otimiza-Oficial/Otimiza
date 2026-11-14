@@ -8,13 +8,30 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.1_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.1_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.2_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.2_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.2: Correções de bugs no Frame Boost
+
+Atualização de correções da 1.0 (número interno 4.0.2). Vocês avisaram que o jogo não estava mais ficando liso com o Frame Boost depois da 1.0.1, e era verdade. Corrigimos e deixamos ele ainda melhor.
+
+## Correções
+
+- A **escala** do Frame Boost voltou a funcionar para todos, como na 1.0. A 1.0.1 tinha desligado ela, e em placa de vídeo fraca é ela que dá FPS de verdade (o jogo desenha menos pixels e o Otimiza amplia; o monitor não muda). Vale de novo no Frame Boost, no Turbo e no **Jogar**. Quem não quiser desliga em Ajustes, em **Escala do Frame Boost**.
+- No **Auto**, CS2, Valorant e os outros competitivos voltaram a encher o monitor, em vez de ficar presos em 2×.
+- O Frame Boost não desliga mais sozinho quando o jogo perde só um pouquinho de FPS: no modo leve, ele só desliga se o jogo perder mais de 10%.
+
+## Melhorias
+
+- Com a placa de vídeo no limite, o Frame Boost avisa antes de ligar e oferece a escala **Qualidade** num toque: FPS real a mais, e o gerador completa o monitor sem roubar do jogo.
+- Cabeçalho das áreas mais limpo, sem o ladrilho colorido.
 
 ---
 
