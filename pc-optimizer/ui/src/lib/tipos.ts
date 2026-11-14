@@ -4138,8 +4138,6 @@ export type PainelFrameboost_Deserialize = {
 	lembrada?: EscolhaFbPorJogo_Deserialize | null,
 	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
 	lembrada_texto?: string | null,
-	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
-	auto_competitivo: boolean,
 };
 
 export type PainelFrameboost_Serialize = {
@@ -4169,8 +4167,6 @@ export type PainelFrameboost_Serialize = {
 	lembrada: EscolhaFbPorJogo_Serialize | null,
 	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
 	lembrada_texto: string | null,
-	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
-	auto_competitivo: boolean,
 };
 
 export type PainelIntel = PainelIntel_Serialize | PainelIntel_Deserialize;

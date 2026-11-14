@@ -95,8 +95,6 @@ export interface PainelFrameBoost {
   /** O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão). */
   lembrada?: { multiplicador: number; escala: NivelDeEscala | null; alvo_fps: number | null; manteve_pct: number; quando: number } | null;
   lembrada_texto?: string | null;
-  /** Jogo competitivo: o Auto liga em 2× (menos atraso) em vez de encher o monitor. */
-  auto_competitivo?: boolean;
 }
 
 export function motivo(s: Suporte): string | null {

@@ -102,8 +102,6 @@
   const estimativa = $derived.by(() => {
     if (!p || mult === 1) return null;
     const dois = p.estimativas.find((e) => e.multiplicador === 2);
-    // Jogo competitivo: o Auto vira 2× (o Rust decide em `multiplicador_para`), então a estimativa é a do 2×.
-    if (mult === 0 && p.auto_competitivo) return dois?.faixa ?? null;
     if (mult === 0) {
       if (!dois || !p.hz) return null;
       const teto = alvo ?? p.hz;
@@ -269,9 +267,9 @@
                   <button role="radio" aria-checked={mult === m} onclick={() => escolherMult(m)}>{m}×</button>
                 {/each}
               </div>
-              <p class="dica">{mult === 0 ? (p.auto_competitivo ? "Jogo competitivo: o Auto fica em 2×, com menos atraso." : "Enche o monitor. Para jogo competitivo, o 2× tem menos atraso.") : mult === 1 ? "Sem gerar quadros: só a escala." : `${mult} quadros na tela para cada um do jogo.`}</p>
+              <p class="dica">{mult === 0 ? "Enche o monitor. Para jogo competitivo, o 2× tem menos atraso." : mult === 1 ? "Sem gerar quadros: só a escala." : `${mult} quadros na tela para cada um do jogo.`}</p>
             </div>
-            {#if mult === 0 && alvos.length && !p.auto_competitivo}
+            {#if mult === 0 && alvos.length}
               <div class="escolha">
                 <span class="rotulo">FPS na tela</span>
                 <div class="segmento" role="radiogroup" aria-label="FPS alvo">
