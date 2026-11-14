@@ -102,6 +102,8 @@
   const estimativa = $derived.by(() => {
     if (!p || mult === 1) return null;
     const dois = p.estimativas.find((e) => e.multiplicador === 2);
+    // Jogo competitivo: o Auto vira 2× (o Rust decide em `multiplicador_para`), então a estimativa é a do 2×.
+    if (mult === 0 && p.auto_competitivo) return dois?.faixa ?? null;
     if (mult === 0) {
       if (!dois || !p.hz) return null;
       const teto = alvo ?? p.hz;
@@ -267,9 +269,9 @@
                   <button role="radio" aria-checked={mult === m} onclick={() => escolherMult(m)}>{m}×</button>
                 {/each}
               </div>
-              <p class="dica">{mult === 0 ? "Enche o monitor. Para jogo competitivo, o 2× tem menos atraso." : mult === 1 ? "Sem gerar quadros: só a escala." : `${mult} quadros na tela para cada um do jogo.`}</p>
+              <p class="dica">{mult === 0 ? (p.auto_competitivo ? "Jogo competitivo: o Auto fica em 2×, com menos atraso." : "Enche o monitor. Para jogo competitivo, o 2× tem menos atraso.") : mult === 1 ? "Sem gerar quadros: só a escala." : `${mult} quadros na tela para cada um do jogo.`}</p>
             </div>
-            {#if mult === 0 && alvos.length}
+            {#if mult === 0 && alvos.length && !p.auto_competitivo}
               <div class="escolha">
                 <span class="rotulo">FPS na tela</span>
                 <div class="segmento" role="radiogroup" aria-label="FPS alvo">
@@ -310,6 +312,21 @@
         </div>
       </div>
 
+      {#if doOtimiza && !a && p.lembrada && p.lembrada_texto}
+        {@const l = p.lembrada}
+        <!-- O que esta máquina já provou neste jogo: um toque para repetir -->
+        <div class="lembrada">
+          <div>
+            <span class="rotulo">Da última vez neste jogo</span>
+            <p><strong>{p.lembrada_texto}</strong> · o jogo manteve {n(l.manteve_pct, 1)}% do FPS <span class="selo medido">medido</span></p>
+          </div>
+          <button
+            class="btn"
+            disabled={ocupado || !liga}
+            onclick={() => agir(() => ferramentas.frameBoostLigar(l.multiplicador, escalaPermitida ? l.escala : null, l.multiplicador === 0 ? l.alvo_fps : null))}
+          >Usar de novo</button>
+        </div>
+      {/if}
       {#if doOtimiza && !a && !escalaPermitida}
         <p class="apoio pequeno">Sem escala: o Frame Boost só gera quadros e não muda a resolução do jogo. Para usar a escala, ligue "Permitir a escala" nos Ajustes.</p>
       {/if}
@@ -517,6 +534,20 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--tinta);
+  }
+  .lembrada {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--linha);
+    background: var(--bloco, var(--superficie-2));
+  }
+  .lembrada p {
+    margin-top: 4px;
+    font-size: 13px;
   }
   .linha {
     display: flex;

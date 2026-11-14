@@ -92,6 +92,11 @@ export interface PainelFrameBoost {
   } | null;
   monitor?: [number, number] | null;
   escalas?: { nivel: NivelDeEscala; largura: number; altura: number }[];
+  /** O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão). */
+  lembrada?: { multiplicador: number; escala: NivelDeEscala | null; alvo_fps: number | null; manteve_pct: number; quando: number } | null;
+  lembrada_texto?: string | null;
+  /** Jogo competitivo: o Auto liga em 2× (menos atraso) em vez de encher o monitor. */
+  auto_competitivo?: boolean;
 }
 
 export function motivo(s: Suporte): string | null {
@@ -183,6 +188,8 @@ let fbDemo: PainelFrameBoost = {
   nota_da_base: null,
   base_solta: false,
   ultima_sessao: null,
+  lembrada: { multiplicador: 3, escala: null, alvo_fps: null, manteve_pct: 96.4, quando: 0 },
+  lembrada_texto: "Frame Boost 3×",
   monitor: [1920, 1080],
   escalas: [
     { nivel: "UltraQualidade", largura: 1477, altura: 831 },

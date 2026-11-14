@@ -2119,6 +2119,26 @@ export type Episodio = {
 
 export type Escolha = "SoDesempenho" | "TodosOsNucleos";
 
+export type EscolhaFbPorJogo = EscolhaFbPorJogo_Serialize | EscolhaFbPorJogo_Deserialize;
+
+export type EscolhaFbPorJogo_Deserialize = {
+	/**  0 = Auto, 1 = só escala, 2+ = fixo. */
+	multiplicador: number,
+	escala?: NivelDeEscala | null,
+	alvo_fps?: number | null,
+	manteve_pct: number | null,
+	quando: number,
+};
+
+export type EscolhaFbPorJogo_Serialize = {
+	/**  0 = Auto, 1 = só escala, 2+ = fixo. */
+	multiplicador: number,
+	escala: NivelDeEscala | null,
+	alvo_fps: number | null,
+	manteve_pct: number | null,
+	quando: number,
+};
+
 export type EscolhaMotorenergia = EscolhaMotorenergia_Serialize | EscolhaMotorenergia_Deserialize;
 
 export type EscolhaMotorenergia_Deserialize = {
@@ -4109,6 +4129,12 @@ export type PainelFrameboost_Deserialize = {
 	/**  O monitor onde o jogo está e, para cada nível de escala, a resolução em que o jogo deve rodar. */
 	monitor?: [number, number] | null,
 	escalas?: OpcaoEscala[],
+	/**  O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão): o painel oferece repetir. */
+	lembrada?: EscolhaFbPorJogo_Deserialize | null,
+	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
+	lembrada_texto?: string | null,
+	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
+	auto_competitivo: boolean,
 };
 
 export type PainelFrameboost_Serialize = {
@@ -4134,6 +4160,12 @@ export type PainelFrameboost_Serialize = {
 	/**  O monitor onde o jogo está e, para cada nível de escala, a resolução em que o jogo deve rodar. */
 	monitor: [number, number] | null,
 	escalas: OpcaoEscala[],
+	/**  O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão): o painel oferece repetir. */
+	lembrada: EscolhaFbPorJogo_Serialize | null,
+	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
+	lembrada_texto: string | null,
+	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
+	auto_competitivo: boolean,
 };
 
 export type PainelIntel = PainelIntel_Serialize | PainelIntel_Deserialize;
