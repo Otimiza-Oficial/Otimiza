@@ -244,8 +244,10 @@
     opacity: 0.28;
     pointer-events: none;
   }
+  /* No claro, capa escura desfocada vira um cinza sujo: só um toque, clareado. */
   :global(:root[data-tema="dia"]) .luz-da-capa {
-    opacity: 0.18;
+    opacity: 0.1;
+    filter: blur(60px) saturate(1.6) brightness(1.5);
   }
   .capa-grande {
     flex: none;
