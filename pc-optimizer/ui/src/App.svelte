@@ -125,8 +125,6 @@
   let busca = $state("");
   let filtroDeJogo = $state("");
   let mostrarAvisos = $state(false);
-  let medindoDpc = $state(false);
-  let recadoDpc = $state<string | null>(null);
 
   // O Oti fala num balão que desce da busca.
   let fala = $state<Fala | null>(null);
@@ -222,6 +220,33 @@
     const c = l.leitura.estado === "lida" ? l.leitura.conexao : l.leitura.estado === "lista_vazia" ? l.leitura.conexao : null;
     return c ? c.qualidade : null;
   });
+  /** "Pronto pra jogar": o que o Otimiza sabe conferir, item a item. Só entra o que foi lido (nada de item inventado);
+   *  cada um diz o que falta e leva para onde se resolve. */
+  type ItemDaProntidao = { id: string; ok: boolean; texto: string; acao: () => void; botao?: string };
+  const prontidao = $derived.by(() => {
+    const itens: ItemDaProntidao[] = [];
+    const t = telaPrincipal;
+    if (t) {
+      const max = t.hz_atual >= t.hz_maximo;
+      itens.push({ id: "tela", ok: max, texto: max ? `Monitor a ${t.hz_atual} Hz` : `Monitor ${t.hz_atual} de ${t.hz_maximo} Hz`, acao: () => abrir("tela") });
+    }
+    // Os dois interruptores do "Durante o jogo": o item desligado liga com um toque (o mesmo do bloco).
+    if (banda && (banda.ligado || banda.impedimento === null))
+      itens.push({ id: "banda", ok: banda.ligado, texto: banda.ligado ? "Downloads segurados" : "Downloads soltos", acao: alternarBanda, botao: banda.ligado ? undefined : "Segurar" });
+    if (wifi?.ligacao.tipo === "wi_fi" && varredura)
+      itens.push({ id: "wifi", ok: varredura.ligado, texto: varredura.ligado ? "Wi-Fi sem varredura" : "Wi-Fi varrendo redes", acao: alternarVarredura, botao: varredura.ligado ? undefined : "Ligar" });
+    if (mudancas != null) itens.push({ id: "otimizado", ok: mudancas > 0, texto: mudancas > 0 ? `${mudancas} ajustes ativos` : "Ainda não otimizado", acao: () => abrir(mudancas ? "historico" : "turbo") });
+    // O aviso do monitor já é o primeiro item; aqui entram os outros.
+    const avisoSerio = lista.find((a) => !a.id.startsWith("hz-"));
+    itens.push({ id: "avisos", ok: !avisoSerio, texto: avisoSerio ? avisoSerio.titulo : "Nenhum aviso", acao: () => (avisoSerio ? abrir(areaDoAviso(avisoSerio.id)) : undefined) });
+    const ok = itens.filter((i) => i.ok).length;
+    return { itens, ok, total: itens.length, fracao: itens.length ? ok / itens.length : 0 };
+  });
+  const saudacaoDaHora = $derived.by(() => {
+    const h = hoje.getHours();
+    return h < 5 ? "Boa madrugada" : h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  });
+
   /** O bloco "Agora": quatro leituras, cada uma com nome e valor por extenso. Barra só fica em cor quando há o que fazer. */
   const medidores = $derived.by(() => {
     const t = telaPrincipal;
@@ -266,7 +291,7 @@
     }),
   );
   const jogosFiltrados = $derived(
-    instalados.filter((i) => i.jogo.nome.toLowerCase().includes(filtroDeJogo.trim().toLowerCase())).slice(0, 3)
+    instalados.filter((i) => i.jogo.nome.toLowerCase().includes(filtroDeJogo.trim().toLowerCase())).slice(0, 4)
   );
 
   function lerTema(): Tema {
@@ -603,18 +628,6 @@
     varredura = await ponte.definirVarredura(!varredura.ligado).catch(() => varredura);
   }
 
-  async function medirDpc() {
-    if (medindoDpc) {
-      await ponte.cancelarDpc().catch(() => {});
-      return;
-    }
-    medindoDpc = true;
-    recadoDpc = "Medindo 10 s…";
-    const r = await ponte.capturarDpc(10).catch((e) => ({ estado: "Falhou" as const, etapa: "", codigo: 0, texto: String(e) }));
-    medindoDpc = false;
-    recadoDpc = r.estado === "Medido" ? r.relatorio.veredito.texto : r.texto;
-  }
-
   // ---------------------------------------------------------------------------------------------------------------
 
   function pct(v: number | null | undefined) {
@@ -914,7 +927,47 @@
       <div class="conteudo" in:entrar>
         {#if aberta === "inicio"}
           <div class="grade">
-            <!-- Seus jogos: busca e as três capas mais recentes -->
+            <!-- Pronto pra jogar: a prontidão lida neste PC, item a item, e as duas ações da tela -->
+            <section class="bloco b-heroi" use:brilho>
+              <div class="heroi-ola">
+                <span class="heroi-oti"><Oti acessorio={temporada?.acessorio ?? null} humor={prontidao.ok === prontidao.total ? "feliz" : humor} tamanho={64} segueCursor={false} /></span>
+                <div>
+                  <p class="sec">{temporada?.saudacao ?? saudacaoDaHora}</p>
+                  <h2 class="heroi-titulo">{prontidao.ok === prontidao.total ? "Pronto pra jogar" : prontidao.total - prontidao.ok === 1 ? "Quase pronto pra jogar" : "Dá pra deixar melhor"}</h2>
+                  <p class="sec">{prontidao.ok} de {prontidao.total} em ordem neste PC</p>
+                </div>
+              </div>
+              <ul class="heroi-itens">
+                {#each prontidao.itens as it (it.id)}
+                  <li>
+                    <button class="item-pronto" class:ok={it.ok} onclick={it.acao} disabled={it.ok && it.id !== "otimizado"} title={it.botao ? `${it.botao} durante o jogo` : undefined}>
+                      <span class="marca-pronto" aria-hidden="true">{it.ok ? "✓" : "!"}</span>
+                      <span class="texto-pronto">{it.texto}</span>
+                      {#if it.botao}<span class="seta-pronto" aria-hidden="true">›</span>{/if}
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+              <div class="heroi-acoes">
+                <div class="anel" style:--fr={prontidao.fracao} aria-label={`${prontidao.ok} de ${prontidao.total} em ordem`}>
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <circle cx="32" cy="32" r="27" class="anel-fundo" />
+                    <circle cx="32" cy="32" r="27" class="anel-cheio" pathLength="100" />
+                  </svg>
+                  <span class="numero">{Math.round(prontidao.fracao * 100)}<small>%</small></span>
+                </div>
+                <div class="heroi-botoes">
+                  <button class="botao-principal" onclick={() => abrir("turbo")}>Otimizar agora</button>
+                  {#if jogoDoPlayer && !jogo}
+                    <button class="botao-secundario" onclick={() => jogoDoPlayer && jogarJogo(jogoDoPlayer)}>Jogar {jogoDoPlayer}</button>
+                  {:else if mudancas}
+                    <button class="botao-secundario" onclick={() => abrir("historico")}>O que foi mudado ({mudancas})</button>
+                  {/if}
+                </div>
+              </div>
+            </section>
+
+            <!-- Seus jogos: busca e as capas mais recentes -->
             <section class="bloco b-jogos" use:brilho>
               <label class="campo-busca">
                 <Icone nome="busca" tamanho={15} />
@@ -925,6 +978,7 @@
                   <div class="capa-jogo">
                     <button class="capa-abrir" onclick={() => abrir("jogos")} title={j.nome} aria-label={`${j.nome}: ver partidas`}>
                       {#if capa}<img src={capa} alt="" onerror={() => fotoFalhou(j.nome)} />{:else}<span class="ini">{iniciais(j.nome)}</span>{/if}
+                      {#if partidaDoPlayer?.ultima && j.nome === partidaDoPlayer.nome}<span class="fps-na-capa"><strong>{inteiro(partidaDoPlayer.ultima.fps_nativo)}</strong> FPS</span>{/if}
                     </button>
                     <div class="capa-pe">
                       <span class="capa-nome">{j.nome}</span>
@@ -993,31 +1047,11 @@
               {/if}
             </section>
 
-            <!-- Otimizar: a ação principal da tela e os atalhos que respondem uma pergunta -->
-            <section class="bloco b-acoes" use:brilho>
-              <h3>Otimizar</h3>
-              <p class="sec pequeno">Ajustes conferidos neste PC. Cada um fica no Histórico com o valor de antes.</p>
-              <button class="botao-principal" onclick={() => abrir("turbo")}>Otimizar agora</button>
-              <ul class="atalhos">
-                <li><button onclick={() => abrir("rede")}>Medir a rota até o jogo<Icone nome="seta_direita" tamanho={14} /></button></li>
-                <li><button onclick={() => abrir("latencia")}>Achar o driver que trava<Icone nome="seta_direita" tamanho={14} /></button></li>
-                <li><button onclick={() => abrir("prova")}>Provar antes e depois<Icone nome="seta_direita" tamanho={14} /></button></li>
-                <li>
-                  <button onclick={() => abrir("historico")}>
-                    <span>O que foi mudado{mudancas ? ` (${mudancas})` : ""}</span><Icone nome="seta_direita" tamanho={14} />
-                  </button>
-                </li>
-              </ul>
-              {#if mudancas}
-                <button class="link desfazer" onclick={() => abrir("historico")}><Icone nome="desfazer" tamanho={14} /> Desfazer tudo</button>
-              {/if}
-            </section>
-
             <!-- Agora: os quatro números do PC, cada um com nome -->
             <section class="bloco b-agora" use:brilho>
               <h3>Agora</h3>
               <ul class="medidores">
-                {#each medidores as m (m.nome)}
+                {#each medidores.slice(0, 2) as m (m.nome)}
                   <li>
                     <div class="medidor-linha">
                       <span>{m.nome}</span>
@@ -1039,7 +1073,6 @@
                     <path d={curvaCpu.area} fill="url(#vivo-preenchido)" />
                     <path d={curvaCpu.linha} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
                   </svg>
-                  <figcaption class="sec pequeno">Processador nos últimos 2 minutos</figcaption>
                 </figure>
               {/if}
               {#if jogo}<p class="sec pequeno">Leitura pausada com o jogo aberto.</p>{/if}
@@ -1074,39 +1107,7 @@
                   </div>
                   <button class="chave" role="switch" aria-checked={varredura?.ligado ?? false} aria-label="Wi-Fi sem procurar redes durante o jogo" disabled={!varredura} onclick={alternarVarredura}></button>
                 </li>
-                <li>
-                  <div>
-                    <span>Driver que trava</span>
-                    <span class="sec pequeno">{recadoDpc ?? "Mede 10 s e aponta o culpado. Não muda nada."}</span>
-                  </div>
-                  <button class="botao-pequeno" onclick={medirDpc}>{medindoDpc ? "Parar" : "Medir"}</button>
-                </li>
               </ul>
-            </section>
-
-            <!-- Avisos: cada um leva para onde se resolve -->
-            <section class="bloco b-avisos" use:brilho>
-              <h3>Avisos</h3>
-              {#if lista.length === 0}
-                <p class="aviso-linha sec"><span class="ponto" data-tom="ok"></span>Nada atrapalhando no que eu sei olhar.</p>
-              {:else}
-                <ul class="lembretes">
-                  {#each lista.slice(0, 3) as a (a.id)}
-                    <li>
-                      <button class="aviso-linha" onclick={() => abrir(areaDoAviso(a.id))}>
-                        <span class="ponto" data-tom={a.gravidade === "serio" ? "perigo" : "atencao"}></span>
-                        <span>{a.titulo}</span>
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-              {#if lista.length <= 1}
-                <div class="avisos-calmo">
-                  <Oti acessorio={temporada?.acessorio ?? null} humor="feliz" tamanho={54} segueCursor={false} />
-                  <p class="sec">{lista.length === 0 ? "Tudo certo por aqui." : "Fora isso, tudo certo por aqui."}</p>
-                </div>
-              {/if}
             </section>
 
             <!-- Tela: a taxa em uso contra a que o monitor aguenta -->
@@ -1914,11 +1915,11 @@
     min-height: 500px;
     display: grid;
     grid-template-columns: 1fr 1fr 1.1fr 1.15fr;
-    grid-template-rows: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 0.9fr);
+    grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr);
     grid-template-areas:
-      "jogos jogos partida acoes"
-      "agora fundo fundo acoes"
-      "agora avisos avisos tela";
+      "heroi heroi heroi heroi"
+      "jogos jogos jogos partida"
+      "agora fundo fundo tela";
     gap: 12px;
   }
   .b-jogos {
@@ -1927,18 +1928,179 @@
   .b-partida {
     grid-area: partida;
   }
-  .b-acoes {
-    grid-area: acoes;
+  /* A faixa "Pronto pra jogar": saudação e o Oti, os itens lidos, o anel e as duas ações. */
+  .bloco.b-heroi {
+    grid-area: heroi;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 24px;
+    padding: 16px 20px;
+    background:
+      radial-gradient(60% 120% at 0% 0%, var(--marca-suave), transparent 60%),
+      radial-gradient(260px circle at var(--mx) var(--my), rgb(255 255 255 / 0.18), transparent 60%),
+      var(--bloco);
   }
+  .heroi-ola {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .heroi-titulo {
+    font-family: var(--fonte-titulo);
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 2px 0;
+  }
+  .heroi-itens {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 8px;
+  }
+  .heroi-itens .item-pronto {
+    width: 100%;
+  }
+  .texto-pronto {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+  .item-pronto {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 6px 0 5px;
+    border-radius: 999px;
+    border: 1px solid var(--vidro-borda);
+    background: var(--bloco-2);
+    color: var(--texto);
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background var(--mov-rapido) ease, transform var(--mov-rapido) var(--curva-mola);
+  }
+  .item-pronto:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .item-pronto:disabled {
+    cursor: default;
+  }
+  .marca-pronto {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--atencao) 22%, transparent);
+    color: var(--atencao);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .item-pronto.ok .marca-pronto {
+    background: color-mix(in srgb, var(--ok) 20%, transparent);
+    color: var(--ok);
+  }
+  .item-pronto.ok .texto-pronto {
+    color: var(--sec);
+  }
+  .seta-pronto {
+    padding: 0 4px;
+    color: var(--sec);
+    font-size: 16px;
+    line-height: 1;
+  }
+  .heroi-acoes {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .anel {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    display: grid;
+    place-items: center;
+  }
+  .anel svg {
+    position: absolute;
+    inset: 0;
+    transform: rotate(-90deg);
+  }
+  .anel circle {
+    fill: none;
+    stroke-width: 6;
+  }
+  .anel-fundo {
+    stroke: var(--bloco-2);
+  }
+  .anel-cheio {
+    stroke: var(--marca);
+    stroke-linecap: round;
+    stroke-dasharray: 100;
+    stroke-dashoffset: calc(100 - var(--fr) * 100);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--marca) 60%, transparent));
+    transition: stroke-dashoffset 900ms var(--curva-saida);
+  }
+  .anel .numero {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .anel small {
+    font-size: 13px;
+    color: var(--sec);
+  }
+  .heroi-botoes {
+    display: grid;
+    gap: 8px;
+    width: 176px;
+  }
+  .botao-secundario {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 12px;
+    border: 1px solid var(--vidro-borda);
+    background: var(--bloco-2);
+    color: var(--texto);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fps-na-capa {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.55);
+    color: #fff;
+    font-size: 11px;
+  }
+  .fps-na-capa strong {
+    font-family: var(--fonte-titulo);
+    font-size: 13px;
+  }
+
   .b-agora {
     grid-area: agora;
   }
   .b-fundo {
     grid-area: fundo;
   }
-  .b-avisos {
-    grid-area: avisos;
-  }
+
   .b-tela {
     grid-area: tela;
   }
@@ -2299,43 +2461,8 @@
   }
 
   /* Otimizar */
-  .b-acoes .botao-principal {
+  .b-heroi .botao-principal {
     margin: 2px 0 6px;
-  }
-  .atalhos {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-  .atalhos li + li {
-    border-top: 1px solid var(--vidro-borda);
-  }
-  .atalhos button {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    width: 100%;
-    min-height: 42px;
-    padding: 0 2px;
-    border: 0;
-    background: none;
-    color: var(--texto);
-    font-size: 13px;
-    text-align: left;
-    cursor: pointer;
-  }
-  .atalhos button :global(.icone) {
-    color: var(--sec);
-    transition: transform var(--mov-rapido) ease;
-  }
-  .atalhos button:hover :global(.icone) {
-    color: var(--texto);
-    transform: translateX(2px);
-  }
-  .desfazer {
-    margin-top: 4px;
-    color: var(--sec);
   }
 
   /* Agora */
@@ -2413,53 +2540,13 @@
   }
   .vivo svg {
     width: 100%;
-    height: 54px;
+    height: 30px;
     opacity: 0.85;
-  }
-  .vivo figcaption {
-    font-size: 11px;
   }
 
   /* Com um aviso só (ou nenhum), o Oti ocupa o resto do bloco em vez de deixar um buraco. */
-  .avisos-calmo {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-top: auto;
-    padding-top: 10px;
-  }
 
   /* Avisos */
-  .lembretes {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 2px;
-  }
-  .aviso-linha {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    width: 100%;
-    padding: 4px 0;
-    border: 0;
-    background: none;
-    color: var(--texto);
-    font-size: 13px;
-    line-height: 1.35;
-    text-align: left;
-  }
-  button.aviso-linha {
-    cursor: pointer;
-  }
-  button.aviso-linha:hover span:last-child {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-  .aviso-linha .ponto {
-    transform: translateY(-1px);
-  }
 
   /* Tela */
   .gigante {
@@ -2484,11 +2571,11 @@
       grid-template-rows: none;
       grid-auto-rows: minmax(180px, auto);
       grid-template-areas:
+        "heroi heroi"
         "jogos jogos"
-        "partida acoes"
-        "agora acoes"
+        "partida agora"
         "fundo fundo"
-        "avisos tela";
+        "tela tela";
     }
     /* Com a grade rolando, a altura vem do conteúdo: sem isto a capa (em pé) cresce com a largura da janela. */
     .tres {
