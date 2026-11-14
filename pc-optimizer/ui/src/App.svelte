@@ -65,6 +65,21 @@
     prova: "relogio",
     ajustes: "ajustes",
   };
+  /** O ícone no cabeçalho de cada área. */
+  const ICONE_DA_AREA: Partial<Record<IdDaArea, NomeDoIcone>> = {
+    turbo: "raio",
+    jogos: "controle",
+    rede: "wifi",
+    latencia: "cronometro",
+    energia: "energia",
+    tela: "monitor",
+    sistema: "chip",
+    prova: "grafico",
+    historico: "relogio",
+    mira: "mira",
+    cores: "gota",
+    ajustes: "ajustes",
+  };
   /** A última área aberta em cada aba: voltar à aba volta para onde a pessoa estava. */
   const ultimaDoGrupo: Partial<Record<IdDoGrupo, IdDaArea>> = {};
   const nomeDaAba = (id: IdDaArea) => (id === "inicio" ? "Visão geral" : (areas.find((a) => a.id === id)?.nome ?? id));
@@ -1067,11 +1082,12 @@
         {:else}
           <div class="area-aberta">
             <header class="area-topo">
-              <div>
+              <span class="area-icone"><Icone nome={ICONE_DA_AREA[aberta] ?? "grade"} tamanho={22} /></span>
+              <div class="area-nome">
                 <h2>{area.nome}</h2>
                 {#if area.pergunta}<p class="sec">{area.pergunta}</p>{/if}
-                {#if contexto}<p class="contexto"><span class="ponto" data-tom={contexto.tom}></span>{contexto.texto}</p>{/if}
               </div>
+              {#if contexto}<p class="contexto"><span class="ponto" data-tom={contexto.tom}></span>{contexto.texto}</p>{/if}
             </header>
             <div class="area-corpo">
               {#if aberta === "historico"}
@@ -2409,10 +2425,10 @@
   /* ---------- Área aberta dentro do painel ---------- */
   .area-aberta {
     display: grid;
-    gap: 8px;
-    max-width: 860px;
+    gap: 14px;
+    max-width: 1000px;
     margin: 0 auto;
-    padding: 6px 10px;
+    padding: 10px 14px 24px;
     /* As áreas usam os tokens de `tokens.css` (os mesmos tons da casca); aqui só as superfícies viram vidro. */
     --superficie: rgb(255 255 255 / 0.4);
     --superficie-2: rgb(255 255 255 / 0.5);
@@ -2425,31 +2441,59 @@
     --acao: #f5f5f7;
     --acao-forte: #fff;
   }
+  /* O cabeçalho da área: ícone num quadrado de vidro, nome grande, a pergunta, e o estado lido à direita. */
   .area-topo {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding-bottom: 6px;
+    gap: 16px;
+    padding: 4px 4px 6px;
+  }
+  .area-icone {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 15px;
+    background: linear-gradient(180deg, var(--bloco-2), var(--bloco));
+    border: 1px solid var(--vidro-borda);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 8px 20px rgb(0 0 0 / 0.18);
+    color: var(--texto);
+  }
+  .area-nome {
+    flex: 1;
+    min-width: 0;
+  }
+  .area-topo h2 {
+    font-family: var(--fonte-titulo);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  .area-topo .area-nome .sec {
+    margin-top: 2px;
+    font-size: 14px;
   }
   .area-topo .contexto {
     display: flex;
     align-items: center;
-    gap: 7px;
-    margin: 6px 0 0;
+    gap: 8px;
+    flex: none;
+    max-width: 46%;
+    margin: 0;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--bloco);
+    border: 1px solid var(--vidro-borda);
     font-size: 13px;
     font-weight: 500;
     color: var(--texto);
   }
-  .area-topo h2 {
-    font-family: var(--fonte-titulo);
-    font-size: 20px;
-    font-weight: 600;
-  }
+  /* O corpo não é mais uma caixa: cada seção vira o seu cartão (`tokens.css`, `.area-corpo .secao`). */
   .area-corpo {
-    padding: 4px 18px 18px;
-    border-radius: 24px;
-    background: var(--bloco);
-    border: 1px solid var(--vidro-borda);
+    display: grid;
+    gap: 12px;
   }
   .em-breve {
     display: grid;
