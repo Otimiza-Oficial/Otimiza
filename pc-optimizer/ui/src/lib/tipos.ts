@@ -96,7 +96,7 @@ export const commands = {
 	redePrioridadeLigar: () => __TAURI_INVOKE<boolean>("rede_prioridade_ligar"),
 	/**  Desliga o R5 (e tira a marca na hora). `LIVRES`: desligar nunca depende de licença. */
 	redePrioridadeDesligar: () => __TAURI_INVOKE<boolean>("rede_prioridade_desligar"),
-	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
+	/**  As rotas já medidas e o ping das partidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
 	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
 	redeWifi: () => __TAURI_INVOKE<DiagnosticoDoWifi_Serialize>("rede_wifi"),
@@ -2736,6 +2736,8 @@ export type HistoricoDaRede_Deserialize = {
 	resumo: ResumoDaRede_Deserialize,
 	/**  Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela). */
 	relatorio?: string | null,
+	/**  Quantas medidas do resumo vieram das partidas (o ping gravado sozinho durante o jogo), e não de rota medida. */
+	das_partidas: number,
 };
 
 export type HistoricoDaRede_Serialize = {
@@ -2744,6 +2746,8 @@ export type HistoricoDaRede_Serialize = {
 	resumo: ResumoDaRede_Serialize,
 	/**  Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela). */
 	relatorio: string | null,
+	/**  Quantas medidas do resumo vieram das partidas (o ping gravado sozinho durante o jogo), e não de rota medida. */
+	das_partidas: number,
 };
 
 export type HistoricoNaTela = HistoricoNaTela_Serialize | HistoricoNaTela_Deserialize;

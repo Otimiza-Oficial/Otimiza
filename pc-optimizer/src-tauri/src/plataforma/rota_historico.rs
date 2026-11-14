@@ -333,6 +333,52 @@ pub fn guardar(rota: &Rota, do_jogo: bool) {
 }
 
 /// Data e hora locais no formato do relatório.
+/// **Pura.** As janelas de ping das partidas (`rede_partida`, gravadas sozinhas durante o jogo) viram medidas do
+/// resumo por horário: o "à noite piora" aparece sem a pessoa medir a rota na mão. Não entram nos recentes nem no
+/// relatório da operadora (não dizem em que trecho da rota foi). `hora_e_dia` dá a hora e o dia locais de cada momento.
+pub fn das_partidas(janelas: &[super::rede_partida::JanelaDeRede], hora_e_dia: impl Fn(i64) -> (u8, u8)) -> Vec<RegistroDaRota> {
+    use super::rede_partida::{PERDA_QUE_SE_SENTE_PCT, VARIACAO_QUE_SE_SENTE_MS};
+    janelas
+        .iter()
+        .map(|j| {
+            let quando = j.quando as i64;
+            let (hora, dia) = hora_e_dia(quando);
+            let veredito = if j.perda_pct >= PERDA_QUE_SE_SENTE_PCT {
+                "perda"
+            } else if j.variacao_ms >= VARIACAO_QUE_SE_SENTE_MS {
+                "variacao"
+            } else {
+                "limpa"
+            };
+            RegistroDaRota {
+                quando,
+                hora: hora.min(23),
+                dia_da_semana: dia.min(6),
+                destino: "1.1.1.1".into(),
+                do_jogo: true,
+                chegou: true,
+                mediana_ms: Some(j.ping_ms.round().max(0.0) as u32),
+                jitter_ms: Some(j.variacao_ms),
+                perda_pct: j.perda_pct,
+                veredito: veredito.into(),
+                trecho: None,
+                salto: None,
+                operadora: None,
+            }
+        })
+        .collect()
+}
+
+/// Hora (0–23) e dia da semana (0 = domingo) locais de um momento.
+pub fn hora_e_dia_local(quando: i64) -> (u8, u8) {
+    use chrono::{Datelike, Local, TimeZone, Timelike};
+    Local
+        .timestamp_opt(quando, 0)
+        .single()
+        .map(|d| (d.hour() as u8, d.weekday().num_days_from_sunday() as u8))
+        .unwrap_or((12, 0))
+}
+
 pub fn data_local(quando: i64) -> String {
     use chrono::{Local, TimeZone};
     Local
@@ -345,6 +391,31 @@ pub fn data_local(quando: i64) -> String {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn janelas_das_partidas_viram_medidas_por_horario() {
+        use crate::plataforma::rede_partida::JanelaDeRede;
+        let j = |quando: u64, ping: f64, var: f64, perda: f64| JanelaDeRede {
+            jogo: "FiveM".into(),
+            quando,
+            ping_ms: ping,
+            variacao_ms: var,
+            perda_pct: perda,
+        };
+        // A hora vem da função: 21h para as duas primeiras, 15h para as outras.
+        let regs = das_partidas(
+            &[j(1, 40.0, 30.0, 0.0), j(2, 38.0, 25.0, 3.0), j(3, 20.0, 2.0, 0.0), j(4, 21.0, 3.0, 0.0)],
+            |q| (if q <= 2 { 21 } else { 15 }, 3),
+        );
+        assert_eq!(regs.iter().map(|r| r.veredito.as_str()).collect::<Vec<_>>(), ["variacao", "perda", "limpa", "limpa"]);
+        assert!(regs.iter().all(|r| r.trecho.is_none() && r.do_jogo));
+        let resumo = resumir(&regs);
+        let noite = resumo.periodos.iter().find(|p| p.periodo == Periodo::Noite).unwrap();
+        assert_eq!(noite.medidas, 2);
+        assert_eq!(noite.com_problema, 2);
+        // Partida nunca conta como problema na operadora: a janela não diz o trecho.
+        assert_eq!(resumo.na_operadora, 0);
+    }
 
     fn reg(hora: u8, ms: u32, perda: f64, veredito: &str, trecho: Option<Trecho>) -> RegistroDaRota {
         RegistroDaRota {

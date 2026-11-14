@@ -577,8 +577,8 @@
     <h2 id="rede-quando">Quando piora</h2>
     {#if !historico || historico.resumo.medidas === 0}
       <p class="apoio">
-        Cada rota que você mede fica guardada aqui. Meça em horários diferentes (de manhã e à noite, jogando) e o
-        Otimiza mostra se a sua conexão piora em algum horário.
+        Isto se enche sozinho: enquanto você joga, o Otimiza mede o ping e guarda por horário. As rotas que você mede
+        aqui também entram. Com partidas em horários diferentes, aparece se a sua conexão piora em algum deles.
       </p>
     {:else}
       <p class="destaque">
@@ -601,6 +601,15 @@
           </div>
         {/each}
       </div>
+      <p class="apoio pequeno">
+        {#if historico.das_partidas > 0}
+          {historico.das_partidas} {historico.das_partidas === 1 ? "medida veio" : "medidas vieram"} das suas partidas (gravadas sozinhas durante o jogo){historico.resumo.medidas > historico.das_partidas
+            ? `, ${historico.resumo.medidas - historico.das_partidas} das rotas que você mediu`
+            : ""}.
+        {:else}
+          Das rotas que você mediu. Jogando com o Otimiza aberto, o ping das partidas também entra aqui.
+        {/if}
+      </p>
       {#if historico.relatorio}
         <div class="chamado">
           <p class="apoio">

@@ -164,18 +164,25 @@ pub struct HistoricoDaRede {
     pub resumo: crate::plataforma::rota_historico::ResumoDaRede,
     /// Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela).
     pub relatorio: Option<String>,
+    /// Quantas medidas do resumo vieram das partidas (o ping gravado sozinho durante o jogo), e não de rota medida.
+    pub das_partidas: u32,
 }
 
-/// As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`.
+/// As rotas já medidas e o ping das partidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`.
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]
 pub async fn rede_historico() -> Result<HistoricoDaRede, String> {
     use crate::plataforma::rota_historico as h;
     let todos = h::ler()?;
+    // O ping das partidas entra no "quando piora": a pessoa não precisa medir a rota na mão em cada horário.
+    let partidas = h::das_partidas(&crate::plataforma::rede_partida::ler(), h::hora_e_dia_local);
+    let mut juntos = todos.clone();
+    juntos.extend(partidas.iter().cloned());
     Ok(HistoricoDaRede {
         recentes: todos.iter().rev().take(30).cloned().collect(),
-        resumo: h::resumir(&todos),
+        resumo: h::resumir(&juntos),
         relatorio: h::relatorio(&todos, h::data_local),
+        das_partidas: partidas.len() as u32,
     })
 }
 

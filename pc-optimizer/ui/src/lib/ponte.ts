@@ -323,6 +323,7 @@ function redeHistoricoDemo(): HistoricoDaRede {
     },
     relatorio:
       "Relatório de rota (medido pelo Otimiza, no estilo do MTR: 10 pacotes por salto)\nOperadora: Vivo\nMedidas com problema dentro da rede da operadora: 4 de 8\n\n- (demonstração) destino 185.40.64.12 · começa no salto 4 · perda de 20% · ping 61 ms\n",
+    das_partidas: 5,
   };
 }
 
