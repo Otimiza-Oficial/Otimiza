@@ -26,7 +26,7 @@
   import { areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
   import { contextoDa } from "./lib/contexto";
   import { avisos as lerAvisos } from "./lib/clima";
-  import { capaRemota, iniciais } from "./lib/capas";
+  import { capaDepoisDaFalha, capaRemota, iniciais } from "./lib/capas";
   import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, receitaMedida, type Acao, type Fala } from "./lib/conversa";
   import { fraseDaComparacao, JOGAR, montarCartao, ofereceLiso, textoParaCompartilhar, type Cartao, type Terminada } from "./lib/partida";
   import {
@@ -178,17 +178,23 @@
   );
   /** Capas que não carregaram (sem internet, arte retirada): esses jogos ficam com a capa desenhada. */
   let semFoto = $state(new Set<string>());
+  /** A capa da última partida depois que a arte da loja falhou (a de reserva, ou nenhuma). */
+  let reservaDaUltima = $state<string | null>(null);
   /** O "player": o jogo aberto, se houver; senão a última partida. Os números só aparecem se forem DESSE jogo. */
   const jogoDoPlayer = $derived(jogo?.nome ?? ultima?.nome ?? null);
   const partidaDoPlayer = $derived(ultima && ultima.nome === jogoDoPlayer ? ultima : null);
   const capaDaUltima = $derived(
     jogoDoPlayer
-      ? (instalados.find((i) => i.jogo.nome === jogoDoPlayer)?.capa ?? (semFoto.has(jogoDoPlayer) ? null : capaRemota(jogoDoPlayer, null)))
+      ? (instalados.find((i) => i.jogo.nome === jogoDoPlayer)?.capa ?? (semFoto.has(jogoDoPlayer) ? reservaDaUltima : capaRemota(jogoDoPlayer, null)))
       : null
   );
+  /** A arte da loja não carregou (sem internet, CDN fora): vai para a capa de reserva e, sem ela, para as iniciais. */
   function fotoFalhou(nome: string) {
-    semFoto = new Set(semFoto).add(nome);
-    instalados = instalados.map((i) => (i.jogo.nome === nome ? { ...i, capa: null } : i));
+    if (nome === jogoDoPlayer) {
+      reservaDaUltima = capaDepoisDaFalha(nome, capaDaUltima);
+      semFoto = new Set(semFoto).add(nome);
+    }
+    instalados = instalados.map((i) => (i.jogo.nome === nome ? { ...i, capa: capaDepoisDaFalha(nome, i.capa) } : i));
   }
   const telaPrincipal = $derived(hardware?.telas.find((t) => t.principal) ?? hardware?.telas[0] ?? null);
   const memoriaPct = $derived.by(() => {

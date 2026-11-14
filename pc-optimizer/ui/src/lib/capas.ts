@@ -68,6 +68,27 @@ export function capaRemota(nome: string, appid: number | null): string | null {
   return null;
 }
 
+/** Os jogos que têm capa de reserva no próprio app (o logo em branco num fundo escuro, em `public/capas`). */
+const RESERVA: Record<string, string> = {
+  fivem: "/capas/fivem.svg",
+  counterstrike2: "/capas/counterstrike2.svg",
+  counterstrikeglobaloffensive: "/capas/counterstrike2.svg",
+  fortnite: "/capas/fortnite.svg",
+  roblox: "/capas/roblox.svg",
+  valorant: "/capas/valorant.svg",
+};
+
+/** A capa que não depende de internet: o que fica quando a arte da loja não carrega. `null` se o jogo não tem. */
+export function capaReserva(nome: string): string | null {
+  return RESERVA[chaveDoJogo(nome)] ?? null;
+}
+
+/** A próxima capa depois que `atual` falhou: a reserva (se ainda não era ela) ou nenhuma (a tela desenha as iniciais). */
+export function capaDepoisDaFalha(nome: string, atual: string | null): string | null {
+  const reserva = capaReserva(nome);
+  return reserva && reserva !== atual ? reserva : null;
+}
+
 /** Sem capa: as iniciais do jogo num quadro neutro. Cor inventada pelo nome parece enfeite e não ajuda a achar. */
 export function iniciais(nome: string) {
   const palavras = nome.replace(/[^\p{L}\p{N} ]/gu, " ").split(/\s+/).filter(Boolean);

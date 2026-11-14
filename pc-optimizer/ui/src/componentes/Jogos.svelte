@@ -10,7 +10,7 @@
   import PcsParecidos from "./PcsParecidos.svelte";
   import LinhaDoTempo from "./LinhaDoTempo.svelte";
   import Icone from "./Icone.svelte";
-  import { capaRemota, chaveDoJogo, iniciais } from "../lib/capas";
+  import { capaDepoisDaFalha, capaRemota, chaveDoJogo, iniciais } from "../lib/capas";
   import { JOGAR } from "../lib/partida";
 
   /** A "loja" de um jogo que o Otimiza mediu mas não achou instalado: sem caminho para o "Jogar". */
@@ -66,9 +66,9 @@
     }
   });
 
-  /** A foto não carregou: o jogo fica com a capa desenhada. */
+  /** A foto não carregou: vai para a capa de reserva e, sem ela, para a capa desenhada. */
   function fotoFalhou(nome: string) {
-    if (itens) itens = itens.map((i) => (i.jogo.nome === nome ? { ...i, capa: null } : i));
+    if (itens) itens = itens.map((i) => (i.jogo.nome === nome ? { ...i, capa: capaDepoisDaFalha(nome, i.capa) } : i));
   }
 
   /** `null` quando a loja não informou (0) ou o número não é uma data: a tela omite em vez de inventar. */
