@@ -332,6 +332,9 @@
     document.documentElement.dataset.tema = tema === "escuro" ? "noite" : "dia";
     document.documentElement.classList.toggle("janela-transparente", semFundo);
     document.documentElement.classList.toggle("fundo-limpo", fundo === "limpo");
+    // A época na raiz: os tokens (cor da marca, filete dos cartões, geada do Natal) mudam o app inteiro.
+    if (temporada) document.documentElement.dataset.epoca = temporada.id;
+    else delete document.documentElement.dataset.epoca;
   });
 
   // ---------------------------------------------------------------------------------------------------------------

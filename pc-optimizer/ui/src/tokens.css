@@ -111,6 +111,75 @@
   color-scheme: dark;
 }
 
+/* ---------------------------------------------------------------------------------------------------------------
+   As épocas do ano. Cada uma troca a cor da marca e ganha um detalhe nos cartões; o cenário (varal e partículas) está
+   em `componentes/EfeitoDeEpoca.svelte`. Tudo some com o jogo aberto (a regra `.jogo-aberto` lá embaixo). */
+:root[data-epoca="natal"] {
+  --marca: #ff4d4d;
+  --epoca-luz: #ffd36b;
+}
+:root[data-epoca="ano-novo"] {
+  --marca: #f2c14e;
+  --epoca-luz: #ffe9a8;
+}
+:root[data-epoca="carnaval"] {
+  --marca: #ff4fa3;
+  --epoca-luz: #8b5cf6;
+}
+:root[data-epoca="pascoa"] {
+  --marca: #a78bfa;
+  --epoca-luz: #fbcfe8;
+}
+:root[data-epoca="festa-junina"] {
+  --marca: #ff8a1f;
+  --epoca-luz: #facc15;
+}
+:root[data-epoca="dia-das-criancas"] {
+  --marca: #3b82f6;
+  --epoca-luz: #facc15;
+}
+:root[data-epoca="halloween"] {
+  --marca: #ff8a1f;
+  --epoca-luz: #a855f7;
+}
+:root[data-epoca] {
+  --marca-suave: color-mix(in srgb, var(--marca) 16%, transparent);
+}
+
+/* O filete de cima dos cartões ganha a luz da época (da marca para a luz, sumindo nas pontas). */
+:root[data-epoca] .bloco::after,
+:root[data-epoca] .area-corpo .secao:not(.secao .secao)::after {
+  content: "";
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--marca), var(--epoca-luz), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Natal: uma geada fina no alto de cada cartão, com a borda irregular de neve acumulada. */
+:root[data-epoca="natal"] .bloco::before,
+:root[data-epoca="natal"] .area-corpo .secao:not(.secao .secao)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 9px -2px, rgb(255 255 255 / 0.85) 7px, transparent 7.6px) 0 0 / 23px 8px repeat-x,
+    radial-gradient(circle at 4px -1px, rgb(255 255 255 / 0.7) 4px, transparent 4.6px) 11px 0 / 23px 6px repeat-x,
+    linear-gradient(180deg, rgb(255 255 255 / 0.75), rgb(255 255 255 / 0)) 0 0 / 100% 4px no-repeat;
+  opacity: 0.32;
+}
+:root[data-epoca="natal"][data-tema="dia"] .bloco::before,
+:root[data-epoca="natal"][data-tema="dia"] .area-corpo .secao:not(.secao .secao)::before {
+  opacity: 0.9;
+  filter: drop-shadow(0 1px 1px rgb(120 140 170 / 0.35));
+}
+
 /* Com jogo aberto: nada de desfoque (recalcula a cada quadro da janela) e superfícies opacas. */
 :root.jogo-aberto {
   --desfoque: none;
