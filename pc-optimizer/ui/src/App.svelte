@@ -46,13 +46,21 @@
     type TrocaComOti,
     type VersaoDoApp,
   } from "./lib/ponte";
+  import {
+    CHAVE_DA_IMAGEM,
+    CHAVE_DO_AJUSTE,
+    CHAVE_DO_FUNDO,
+    lerAjusteGuardado,
+    lerFundoGuardado,
+    opcaoDo,
+    type AjusteDoFundo,
+    type Fundo,
+  } from "./lib/fundos";
+  import PapelDeFundo from "./componentes/PapelDeFundo.svelte";
+  import MenuDoFundo from "./componentes/MenuDoFundo.svelte";
 
   type Tema = "claro" | "escuro";
-  /** O que fica atrás do vidro: grafite limpo (padrão), o cômodo desfocado ou a área de trabalho (janela transparente). */
-  type Fundo = "limpo" | "comodo" | "area";
-  const NOMES_DO_FUNDO: Record<Fundo, string> = { limpo: "Limpo", comodo: "Cômodo", area: "Área de trabalho" };
   const CHAVE_DO_TEMA = "otimiza.tema";
-  const CHAVE_DO_FUNDO = "otimiza.fundo";
   /** Abaixo disto livre ao tocar em Jogar, o Oti avisa: FiveM e jogos atuais pedem uns 3 GB a mais na partida. */
   const MEMORIA_LIVRE_MINIMA_GB = 3;
   /** A apresentação já foi vista nesta máquina (ou pulada): não abre de novo sozinha. */
@@ -124,8 +132,14 @@
   let wifi = $state<DiagnosticoDoWifi | null>(null);
   let mudancas = $state<number | null>(null);
   let tema = $state<Tema>(lerTema());
+  /** A imagem que a pessoa escolheu para o fundo (JPEG reduzido, em data URL), guardada só neste PC. */
+  let imagemDoFundo = $state<string | null>(lerGuardado(CHAVE_DA_IMAGEM));
+  /** O desfoque e o quanto escurece nas fotos. */
+  let ajusteDoFundo = $state<AjusteDoFundo>(lerAjusteGuardado(lerGuardado(CHAVE_DO_AJUSTE)));
   /** O fundo atrás do vidro. "Área de trabalho": a janela fica transparente e o Windows aparece entre os cards. */
-  let fundo = $state<Fundo>(lerFundo());
+  let fundo = $state<Fundo>(lerFundoGuardado(lerGuardado(CHAVE_DO_FUNDO), lerGuardado(CHAVE_DA_IMAGEM) !== null));
+  const nomeDoFundo = $derived(opcaoDo(fundo).nome);
+  const fundoPapel = $derived(opcaoDo(fundo).tipo === "cena" || opcaoDo(fundo).tipo === "foto");
   const semFundo = $derived(fundo === "area");
   let menuDoFundo = $state(false);
   /** O fundo que volta quando a apresentação desliga a "área de trabalho". */
@@ -318,24 +332,44 @@
     }
   }
 
-  // "sem" e "com" são os valores de antes (o botão "Sem fundo"): quem escolheu continua com o que escolheu.
-  function lerFundo(): Fundo {
+  function lerGuardado(chave: string): string | null {
     try {
-      const v = localStorage.getItem(CHAVE_DO_FUNDO);
-      return v === "sem" || v === "area" ? "area" : v === "com" || v === "comodo" ? "comodo" : "limpo";
+      return localStorage.getItem(chave);
     } catch {
-      return "limpo";
+      return null;
     }
   }
 
   function escolherFundo(f: Fundo) {
     if (f !== "area") fundoAntes = f;
     fundo = f;
-    menuDoFundo = false;
+    // As fotos pedem o ajuste à mão: o menu fica aberto nelas. Os outros fecham na hora.
+    if (opcaoDo(f).tipo !== "foto") menuDoFundo = false;
     try {
       localStorage.setItem(CHAVE_DO_FUNDO, f);
     } catch {
       // Só não lembra na próxima abertura.
+    }
+  }
+
+  /** Guarda (ou tira) a imagem do fundo. Falso quando não coube no armazenamento: a de antes continua. */
+  function guardarImagemDoFundo(dados: string | null): boolean {
+    try {
+      if (dados) localStorage.setItem(CHAVE_DA_IMAGEM, dados);
+      else localStorage.removeItem(CHAVE_DA_IMAGEM);
+    } catch {
+      return false;
+    }
+    imagemDoFundo = dados;
+    return true;
+  }
+
+  function mudarAjusteDoFundo(a: AjusteDoFundo) {
+    ajusteDoFundo = a;
+    try {
+      localStorage.setItem(CHAVE_DO_AJUSTE, JSON.stringify(a));
+    } catch {
+      // Vale até fechar o app.
     }
   }
 
@@ -372,6 +406,7 @@
     document.documentElement.dataset.tema = tema === "escuro" ? "noite" : "dia";
     document.documentElement.classList.toggle("janela-transparente", semFundo);
     document.documentElement.classList.toggle("fundo-limpo", fundo === "limpo");
+    document.documentElement.classList.toggle("fundo-papel", fundoPapel);
     // A época na raiz: os tokens (cor da marca, filete dos cartões, geada do Natal) mudam o app inteiro.
     if (temporada) document.documentElement.dataset.epoca = temporada.id;
     else delete document.documentElement.dataset.epoca;
@@ -820,6 +855,7 @@
   <div class="luminaria"><span></span></div>
   <div class="mesa"></div>
 </div>
+<PapelDeFundo {fundo} imagem={imagemDoFundo} ajuste={ajusteDoFundo} />
 
 {#if temporada}
   <EfeitoDeEpoca efeito={temporada.efeito} />
@@ -858,15 +894,19 @@
       {/if}
       <div class="fundo-escolha">
         <button class="fundo-botao" aria-haspopup="menu" aria-expanded={menuDoFundo} title="O que fica atrás do painel" onclick={() => (menuDoFundo = !menuDoFundo)}>
-          Fundo: {NOMES_DO_FUNDO[fundo]}
+          Fundo: {nomeDoFundo}
         </button>
         {#if menuDoFundo}
-          <div class="fundo-menu vidro-forte" role="menu" in:entrar>
-            {#each Object.entries(NOMES_DO_FUNDO) as [id, nome] (id)}
-              <button role="menuitemradio" aria-checked={fundo === id} onclick={() => escolherFundo(id as Fundo)}>
-                <span class="amostra" data-fundo={id}></span>{nome}
-              </button>
-            {/each}
+          <div in:entrar>
+            <MenuDoFundo
+              {fundo}
+              imagem={imagemDoFundo}
+              ajuste={ajusteDoFundo}
+              onescolher={escolherFundo}
+              onimagem={guardarImagemDoFundo}
+              onajuste={mudarAjusteDoFundo}
+              onfechar={() => (menuDoFundo = false)}
+            />
           </div>
         {/if}
       </div>
@@ -1246,7 +1286,8 @@
   :global(:root.fundo-limpo) .limpo {
     display: block;
   }
-  :global(:root.fundo-limpo) .comodo {
+  :global(:root.fundo-limpo) .comodo,
+  :global(:root.fundo-papel) .comodo {
     display: none;
   }
   /* A luz da época também entra no fundo limpo, bem mais baixa que no cômodo (lá ela passa pelo desfoque). */
@@ -1611,59 +1652,6 @@
   }
   .fundo-escolha {
     position: relative;
-  }
-  .fundo-menu {
-    background: rgb(250 250 252 / 0.98);
-    box-shadow: 0 20px 50px rgb(0 0 0 / 0.35);
-    position: absolute;
-    right: 0;
-    top: 44px;
-    z-index: 30;
-    display: grid;
-    gap: 2px;
-    min-width: 210px;
-    padding: 6px;
-    border-radius: 16px;
-  }
-  :global(:root[data-tema="noite"]) .fundo-menu {
-    background: rgb(30 30 34 / 0.98);
-  }
-  .fundo-menu button {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 38px;
-    padding: 0 10px;
-    border: 0;
-    border-radius: 10px;
-    background: transparent;
-    color: var(--texto);
-    font: inherit;
-    font-size: 13px;
-    text-align: left;
-    cursor: pointer;
-  }
-  .fundo-menu button:hover {
-    background: var(--bloco-2);
-  }
-  .fundo-menu button[aria-checked="true"] {
-    background: var(--bloco-2);
-    font-weight: 600;
-  }
-  .amostra {
-    width: 22px;
-    height: 16px;
-    border-radius: 5px;
-    border: 1px solid var(--linha-forte);
-  }
-  .amostra[data-fundo="limpo"] {
-    background: linear-gradient(180deg, #2a2a2f, #0b0b0d);
-  }
-  .amostra[data-fundo="comodo"] {
-    background: linear-gradient(180deg, #d9d4cd, #a79c8f);
-  }
-  .amostra[data-fundo="area"] {
-    background: repeating-conic-gradient(var(--linha-forte) 0 25%, transparent 0 50%) 0 0 / 8px 8px;
   }
   .segmento {
     display: flex;
