@@ -76,6 +76,21 @@ function cenaBase(): ImageData {
   return base;
 }
 
+/** Troca a cena desenhada por uma imagem de verdade (um quadro de jogo), cortada para 16:9 a 640×360. */
+export function definirCena(img: HTMLImageElement) {
+  const W = 640;
+  const H = 360;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const x = c.getContext("2d")!;
+  const escala = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+  const w = img.naturalWidth * escala;
+  const h = img.naturalHeight * escala;
+  x.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+  base = x.getImageData(0, 0, W, H);
+}
+
 /** Desenha a prévia no canvas: à esquerda de `corte` (0 a 1) o original, à direita o ajustado. */
 export function previa(cv: HTMLCanvasElement, a: Ajuste, corte: number) {
   const d = cenaBase();

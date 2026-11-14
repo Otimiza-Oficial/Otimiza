@@ -127,43 +127,22 @@
     v == null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: casas, minimumFractionDigits: casas });
   const pct = (v: number, min: number, max: number) => `${((v - min) / (max - min)) * 100}%`;
 
-  /** O fundo da prévia: a mira precisa aparecer no céu claro e na sombra do mapa. */
+  /** O fundo da prévia: quadros de FiveM de verdade. A mira precisa aparecer no claro (rua de dia), no meio do mato e
+   *  no escuro (a mesma rua à noite). */
   const FUNDOS = [
-    ["mapa", "Mapa"],
-    ["claro", "Céu claro"],
-    ["escuro", "Sombra"],
+    ["rua", "Rua"],
+    ["morro", "Morro"],
+    ["noite", "Noite"],
   ] as const;
-  let fundo = $state<(typeof FUNDOS)[number][0]>("mapa");
+  let fundo = $state<(typeof FUNDOS)[number][0]>("rua");
 </script>
 
 <div class="area-mira">
   <section class="secao estudio">
     <!-- A mira em cima de um jogo: troque o fundo para ver se ela aparece no claro e no escuro. -->
     <div class="palco" data-fundo={fundo}>
-      {#if fundo === "mapa"}
-        <svg class="cena" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-          <defs>
-            <linearGradient id="ceu-mira" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#7fb2e0" />
-              <stop offset="1" stop-color="#e9d3b4" />
-            </linearGradient>
-            <linearGradient id="chao-mira" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#8a7a63" />
-              <stop offset="1" stop-color="#4f4436" />
-            </linearGradient>
-          </defs>
-          <rect width="400" height="300" fill="url(#ceu-mira)" />
-          <path d="M0 175 L40 120 L70 150 L110 95 L150 140 L185 110 L230 150 L270 105 L310 145 L350 115 L400 160 L400 300 L0 300Z" fill="#8a9bb0" opacity="0.55" />
-          <rect x="30" y="120" width="70" height="80" fill="#5c5348" />
-          <rect x="44" y="134" width="12" height="16" fill="#2e2a25" />
-          <rect x="70" y="134" width="12" height="16" fill="#2e2a25" />
-          <rect x="285" y="105" width="90" height="95" fill="#665b4d" />
-          <rect x="300" y="122" width="14" height="20" fill="#2e2a25" />
-          <rect x="330" y="122" width="14" height="20" fill="#2e2a25" />
-          <rect x="0" y="195" width="400" height="105" fill="url(#chao-mira)" />
-          <rect x="170" y="165" width="60" height="34" rx="2" fill="#3e372e" />
-        </svg>
-      {/if}
+      <img class="cena" src={fundo === "morro" ? "/previas/fivem-morro.jpg" : "/previas/fivem-rua.jpg"} alt="" draggable="false" />
+      <div class="sombra-da-cena" aria-hidden="true"></div>
       <svg class="mira" viewBox="-60 -60 120 120" aria-label="Prévia da mira">{@html desenharMira(mira, 1.6)}</svg>
       <div class="fundos" role="radiogroup" aria-label="Fundo da prévia">
         {#each FUNDOS as [id, nome] (id)}
@@ -309,7 +288,7 @@
   }
   .estudio {
     display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
     gap: 18px;
     align-items: start;
   }
@@ -317,27 +296,39 @@
     position: relative;
     display: grid;
     place-items: center;
-    aspect-ratio: 4 / 3;
-    border-radius: 20px;
+    aspect-ratio: 16 / 10;
+    border-radius: 18px;
     overflow: hidden;
-    box-shadow: 0 12px 30px rgb(0 0 0 / 0.18);
-  }
-  .palco[data-fundo="claro"] {
-    background: linear-gradient(180deg, #dceaf7, #f6efe2);
-  }
-  .palco[data-fundo="escuro"] {
-    background: radial-gradient(circle at 50% 45%, #2a3242, #0c0f15);
+    background: #111;
+    box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
   }
   .cena {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
+    object-fit: cover;
+    transform: scale(1.04);
+    transition: filter var(--mov-entrar) ease;
+  }
+  /* A noite é a mesma rua, escurecida e azulada: a mira precisa continuar aparecendo. */
+  .palco[data-fundo="noite"] .cena {
+    filter: brightness(0.28) saturate(0.7) hue-rotate(195deg) contrast(1.15);
+  }
+  /* Vinheta e um degradê embaixo, para os rótulos lerem bem sobre o jogo. */
+  .sombra-da-cena {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(120% 90% at 50% 45%, transparent 55%, rgb(0 0 0 / 0.45)),
+      linear-gradient(180deg, rgb(0 0 0 / 0.25), transparent 25%, transparent 75%, rgb(0 0 0 / 0.35));
+    pointer-events: none;
   }
   .mira {
     position: relative;
-    width: 46%;
-    max-width: 220px;
+    z-index: 1;
+    width: 40%;
+    max-width: 200px;
     aspect-ratio: 1;
   }
   .fundos {
