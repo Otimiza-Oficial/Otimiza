@@ -87,6 +87,20 @@
   let versao = $state<VersaoDoApp | null>(null);
   let hardware = $state<Hardware | null>(null);
   let metricas = $state<MetricasAoVivo | null>(null);
+  /** As últimas leituras do processador (uma a cada 2 s): o gráfico vivo do bloco Agora. */
+  let historicoCpu = $state<number[]>([]);
+  const curvaCpu = $derived.by(() => {
+    const v = historicoCpu;
+    if (v.length < 3) return null;
+    // A curva ocupa a largura toda desde as primeiras leituras e vai ficando mais fina até juntar 2 minutos.
+    const passo = 120 / (v.length - 1);
+    const x0 = 0;
+    // O teto acompanha o maior valor (no mínimo 25%): com o PC parado a 15% a curva ainda mostra o que mexe.
+    const teto = Math.min(100, Math.max(25, Math.max(...v) * 1.3));
+    const pts = v.map((c, i) => `${(x0 + i * passo).toFixed(2)},${(34 - (Math.max(0, Math.min(teto, c)) / teto) * 30).toFixed(2)}`);
+    const linha = "M" + pts.join(" L");
+    return { linha, area: `${linha} L120,36 L${x0.toFixed(2)},36 Z` };
+  });
   let jogo = $state<JogoAberto | null>(null);
   let biblioteca = $state<ResumoDoJogo[]>([]);
   let instalados = $state<{ jogo: JogoDaLoja; capa: string | null }[]>([]);
@@ -675,7 +689,13 @@
     const laco = async () => {
       if (!vivo) return;
       jogo = await ponte.jogoAberto().catch(() => null);
-      if (!jogo && !document.hidden) metricas = await ponte.metricas().catch(() => metricas);
+      if (!jogo && !document.hidden) {
+        const lido = await ponte.metricas().catch(() => null);
+        if (lido) {
+          metricas = lido;
+          if (lido.cpu.overall != null) historicoCpu = [...historicoCpu.slice(-59), lido.cpu.overall];
+        }
+      }
       espera = setTimeout(laco, jogo ? 5000 : document.hidden ? 4000 : 2000);
     };
     void laco();
@@ -1004,6 +1024,21 @@
                   </li>
                 {/each}
               </ul>
+              {#if curvaCpu && !jogo}
+                <figure class="vivo">
+                  <svg viewBox="0 0 120 36" preserveAspectRatio="none" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="vivo-preenchido" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="currentColor" stop-opacity="0.22" />
+                        <stop offset="1" stop-color="currentColor" stop-opacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path d={curvaCpu.area} fill="url(#vivo-preenchido)" />
+                    <path d={curvaCpu.linha} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+                  </svg>
+                  <figcaption class="sec pequeno">Processador nos últimos 2 minutos</figcaption>
+                </figure>
+              {/if}
               {#if jogo}<p class="sec pequeno">Leitura pausada com o jogo aberto.</p>{/if}
               <button class="link" onclick={() => abrir("sistema", "agora")}>Ver quem está pesando <Icone nome="seta_direita" tamanho={14} /></button>
             </section>
@@ -1062,6 +1097,12 @@
                     </li>
                   {/each}
                 </ul>
+              {/if}
+              {#if lista.length <= 1}
+                <div class="avisos-calmo">
+                  <Oti acessorio={temporada?.acessorio ?? null} humor="feliz" tamanho={54} segueCursor={false} />
+                  <p class="sec">{lista.length === 0 ? "Tudo certo por aqui." : "Fora isso, tudo certo por aqui."}</p>
+                </div>
               {/if}
             </section>
 
@@ -2358,6 +2399,31 @@
     gap: 1px;
     min-width: 0;
     font-size: 13px;
+  }
+
+  /* O gráfico vivo do processador: desce até o rodapé do bloco Agora. */
+  .vivo {
+    display: grid;
+    gap: 4px;
+    margin: auto 0 0;
+    color: var(--texto);
+  }
+  .vivo svg {
+    width: 100%;
+    height: 54px;
+    opacity: 0.85;
+  }
+  .vivo figcaption {
+    font-size: 11px;
+  }
+
+  /* Com um aviso só (ou nenhum), o Oti ocupa o resto do bloco em vez de deixar um buraco. */
+  .avisos-calmo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: auto;
+    padding-top: 10px;
   }
 
   /* Avisos */
