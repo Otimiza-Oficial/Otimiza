@@ -68,6 +68,7 @@ principal mais claro em menos tempo de olhar.
 - [x] Visão geral — capas de reserva com logo, curva do processador, Oti nos avisos
 - [x] Frame Boost em componentes · Jogos como página de jogo · Tela com medidor de Hz · Histórico em linha do tempo
 - [x] Épocas — varal por época, partículas atrás do vidro, cor da marca e filete por época, geada no Natal
-- [ ] Rede (herói do sinal), Turbo (modos), Mira, Cores, Latência, Energia, Prova (gráfico com a marca)
+- [x] Rede (herói do sinal), Prova (gráfico com a marca), passada no claro (Jogos)
+- [ ] Turbo (modos), Mira, Cores, Latência, Energia, Sistema e Ajustes: só a passada geral dos cartões até agora
 - [ ] Balão do Oti, apresentação, avisos
 - [ ] Passada no tema claro, prints finais, texto do changelog
