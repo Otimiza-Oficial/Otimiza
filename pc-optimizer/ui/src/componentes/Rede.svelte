@@ -315,6 +315,15 @@
           {@const leitura = l.leitura}
           {#if leitura.estado === "lida" || (leitura.estado === "lista_vazia" && leitura.conexao)}
             {@const c = leitura.conexao!}
+            {@const pct = Math.max(0, Math.min(100, 2 * (c.rssi_dbm + 100)))}
+            <!-- O sinal em destaque: o número que a pessoa entende (a mesma conta do bloco Agora) e as quatro barrinhas -->
+            <div class="sinal-heroi">
+              <span class="barras" aria-hidden="true">
+                {#each [1, 2, 3, 4] as b (b)}<i class:acesa={pct >= b * 22} style:height={`${8 + b * 7}px`}></i>{/each}
+              </span>
+              <strong class="numero">{pct}%</strong>
+              <span class="apoio">de sinal · {c.rssi_dbm} dBm</span>
+            </div>
             <p class="destaque">Wi-Fi “{c.ssid}”, sinal {NOME_DO_SINAL[c.sinal]}</p>
             <dl class="ficha">
               <dt>Sinal</dt>
@@ -690,6 +699,35 @@
 </div>
 
 <style>
+  .sinal-heroi {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    margin-bottom: 4px;
+  }
+  .sinal-heroi .numero {
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+  }
+  .sinal-heroi .apoio {
+    padding-bottom: 6px;
+  }
+  .barras {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding-bottom: 6px;
+  }
+  .barras i {
+    width: 7px;
+    border-radius: 3px;
+    background: var(--linha-forte);
+  }
+  .barras i.acesa {
+    background: var(--tinta);
+  }
   .destaque {
     font-weight: 500;
   }
