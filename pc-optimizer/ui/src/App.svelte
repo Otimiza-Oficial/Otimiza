@@ -65,6 +65,21 @@
     prova: "relogio",
     ajustes: "ajustes",
   };
+  /** A cor do ladrilho de cada área no cabeçalho (ícone branco por cima): reconhecer a área de relance. */
+  const COR_DA_AREA: Partial<Record<IdDaArea, string>> = {
+    turbo: "#ff9f0a",
+    jogos: "#ff3b30",
+    rede: "#0a84ff",
+    latencia: "#bf5af2",
+    energia: "#30d158",
+    tela: "#32ade6",
+    sistema: "#8e8e93",
+    prova: "#5e5ce6",
+    historico: "#636366",
+    mira: "#ff375f",
+    cores: "#af52de",
+    ajustes: "#8e8e93",
+  };
   /** O ícone no cabeçalho de cada área. */
   const ICONE_DA_AREA: Partial<Record<IdDaArea, NomeDoIcone>> = {
     turbo: "raio",
@@ -1133,7 +1148,7 @@
         {:else}
           <div class="area-aberta">
             <header class="area-topo">
-              <span class="area-icone"><Icone nome={ICONE_DA_AREA[aberta] ?? "grade"} tamanho={22} /></span>
+              <span class="area-icone" style:--cor-area={COR_DA_AREA[aberta] ?? "#8e8e93"}><Icone nome={ICONE_DA_AREA[aberta] ?? "grade"} tamanho={24} /></span>
               <div class="area-nome">
                 <h2>{area.nome}</h2>
                 {#if area.pergunta}<p class="sec">{area.pergunta}</p>{/if}
@@ -2619,17 +2634,26 @@
     gap: 16px;
     padding: 4px 4px 6px;
   }
+  /* O ladrilho colorido da área: degradê da cor, brilho de vidro no alto, ícone branco e uma sombra da mesma cor. */
   .area-icone {
+    position: relative;
     display: grid;
     place-items: center;
     flex: none;
-    width: 48px;
-    height: 48px;
-    border-radius: 15px;
-    background: linear-gradient(180deg, var(--bloco-2), var(--bloco));
-    border: 1px solid var(--vidro-borda);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 8px 20px rgb(0 0 0 / 0.18);
-    color: var(--texto);
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    background:
+      radial-gradient(120% 80% at 30% 0%, rgb(255 255 255 / 0.45), transparent 55%),
+      linear-gradient(160deg, color-mix(in srgb, var(--cor-area) 75%, #fff), var(--cor-area) 55%, color-mix(in srgb, var(--cor-area) 80%, #000));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      inset 0 -1px 0 rgb(0 0 0 / 0.15),
+      0 10px 24px -6px color-mix(in srgb, var(--cor-area) 60%, transparent);
+    color: #fff;
+  }
+  .area-icone :global(svg) {
+    filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.25));
   }
   .area-nome {
     flex: 1;
