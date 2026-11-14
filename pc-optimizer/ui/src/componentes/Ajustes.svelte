@@ -42,7 +42,7 @@
    *  de fábrica. As outras chaves de `flags` ficam como estão: lê tudo e grava tudo, trocando só esta. */
   let nvidia = $state(false);
   let smoothMotion = $state<boolean | null>(null);
-  /** A escala do Frame Boost (o jogo com menos pixels, ampliado para a tela): desligada por padrão. */
+  /** A escala do Frame Boost (o jogo com menos pixels, ampliado para a tela): ligada por padrão, como na 1.0. */
   let escalaPermitida = $state<boolean | null>(null);
   async function alternarEscala() {
     if (escalaPermitida === null) return;
@@ -154,7 +154,7 @@
       .hardwareUltimo()
       .then((h) => {
         nvidia = h?.placa.fabricante === "Nvidia";
-        ferramentas.escalaPermitida().then((v) => (escalaPermitida = v)).catch(() => (escalaPermitida = false));
+        ferramentas.escalaPermitida().then((v) => (escalaPermitida = v)).catch(() => (escalaPermitida = true));
         if (nvidia && noTauri) como<{ smooth_motion_drs: boolean }>(commands.flagsLer()).then((f) => (smoothMotion = f.smooth_motion_drs)).catch(() => {});
       })
       .catch(() => {});
@@ -338,13 +338,14 @@
     <section class="secao">
       <div class="linha">
         <div class="info">
-          <h2>Permitir a escala</h2>
+          <h2>Escala do Frame Boost</h2>
           <span class="apoio">
-            Com ela, o Frame Boost e o Turbo podem deixar o jogo numa janela menor (menos pixels, mais FPS) e ampliar para a
-            tela. Desligada, o Otimiza nunca muda a resolução do jogo: o Frame Boost só gera quadros.
+            Com ela, o Frame Boost e o Turbo podem fazer o jogo desenhar menos pixels e ampliar para a tela: em placa de vídeo
+            no limite, é FPS de verdade a mais. O monitor não muda. Desligada, o Otimiza nunca mexe na resolução do jogo e o
+            Frame Boost só gera quadros.
           </span>
         </div>
-        <button class="interruptor" role="switch" aria-checked={escalaPermitida} aria-label="Permitir a escala" onclick={alternarEscala}></button>
+        <button class="interruptor" role="switch" aria-checked={escalaPermitida} aria-label="Escala do Frame Boost" onclick={alternarEscala}></button>
       </div>
     </section>
   {/if}

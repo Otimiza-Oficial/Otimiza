@@ -1851,10 +1851,11 @@ fn sessao(
                 let razao = guarda.razao_media();
                 match reacao_a_perda(gpu.leve()) {
                     // No FiveM do dono a guarda desligou o gerador 7 vezes (o jogo perdendo de 5% a 35%): antes de
-                    // desistir, alivia a placa e confere de novo do zero (a média de antes condenaria o modo leve).
+                    // desistir, alivia a placa e confere de novo do zero (a média de antes condenaria o modo leve),
+                    // com a régua do modo leve (`RAZAO_MINIMA_LEVE`): perder pouco não tira o Frame Boost inteiro.
                     ReacaoAPerda::FicarLeve => {
                         gpu.modo_leve(true);
-                        guarda = guarda::Guarda::nova(segundos(inicio));
+                        guarda = guarda::Guarda::nova_leve(segundos(inicio));
                         crate::utils::Logger::warn(&format!(
                             "gerador: o jogo perdia FPS (razão {:?}); modo leve, conferindo de novo",
                             razao

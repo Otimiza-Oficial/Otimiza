@@ -2580,11 +2580,12 @@ export type Flags_Deserialize = {
 	/**  R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão. */
 	prioridade_na_rede?: boolean,
 	/**
-	 *  A escala do Frame Boost (o jogo numa janela menor, ampliada para a tela). Desligada por padrão, decisão do dono
-	 *  (13/11/2026): o Otimiza não muda a resolução do jogo sem a pessoa pedir. Vale para o Frame Boost, o Turbo e o
-	 *  "Jogar".
+	 *  A pessoa desligou a escala do Frame Boost (o jogo numa janela menor, ampliada para a tela) nos Ajustes. Ligada
+	 *  por padrão, como na 1.0: em placa fraca é ela que dá FPS de verdade, e a 1.0.1 (que a desligou para todos, com a
+	 *  chave `escala_permitida`) deixou o jogo menos liso. A chave antiga fica no arquivo e é ignorada. Vale para o
+	 *  Frame Boost, o Turbo e o "Jogar".
 	 */
-	escala_permitida?: boolean,
+	escala_desligada?: boolean,
 };
 
 export type Flags_Serialize = {
@@ -2606,11 +2607,12 @@ export type Flags_Serialize = {
 	/**  R5: o jogo aberto marcado com DSCP 46 (`prioridade_jogo`). Experimento, desligado por padrão. */
 	prioridade_na_rede: boolean,
 	/**
-	 *  A escala do Frame Boost (o jogo numa janela menor, ampliada para a tela). Desligada por padrão, decisão do dono
-	 *  (13/11/2026): o Otimiza não muda a resolução do jogo sem a pessoa pedir. Vale para o Frame Boost, o Turbo e o
-	 *  "Jogar".
+	 *  A pessoa desligou a escala do Frame Boost (o jogo numa janela menor, ampliada para a tela) nos Ajustes. Ligada
+	 *  por padrão, como na 1.0: em placa fraca é ela que dá FPS de verdade, e a 1.0.1 (que a desligou para todos, com a
+	 *  chave `escala_permitida`) deixou o jogo menos liso. A chave antiga fica no arquivo e é ignorada. Vale para o
+	 *  Frame Boost, o Turbo e o "Jogar".
 	 */
-	escala_permitida: boolean,
+	escala_desligada: boolean,
 };
 
 export type FonteDaNativa = 
@@ -4138,8 +4140,11 @@ export type PainelFrameboost_Deserialize = {
 	lembrada?: EscolhaFbPorJogo_Deserialize | null,
 	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
 	lembrada_texto?: string | null,
-	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
-	auto_competitivo: boolean,
+	/**
+	 *  A placa de vídeo já está quase cheia com o jogo (`comecar_leve`): só gerar quadros tira FPS do jogo, e a tela
+	 *  sugere a escala, que dá FPS real a mais.
+	 */
+	placa_no_limite?: boolean,
 };
 
 export type PainelFrameboost_Serialize = {
@@ -4169,8 +4174,11 @@ export type PainelFrameboost_Serialize = {
 	lembrada: EscolhaFbPorJogo_Serialize | null,
 	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
 	lembrada_texto: string | null,
-	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
-	auto_competitivo: boolean,
+	/**
+	 *  A placa de vídeo já está quase cheia com o jogo (`comecar_leve`): só gerar quadros tira FPS do jogo, e a tela
+	 *  sugere a escala, que dá FPS real a mais.
+	 */
+	placa_no_limite: boolean,
 };
 
 export type PainelIntel = PainelIntel_Serialize | PainelIntel_Deserialize;

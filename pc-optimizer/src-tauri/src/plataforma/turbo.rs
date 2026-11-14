@@ -120,7 +120,7 @@ pub fn sem_escala(r: Receita) -> Receita {
 
 /// A receita como vale nesta máquina: sem a escala, se a pessoa não a permitiu.
 pub fn conforme_os_ajustes(r: Receita) -> Receita {
-    if super::flags::Flags::load().escala_permitida {
+    if !super::flags::Flags::load().escala_desligada {
         r
     } else {
         sem_escala(r)

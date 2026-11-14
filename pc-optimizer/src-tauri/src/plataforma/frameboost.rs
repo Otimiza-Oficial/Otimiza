@@ -113,8 +113,10 @@ pub struct Painel {
     pub lembrada: Option<super::fb_por_jogo::Escolha>,
     /// A mesma escolha em palavras ("Frame Boost 3×").
     pub lembrada_texto: Option<String>,
-    /// O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso.
-    pub auto_competitivo: bool,
+    /// A placa de vídeo já está quase cheia com o jogo (`comecar_leve`): só gerar quadros tira FPS do jogo, e a tela
+    /// sugere a escala, que dá FPS real a mais.
+    #[serde(default)]
+    pub placa_no_limite: bool,
 }
 
 /// A frase da última vez que o Frame Boost ligou, para o painel repetir enquanto ele estiver ligado.
@@ -344,7 +346,7 @@ pub fn painel_de(
         escalas: Vec::new(),
         lembrada: None,
         lembrada_texto: None,
-        auto_competitivo: false,
+        placa_no_limite: false,
     }
 }
 
@@ -449,8 +451,12 @@ pub fn painel() -> Painel {
         Some(ativo_do_driver(recurso, medicao.as_ref()))
     });
     let mut p = painel_de(jogo.as_ref(), nativo, hz, &gerador, pelo_driver);
-    if p.aviso.is_none() && jogo.is_some() {
-        p.aviso = aviso_de_folga(memoria_disponivel_gb(), uso_da_placa_pct());
+    if jogo.is_some() {
+        let placa = uso_da_placa_pct();
+        p.placa_no_limite = comecar_leve(placa);
+        if p.aviso.is_none() {
+            p.aviso = aviso_de_folga(memoria_disponivel_gb(), placa);
+        }
     }
     if let (Some(j), Some(hz)) = (jogo.as_ref(), hz) {
         p.base = super::base_do_jogo::travada(j.pid, &j.executavel, hz);
@@ -468,7 +474,6 @@ pub fn painel() -> Painel {
     // FB8 à vista: o que ficou guardado para este jogo, para a tela oferecer "usar de novo".
     if let Some(j) = jogo.as_ref() {
         let id = super::historico::id_do_jogo(&j.executavel).0;
-        p.auto_competitivo = super::turbo::competitivo(&id);
         if let Some(e) = super::fb_por_jogo::escolha(&id) {
             p.lembrada_texto = Some(super::fb_por_jogo::descrever(&e));
             p.lembrada = Some(e);
@@ -578,16 +583,6 @@ fn uso_da_placa_pct() -> Option<u32> {
 /// Liga o Frame Boost que o automático escolheu. O do jogo não é do Otimiza ligar (vai no menu de vídeo dele); o
 /// Smooth Motion só com o interruptor experimental; o AFMF e o gerador do Otimiza, sempre.
 #[cfg(target_os = "windows")]
-/// **Pura.** O multiplicador que vale de fato: em jogo competitivo, o Auto fica em 2× (menos atraso) em vez de encher
-/// o monitor; o resto passa como veio.
-pub fn multiplicador_para(pedido: u8, id_do_jogo: &str) -> u8 {
-    if pedido == 0 && super::turbo::competitivo(id_do_jogo) {
-        2
-    } else {
-        pedido
-    }
-}
-
 pub fn ligar(
     app: &tauri::AppHandle,
     multiplicador: u8,
@@ -599,17 +594,16 @@ pub fn ligar(
     crate::modules::licenca::exigir()?;
     // A escala só com a pessoa permitindo (Ajustes): o Otimiza não muda a resolução do jogo por conta própria. Todo
     // caminho passa aqui (Frame Boost, Turbo, "Jogar", a escolha lembrada).
-    let escala = if super::flags::Flags::load().escala_permitida {
+    let escala = if !super::flags::Flags::load().escala_desligada {
         escala
     } else {
         if escala.is_some() && multiplicador == 1 {
-            return Err("A escala está desligada nos Ajustes: o Otimiza não muda a resolução do jogo. Para usar, ligue \"Permitir a escala\" em Ajustes.".to_string());
+            return Err("A escala está desligada nos Ajustes: o Otimiza não muda a resolução do jogo. Para usar, ligue \"Escala do Frame Boost\" em Ajustes.".to_string());
         }
         None
     };
     let jogo =
         super::sessao::atual().ok_or("Abra o jogo primeiro: o Frame Boost liga no jogo aberto.")?;
-    let multiplicador = multiplicador_para(multiplicador, &super::historico::id_do_jogo(&jogo.executavel).0);
     let recomendado = jogo
         .frame_boost_auto
         .clone()
@@ -747,15 +741,6 @@ pub fn medir() -> Result<Painel, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn auto_em_jogo_competitivo_fica_em_2x() {
-        assert_eq!(multiplicador_para(0, "cs2"), 2);
-        assert_eq!(multiplicador_para(0, "valorant"), 2);
-        assert_eq!(multiplicador_para(0, "fivem"), 0, "fora da lista, o Auto continua enchendo o monitor");
-        assert_eq!(multiplicador_para(3, "cs2"), 3, "escolha fixa da pessoa passa como veio");
-        assert_eq!(multiplicador_para(1, "cs2"), 1);
-    }
 
     #[test]
     fn placa_quase_cheia_comeca_leve() {
