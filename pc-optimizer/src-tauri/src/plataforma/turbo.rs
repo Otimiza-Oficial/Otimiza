@@ -457,6 +457,58 @@ fn receitas_em(p: &Perfis) -> Vec<ReceitaDoJogo> {
         .collect()
 }
 
+/// O Turbo de um jogo para a página dele: o id (quando o jogo é do catálogo ou já tem receita), a receita e o atraso.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct TurboDoJogo {
+    pub id: Option<String>,
+    pub receita: Option<ReceitaDoJogo>,
+    pub menor_atraso: bool,
+    pub competitivo: bool,
+}
+
+fn so_letras(s: &str) -> String {
+    s.to_lowercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect()
+}
+
+/// **Pura.** O id pelo nome que a loja mostra: a receita guardada com esse nome, ou o jogo do catálogo com esse nome.
+fn id_pelo_nome(p: &Perfis, nome: &str) -> Option<String> {
+    let alvo = so_letras(nome);
+    p.jogos
+        .keys()
+        .find(|id| so_letras(&nome_do_id(id)) == alvo || so_letras(id) == alvo)
+        .cloned()
+        .or_else(|| {
+            super::jogos::CATALOGO
+                .iter()
+                .find(|j| so_letras(j.nome) == alvo || so_letras(j.id) == alvo)
+                .map(|j| j.id.to_string())
+        })
+}
+
+fn do_jogo_em(p: &Perfis, nome: &str) -> TurboDoJogo {
+    let id = id_pelo_nome(p, nome);
+    let receita = id.as_ref().and_then(|id| receitas_em(p).into_iter().find(|r| &r.id == id));
+    TurboDoJogo {
+        menor_atraso: id.as_deref().map(|i| menor_atraso_em(p, i)).unwrap_or(false),
+        competitivo: id.as_deref().map(competitivo).unwrap_or(false),
+        id,
+        receita,
+    }
+}
+
+/// A página do jogo: lê e, com `menor`, grava a escolha de atraso antes.
+pub fn do_jogo(nome: &str, menor: Option<bool>) -> Result<TurboDoJogo, String> {
+    let c = caminho();
+    let mut p = ler_em(&c);
+    if let Some(m) = menor {
+        let id = id_pelo_nome(&p, nome).ok_or("Este jogo ainda não é conhecido pelo Turbo: abra ele uma vez com o Otimiza aberto.")?;
+        escolher_atraso_em(&mut p, &id, m);
+        gravar_em(&c, &p)?;
+    }
+    Ok(do_jogo_em(&p, nome))
+}
+
 /// Todas as receitas guardadas, de todos os jogos. Só lê.
 pub fn receitas() -> Vec<ReceitaDoJogo> {
     receitas_em(&ler_em(&caminho()))
@@ -1276,6 +1328,22 @@ mod tests {
             assert_eq!((r.escala, r.multiplicador, r.energia, r.memoria), (None, None, false, false));
             assert!(!r.explicacao.is_empty());
         }
+    }
+
+    #[test]
+    fn a_pagina_do_jogo_acha_o_turbo_pelo_nome_da_loja() {
+        let receita = montar(Gargalo::Placa, Some(50.0), Some(144), false);
+        let mut p = Perfis::default();
+        p.jogos.insert("fivem".into(), Perfil { receita, fps_antes: Some(50.0), medido_em: 1, prova: None });
+        let fivem = do_jogo_em(&p, "FiveM");
+        assert_eq!(fivem.id.as_deref(), Some("fivem"));
+        assert!(fivem.receita.is_some());
+        // Sem receita, o jogo do catálogo ainda tem id (dá para escolher o atraso) e vem como competitivo.
+        let cs = do_jogo_em(&p, &nome_do_id("cs2"));
+        assert_eq!(cs.id.as_deref(), Some("cs2"));
+        assert!(cs.receita.is_none() && cs.competitivo && cs.menor_atraso);
+        // Jogo desconhecido: sem id, sem escolha.
+        assert!(do_jogo_em(&p, "Jogo Que Não Existe").id.is_none());
     }
 
     #[test]

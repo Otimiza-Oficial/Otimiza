@@ -86,6 +86,7 @@ mod tests {
                 // Onda 2: Turbo.
                 crate::commands::turbo_painel,
                 crate::commands::turbo_receitas,
+                crate::commands::turbo_do_jogo,
                 crate::commands::turbo_ligar,
                 crate::commands::turbo_provar,
                 crate::commands::turbo_prova_guardada,

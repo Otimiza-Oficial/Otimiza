@@ -68,6 +68,9 @@ import {
 export type { Ganho, Parte, Tela, VersaoDoApp } from "./tipos";
 /** Uma receita do Turbo guardada para um jogo, com o nome dele (a página do jogo mostra a sua). */
 export type ReceitaDoTurboPorJogo = Awaited<ReturnType<typeof commands.turboReceitas>>[number];
+/** O Turbo de um jogo na página dele: a receita e a escolha de atraso. */
+export type TurboDoJogoNaPagina = Awaited<ReturnType<typeof commands.turboDoJogo>>;
+const atrasoDemo: Record<string, boolean> = {};
 export type Hardware = PerfilDeHardware_Serialize;
 export type Lancamento = LancamentoGerado;
 export type RelatorioDaPartida = RelatorioDaPartida_Serialize;
@@ -1076,6 +1079,16 @@ export const ponte = {
     return ligado ? { tipo: "NadaALimitar", avisos: [] } : { tipo: "Desligado" };
   },
   turbo: (): Promise<PainelDoTurbo> => (noTauri ? commands.turboPainel() : Promise.resolve(painelDemo())),
+  /** O Turbo de um jogo pelo nome (página do jogo); com `menor`, grava a escolha de atraso antes. */
+  turboDoJogo: async (nome: string, menor: boolean | null): Promise<TurboDoJogoNaPagina> => {
+    if (noTauri) return commands.turboDoJogo(nome, menor);
+    const id = nome.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const competitivo = ["counterstrike2", "valorant", "fortnite"].includes(id);
+    if (menor != null) atrasoDemo[id] = menor;
+    const menorAtraso = atrasoDemo[id] ?? competitivo;
+    const [fivem] = await ponte.turboReceitas();
+    return { id, receita: id === "fivem" && !menorAtraso ? fivem : null, menor_atraso: menorAtraso, competitivo };
+  },
   /** As receitas do Turbo guardadas por jogo. No navegador, a do FiveM de demonstração. */
   turboReceitas: (): Promise<ReceitaDoTurboPorJogo[]> =>
     noTauri

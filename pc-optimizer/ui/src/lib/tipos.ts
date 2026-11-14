@@ -165,6 +165,11 @@ export const commands = {
 	/**  As receitas do Turbo guardadas para cada jogo (a página do jogo mostra a dele). `LIVRES`: só lê. */
 	turboReceitas: () => __TAURI_INVOKE<ReceitaDoJogo_Serialize[]>("turbo_receitas"),
 	/**
+	 *  O Turbo de um jogo pelo nome (a página do jogo): a receita guardada e a escolha de atraso; com `menor`, grava a
+	 *  escolha antes (trocar esquece a receita montada com a outra). `LIVRES`: preferência no arquivo do Turbo.
+	 */
+	turboDoJogo: (nome: string, menor: boolean | null) => __TAURI_INVOKE<TurboDoJogo_Serialize>("turbo_do_jogo", { nome, menor }),
+	/**
 	 *  `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
 	 *  base é travado como no Frame Boost (o `travar_base` não trava no só escala).
 	 */
@@ -6389,6 +6394,25 @@ export type TrocaComOti = {
 	/**  "pessoa" ou "oti". */
 	papel: string,
 	texto: string,
+};
+
+/**  O Turbo de um jogo para a página dele: o id (quando o jogo é do catálogo ou já tem receita), a receita e o atraso. */
+export type TurboDoJogo = TurboDoJogo_Serialize | TurboDoJogo_Deserialize;
+
+/**  O Turbo de um jogo para a página dele: o id (quando o jogo é do catálogo ou já tem receita), a receita e o atraso. */
+export type TurboDoJogo_Deserialize = {
+	id?: string | null,
+	receita?: ReceitaDoJogo_Deserialize | null,
+	menor_atraso: boolean,
+	competitivo: boolean,
+};
+
+/**  O Turbo de um jogo para a página dele: o id (quando o jogo é do catálogo ou já tem receita), a receita e o atraso. */
+export type TurboDoJogo_Serialize = {
+	id: string | null,
+	receita: ReceitaDoJogo_Serialize | null,
+	menor_atraso: boolean,
+	competitivo: boolean,
 };
 
 /**  O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando). */

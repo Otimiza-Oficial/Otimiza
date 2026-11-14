@@ -32,6 +32,8 @@ R-a → R-b → T-a → F-b → F-a → T-b. Cada um: teste do que é puro, `car
 ## Andamento
 - [x] R-a — o "quando piora" usa também o ping das partidas (`rota_historico::das_partidas`, campo `das_partidas`)
 - [x] R-b — nota da fila A+…F (`ui/src/lib/fila.ts`, com teste)
-- [ ] T-a — próximo: comando `turbo_receitas` (LIVRES, só lê) listando os perfis de `turbo.rs` com o nome do catálogo
-  (`jogos::CATALOGO` pelo id) e o cartão "Turbo neste jogo" na aba Jogos (casar por `chaveDoJogo`)
-- [ ] F-b, F-a, T-b
+- [x] T-a — "Turbo neste jogo" na página do jogo (`turbo_do_jogo`, `turbo_receitas`, só preferência)
+- [x] T-b — Menor atraso × Mais FPS escolhível por jogo, mesmo sem receita (jogo do catálogo)
+- [x] F-b — "da última vez neste jogo" no Frame Boost com Usar de novo (`Painel.lembrada`)
+- [x] F-a — Auto em 2× nos competitivos (`frameboost::multiplicador_para`). **Conferir com jogo aberto** (atraso) antes
+  de publicar.
