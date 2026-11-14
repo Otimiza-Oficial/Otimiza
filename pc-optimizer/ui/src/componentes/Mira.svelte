@@ -137,7 +137,7 @@
 </script>
 
 <div class="area-mira">
-  <section class="estudio">
+  <section class="secao estudio">
     <!-- A mira em cima de um jogo: troque o fundo para ver se ela aparece no claro e no escuro. -->
     <div class="palco" data-fundo={fundo}>
       {#if fundo === "mapa"}

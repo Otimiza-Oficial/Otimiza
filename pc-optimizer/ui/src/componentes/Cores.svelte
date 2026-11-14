@@ -114,7 +114,7 @@
   }
 </script>
 
-<div class="estudio">
+<div class="secao estudio">
   <!-- A cena: antes à esquerda do divisor, depois à direita. O divisor é a própria imagem. -->
   <div class="palco">
     <canvas bind:this={canvas}></canvas>
