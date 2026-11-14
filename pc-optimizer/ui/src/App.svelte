@@ -48,6 +48,9 @@
   } from "./lib/ponte";
 
   type Tema = "claro" | "escuro";
+  /** O que fica atrás do vidro: grafite limpo (padrão), o cômodo desfocado ou a área de trabalho (janela transparente). */
+  type Fundo = "limpo" | "comodo" | "area";
+  const NOMES_DO_FUNDO: Record<Fundo, string> = { limpo: "Limpo", comodo: "Cômodo", area: "Área de trabalho" };
   const CHAVE_DO_TEMA = "otimiza.tema";
   const CHAVE_DO_FUNDO = "otimiza.fundo";
   /** Abaixo disto livre ao tocar em Jogar, o Oti avisa: FiveM e jogos atuais pedem uns 3 GB a mais na partida. */
@@ -77,8 +80,12 @@
   let wifi = $state<DiagnosticoDoWifi | null>(null);
   let mudancas = $state<number | null>(null);
   let tema = $state<Tema>(lerTema());
-  /** Sem fundo: o cômodo some e a área de trabalho aparece entre os cards (a janela é transparente). A pessoa escolhe. */
-  let semFundo = $state(lerFundo());
+  /** O fundo atrás do vidro. "Área de trabalho": a janela fica transparente e o Windows aparece entre os cards. */
+  let fundo = $state<Fundo>(lerFundo());
+  const semFundo = $derived(fundo === "area");
+  let menuDoFundo = $state(false);
+  /** O fundo que volta quando a apresentação desliga a "área de trabalho". */
+  let fundoAntes: Fundo = "limpo";
   /** A apresentação aberta: inteira (primeira vez, ou pedida nos Ajustes) ou só o passo da licença (botão da barra). */
   let boasVindas = $state<ModoDasBoasVindas | null>(null);
   let licenca = $state<EstadoDaLicenca | null>(null);
@@ -229,27 +236,37 @@
 
   function lerTema(): Tema {
     try {
-      return localStorage.getItem(CHAVE_DO_TEMA) === "escuro" ? "escuro" : "claro";
+      // Quem nunca escolheu começa no escuro: o grafite é a cara do Otimiza.
+      return localStorage.getItem(CHAVE_DO_TEMA) === "claro" ? "claro" : "escuro";
     } catch {
-      return "claro";
+      return "escuro";
     }
   }
 
-  function lerFundo(): boolean {
+  // "sem" e "com" são os valores de antes (o botão "Sem fundo"): quem escolheu continua com o que escolheu.
+  function lerFundo(): Fundo {
     try {
-      return localStorage.getItem(CHAVE_DO_FUNDO) === "sem";
+      const v = localStorage.getItem(CHAVE_DO_FUNDO);
+      return v === "sem" || v === "area" ? "area" : v === "com" || v === "comodo" ? "comodo" : "limpo";
     } catch {
-      return false;
+      return "limpo";
     }
   }
 
-  function alternarFundo() {
-    semFundo = !semFundo;
+  function escolherFundo(f: Fundo) {
+    if (f !== "area") fundoAntes = f;
+    fundo = f;
+    menuDoFundo = false;
     try {
-      localStorage.setItem(CHAVE_DO_FUNDO, semFundo ? "sem" : "com");
+      localStorage.setItem(CHAVE_DO_FUNDO, f);
     } catch {
       // Só não lembra na próxima abertura.
     }
+  }
+
+  /** A apresentação só liga e desliga a área de trabalho. */
+  function alternarFundo() {
+    escolherFundo(fundo === "area" ? fundoAntes : "area");
   }
 
   function abrirBoasVindas(modo: ModoDasBoasVindas) {
@@ -279,6 +296,7 @@
     document.documentElement.classList.toggle("jogo-aberto", jogoNaTela);
     document.documentElement.dataset.tema = tema === "escuro" ? "noite" : "dia";
     document.documentElement.classList.toggle("janela-transparente", semFundo);
+    document.documentElement.classList.toggle("fundo-limpo", fundo === "limpo");
   });
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -721,6 +739,7 @@
 </script>
 
 <!-- O cômodo desfocado atrás do vidro. Feito em CSS: parede, janela com luz, chão, sofá e luminária. -->
+<div class="limpo" data-epoca={temporada?.id ?? null} aria-hidden="true"></div>
 <div class="comodo" data-epoca={temporada?.id ?? null} aria-hidden="true">
   <div class="parede"></div>
   <div class="janela-luz"></div>
@@ -765,9 +784,20 @@
       {#if licenca && !licenca.ativa}
         <button class="ativar-botao" onclick={() => abrirBoasVindas("licenca")}>Ativar licença</button>
       {/if}
-      <button class="fundo-botao" aria-pressed={semFundo} title={semFundo ? "Voltar o fundo" : "Tirar o fundo e ver a área de trabalho"} onclick={alternarFundo}>
-        Sem fundo
-      </button>
+      <div class="fundo-escolha">
+        <button class="fundo-botao" aria-haspopup="menu" aria-expanded={menuDoFundo} title="O que fica atrás do painel" onclick={() => (menuDoFundo = !menuDoFundo)}>
+          Fundo: {NOMES_DO_FUNDO[fundo]}
+        </button>
+        {#if menuDoFundo}
+          <div class="fundo-menu vidro-forte" role="menu" in:entrar>
+            {#each Object.entries(NOMES_DO_FUNDO) as [id, nome] (id)}
+              <button role="menuitemradio" aria-checked={fundo === id} onclick={() => escolherFundo(id as Fundo)}>
+                <span class="amostra" data-fundo={id}></span>{nome}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
       <button class="redondo" aria-label="Avisos" onclick={() => (mostrarAvisos = !mostrarAvisos)}>
         <Icone nome="sino" tamanho={18} />
         {#if lista.length > 0}<span class="contador">{lista.length}</span>{/if}
@@ -1114,6 +1144,41 @@
 </div>
 
 <style>
+  /* ---------- O fundo limpo (padrão): grafite com uma luz de cima e um respiro da marca embaixo ---------- */
+  .limpo {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    display: none;
+    background:
+      radial-gradient(70% 55% at 50% -10%, rgb(255 255 255 / 0.07), transparent 70%),
+      radial-gradient(60% 40% at 50% 115%, color-mix(in srgb, var(--marca) 14%, transparent), transparent 70%),
+      linear-gradient(180deg, #121215 0%, #0b0b0d 100%);
+  }
+  :global(:root[data-tema="dia"]) .limpo {
+    background:
+      radial-gradient(70% 55% at 50% -10%, rgb(255 255 255 / 0.95), transparent 70%),
+      radial-gradient(60% 40% at 50% 115%, color-mix(in srgb, var(--marca) 8%, transparent), transparent 70%),
+      linear-gradient(180deg, #f3f4f7 0%, #e6e8ee 100%);
+  }
+  :global(:root.fundo-limpo) .limpo {
+    display: block;
+  }
+  :global(:root.fundo-limpo) .comodo {
+    display: none;
+  }
+  /* A luz da época também entra no fundo limpo, bem mais baixa que no cômodo (lá ela passa pelo desfoque). */
+  .limpo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  .limpo[data-epoca]::after {
+    opacity: 0.55;
+  }
+
   /* ---------- O cômodo atrás do vidro ---------- */
   .comodo {
     position: fixed;
@@ -1133,39 +1198,46 @@
   .comodo[data-epoca]::after {
     opacity: 1;
   }
-  .comodo[data-epoca="natal"]::after {
+  .comodo[data-epoca="natal"]::after,
+  .limpo[data-epoca="natal"]::after {
     background:
       radial-gradient(ellipse 40% 50% at 12% 70%, rgb(214 47 58 / 0.35), transparent 70%),
       radial-gradient(ellipse 35% 45% at 88% 30%, rgb(34 139 84 / 0.3), transparent 70%),
       radial-gradient(ellipse 30% 30% at 60% 85%, rgb(255 210 120 / 0.35), transparent 70%);
   }
-  .comodo[data-epoca="ano-novo"]::after {
+  .comodo[data-epoca="ano-novo"]::after,
+  .limpo[data-epoca="ano-novo"]::after {
     background:
       radial-gradient(ellipse 45% 50% at 80% 25%, rgb(230 180 34 / 0.35), transparent 70%),
       radial-gradient(ellipse 40% 40% at 20% 80%, rgb(255 255 255 / 0.35), transparent 70%);
   }
-  .comodo[data-epoca="carnaval"]::after {
+  .comodo[data-epoca="carnaval"]::after,
+  .limpo[data-epoca="carnaval"]::after {
     background:
       radial-gradient(ellipse 40% 45% at 15% 30%, rgb(122 43 214 / 0.3), transparent 70%),
       radial-gradient(ellipse 40% 45% at 85% 70%, rgb(255 79 154 / 0.3), transparent 70%),
       radial-gradient(ellipse 30% 35% at 55% 20%, rgb(46 196 182 / 0.25), transparent 70%);
   }
-  .comodo[data-epoca="pascoa"]::after {
+  .comodo[data-epoca="pascoa"]::after,
+  .limpo[data-epoca="pascoa"]::after {
     background:
       radial-gradient(ellipse 45% 50% at 20% 30%, rgb(255 182 200 / 0.4), transparent 70%),
       radial-gradient(ellipse 45% 50% at 80% 75%, rgb(190 230 200 / 0.4), transparent 70%);
   }
-  .comodo[data-epoca="festa-junina"]::after {
+  .comodo[data-epoca="festa-junina"]::after,
+  .limpo[data-epoca="festa-junina"]::after {
     background:
       radial-gradient(ellipse 50% 45% at 50% 95%, rgb(255 140 40 / 0.4), transparent 70%),
       radial-gradient(ellipse 35% 35% at 15% 20%, rgb(250 204 21 / 0.3), transparent 70%);
   }
-  .comodo[data-epoca="dia-das-criancas"]::after {
+  .comodo[data-epoca="dia-das-criancas"]::after,
+  .limpo[data-epoca="dia-das-criancas"]::after {
     background:
       radial-gradient(ellipse 40% 45% at 20% 25%, rgb(59 130 246 / 0.3), transparent 70%),
       radial-gradient(ellipse 40% 45% at 80% 75%, rgb(250 204 21 / 0.3), transparent 70%);
   }
-  .comodo[data-epoca="halloween"]::after {
+  .comodo[data-epoca="halloween"]::after,
+  .limpo[data-epoca="halloween"]::after {
     background:
       radial-gradient(ellipse 45% 50% at 20% 75%, rgb(249 115 22 / 0.4), transparent 70%),
       radial-gradient(ellipse 45% 45% at 85% 25%, rgb(88 28 135 / 0.4), transparent 70%);
@@ -1278,6 +1350,24 @@
     --vidro-borda: rgb(255 255 255 / 0.12);
     --bloco-solto: rgb(38 38 42 / 0.94);
   }
+  /* Fundo limpo: o vidro vira grafite firme (o desfoque não tem o que desfocar e só gastaria placa). */
+  :global(:root.fundo-limpo) .casca {
+    --vidro-fundo: rgb(250 250 252 / 0.82);
+    --vidro-borda: rgb(255 255 255 / 0.9);
+    --bloco: rgb(0 0 0 / 0.035);
+    --bloco-solto: rgb(255 255 255 / 0.92);
+    --bloco-2: rgb(0 0 0 / 0.06);
+  }
+  :global(:root.fundo-limpo[data-tema="noite"]) .casca {
+    --vidro-fundo: rgb(24 24 27 / 0.86);
+    --vidro-borda: rgb(255 255 255 / 0.08);
+    --bloco: rgb(255 255 255 / 0.045);
+    --bloco-solto: rgb(26 26 30 / 0.96);
+    --bloco-2: rgb(255 255 255 / 0.09);
+  }
+  :global(:root.fundo-limpo) .vidro,
+  :global(:root.fundo-limpo) .vidro-forte,
+  :global(:root.fundo-limpo) .painel.solto .bloco,
   :global(:root.janela-transparente) .vidro,
   :global(:root.janela-transparente) .vidro-forte,
   :global(:root.janela-transparente) .painel.solto .bloco {
@@ -1435,10 +1525,56 @@
     font-size: 13px;
     cursor: pointer;
   }
-  .fundo-botao[aria-pressed="true"] {
-    background: var(--texto);
-    color: var(--contra, #fff);
-    border-color: transparent;
+  .fundo-escolha {
+    position: relative;
+  }
+  .fundo-menu {
+    position: absolute;
+    right: 0;
+    top: 44px;
+    z-index: 30;
+    display: grid;
+    gap: 2px;
+    min-width: 210px;
+    padding: 6px;
+    border-radius: 16px;
+  }
+  .fundo-menu button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 38px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--texto);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .fundo-menu button:hover {
+    background: var(--bloco-2);
+  }
+  .fundo-menu button[aria-checked="true"] {
+    background: var(--bloco-2);
+    font-weight: 600;
+  }
+  .amostra {
+    width: 22px;
+    height: 16px;
+    border-radius: 5px;
+    border: 1px solid var(--linha-forte);
+  }
+  .amostra[data-fundo="limpo"] {
+    background: linear-gradient(180deg, #2a2a2f, #0b0b0d);
+  }
+  .amostra[data-fundo="comodo"] {
+    background: linear-gradient(180deg, #d9d4cd, #a79c8f);
+  }
+  .amostra[data-fundo="area"] {
+    background: repeating-conic-gradient(var(--linha-forte) 0 25%, transparent 0 50%) 0 0 / 8px 8px;
   }
   .segmento {
     display: flex;
@@ -2363,6 +2499,25 @@
   .aba.ativa {
     color: var(--ativo-texto);
     font-weight: 600;
+  }
+  /* O pontinho da marca embaixo da aba ativa: o único vermelho fixo da tela. */
+  .aba::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 5px;
+    width: 4px;
+    height: 4px;
+    margin-left: -2px;
+    border-radius: 50%;
+    background: var(--marca);
+    opacity: 0;
+    transform: scale(0.4);
+    transition: opacity var(--mov-medio) ease, transform var(--mov-medio) var(--curva-mola);
+  }
+  .aba.ativa::after {
+    opacity: 1;
+    transform: scale(1);
   }
 
   .pausado {

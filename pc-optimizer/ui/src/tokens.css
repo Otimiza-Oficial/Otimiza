@@ -31,6 +31,11 @@
   --acao-forte: #000000;
   --acao-suave: rgb(29 29 31 / 0.06);
 
+  /* A cor da marca (a do vídeo): só em momento de marca — aba ativa, segmento escolhido, número-herói, foco. Botão
+     principal continua preto/branco. Nunca para estado (ok, atenção e perigo têm cores próprias). */
+  --marca: #e5262c;
+  --marca-suave: rgb(229 38 44 / 0.1);
+
   /* Estado: só em ponto, ícone pequeno ou texto curto. */
   --ok: #1d936e;
   --atencao: #b8741a;
@@ -86,6 +91,8 @@
   --acao: #f5f5f7;
   --acao-forte: #ffffff;
   --acao-suave: rgb(255 255 255 / 0.08);
+  --marca: #ff3b3b;
+  --marca-suave: rgb(255 59 59 / 0.14);
   --ok: #4cc59a;
   --atencao: #e2a34f;
   --perigo: #ec7a73;
@@ -149,8 +156,12 @@ input {
 }
 
 :focus-visible {
-  outline: 2px solid var(--acao);
+  outline: 2px solid var(--marca);
   outline-offset: 2px;
+}
+
+::selection {
+  background: var(--marca-suave);
 }
 
 h1,
