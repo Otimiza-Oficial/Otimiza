@@ -62,3 +62,12 @@ Cada onda: `svelte-check`, `npm run testes:ui`, prints dos dois temas com `scrip
 ## O que fica para o construtor
 Disposição exata de cada aba, textos curtos, quais detalhes recolher. Regra de desempate: o que deixa o número ou a ação
 principal mais claro em menos tempo de olhar.
+
+## Andamento (atualizado a cada commit)
+- [x] Onda 1 — fundo Limpo padrão, escuro padrão, cor da marca, cabeçalho das áreas, seções em cartões
+- [x] Visão geral — capas de reserva com logo, curva do processador, Oti nos avisos
+- [x] Frame Boost em componentes · Jogos como página de jogo · Tela com medidor de Hz · Histórico em linha do tempo
+- [x] Épocas — varal por época, partículas atrás do vidro, cor da marca e filete por época, geada no Natal
+- [ ] Rede (herói do sinal), Turbo (modos), Mira, Cores, Latência, Energia, Prova (gráfico com a marca)
+- [ ] Balão do Oti, apresentação, avisos
+- [ ] Passada no tema claro, prints finais, texto do changelog
