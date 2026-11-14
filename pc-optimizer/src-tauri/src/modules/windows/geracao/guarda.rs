@@ -14,6 +14,10 @@ pub const INTERVALO_INICIAL: f64 = 5.0;
 pub const INTERVALO_DE_ROTINA: f64 = 300.0;
 pub const MINIMO_DE_AMOSTRAS: usize = 3;
 pub const RAZAO_MINIMA: f64 = 0.96;
+/// Já no modo leve, a régua para desligar de vez. Com 0,96 nas duas, o log do dono mostrou o gerador desligando com o
+/// jogo mantendo 95,5% do FPS: a tela perdia o 2× inteiro (uns 80% de quadros a mais) por 4,5% do jogo. Abaixo de 90%,
+/// sim, o jogo sente, e desliga.
+pub const RAZAO_MINIMA_LEVE: f64 = 0.90;
 /// Medido nesta máquina (PresentMon 2.6.0 no dwm, `presentmon::tests::vivo_conta_o_dwm`): os quadros chegam de 3,1 a
 /// 3,9 s depois de apresentados (lote do ETW mais o que o PresentMon segura para calcular as métricas). Cinco dão folga.
 pub const ATRASO_DA_CONTAGEM: f64 = 5.0;
@@ -53,6 +57,8 @@ pub struct Guarda {
     pub razoes: Vec<f64>,
     /// Conferências descartadas seguidas (jogo parado, fonte sem contagem): cada uma dobra a espera da próxima.
     falhas: u32,
+    /// Abaixo desta razão média, desliga: `RAZAO_MINIMA`, ou `RAZAO_MINIMA_LEVE` depois do modo leve.
+    minima: f64,
 }
 
 impl Guarda {
@@ -63,6 +69,15 @@ impl Guarda {
             },
             razoes: Vec::new(),
             falhas: 0,
+            minima: RAZAO_MINIMA,
+        }
+    }
+
+    /// A guarda depois do modo leve: confere de novo do zero, com a régua de `RAZAO_MINIMA_LEVE`.
+    pub fn nova_leve(agora: f64) -> Guarda {
+        Guarda {
+            minima: RAZAO_MINIMA_LEVE,
+            ..Guarda::nova(agora)
         }
     }
 
@@ -122,7 +137,7 @@ impl Guarda {
                     proxima: agora + intervalo,
                 };
                 if self.razoes.len() >= MINIMO_DE_AMOSTRAS
-                    && self.razao_media().is_some_and(|r| r < RAZAO_MINIMA)
+                    && self.razao_media().is_some_and(|r| r < self.minima)
                 {
                     Acao::Desligar
                 } else {
@@ -168,7 +183,10 @@ mod tests {
 
     /// O jogo roda a `fps_com` gerando e `fps_sem` pausado; `atraso` simula o ETW entregando depois.
     fn simular(fps_com: f64, fps_sem: f64, segundos: f64, atraso: f64) -> (Guarda, Vec<Acao>) {
-        let mut g = Guarda::nova(0.0);
+        simular_com(Guarda::nova(0.0), fps_com, fps_sem, segundos, atraso)
+    }
+
+    fn simular_com(mut g: Guarda, fps_com: f64, fps_sem: f64, segundos: f64, atraso: f64) -> (Guarda, Vec<Acao>) {
         let mut linha = LinhaDoTempo::default();
         let mut pendentes: std::collections::VecDeque<f64> = Default::default();
         let mut acoes = Vec::new();
@@ -193,6 +211,19 @@ mod tests {
             t += passo;
         }
         (g, acoes)
+    }
+
+    #[test]
+    fn no_modo_leve_perder_pouco_nao_desliga_mas_perder_muito_sim() {
+        // 92% do FPS: antes desligava (o log do dono mostrou até com 95,5%); no modo leve, o gerador fica.
+        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 64.4, 70.0, 120.0, 0.0);
+        assert!(!acoes.contains(&Acao::Desligar), "{:?}", acoes);
+        // Fora do modo leve, a mesma perda ainda pede o modo leve primeiro.
+        let (_, acoes) = simular(64.4, 70.0, 120.0, 0.0);
+        assert!(acoes.contains(&Acao::Desligar));
+        // 80% do FPS: o jogo sente; no modo leve, desliga.
+        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 56.0, 70.0, 120.0, 0.0);
+        assert!(acoes.contains(&Acao::Desligar));
     }
 
     #[test]
