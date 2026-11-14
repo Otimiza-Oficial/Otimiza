@@ -422,6 +422,46 @@ fn escolher_atraso_em(p: &mut Perfis, id_do_jogo: &str, menor: bool) {
     p.menor_atraso.insert(id_do_jogo.to_string(), menor);
 }
 
+/// Uma receita guardada, com o nome do jogo para a tela (a página do jogo, na aba Jogos).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct ReceitaDoJogo {
+    pub id: String,
+    pub nome: String,
+    pub perfil: Perfil,
+    /// A escolha "menor atraso" valendo para o jogo (a da pessoa, ou a sugestão de jogo competitivo).
+    pub menor_atraso: bool,
+    /// O jogo está na lista de competitivos: sem escolha, ele vai de menor atraso.
+    pub competitivo: bool,
+}
+
+/// **Pura.** O nome de um id de jogo para a tela: o do catálogo, ou o executável sem ".exe".
+pub fn nome_do_id(id: &str) -> String {
+    super::jogos::CATALOGO
+        .iter()
+        .find(|j| j.id == id)
+        .map(|j| j.nome.to_string())
+        .unwrap_or_else(|| id.trim_end_matches(".exe").to_string())
+}
+
+fn receitas_em(p: &Perfis) -> Vec<ReceitaDoJogo> {
+    p.jogos
+        .iter()
+        .map(|(id, perfil)| ReceitaDoJogo {
+            id: id.clone(),
+            nome: nome_do_id(id),
+            perfil: perfil.clone(),
+            menor_atraso: menor_atraso_em(p, id),
+            competitivo: competitivo(id),
+        })
+        .collect()
+}
+
+/// Todas as receitas guardadas, de todos os jogos. Só lê.
+pub fn receitas() -> Vec<ReceitaDoJogo> {
+    receitas_em(&ler_em(&caminho()))
+}
+
 pub fn esquecer(id_do_jogo: &str) -> Result<(), String> {
     let c = caminho();
     let mut p = ler_em(&c);
@@ -1236,6 +1276,23 @@ mod tests {
             assert_eq!((r.escala, r.multiplicador, r.energia, r.memoria), (None, None, false, false));
             assert!(!r.explicacao.is_empty());
         }
+    }
+
+    #[test]
+    fn as_receitas_guardadas_saem_com_o_nome_do_jogo_e_a_escolha_do_atraso() {
+        let receita = montar(Gargalo::Processador, Some(70.0), Some(144), false);
+        let perfil = Perfil { receita, fps_antes: Some(70.0), medido_em: 5, prova: Some(Desfecho::Ganhou) };
+        let mut p = Perfis::default();
+        p.jogos.insert("cs2".into(), perfil.clone());
+        p.jogos.insert("meujogo.exe".into(), perfil);
+        let r = receitas_em(&p);
+        assert_eq!(r.len(), 2);
+        let cs2 = r.iter().find(|x| x.id == "cs2").unwrap();
+        assert!(cs2.competitivo && cs2.menor_atraso, "competitivo sem escolha vai de menor atraso");
+        assert_ne!(cs2.nome, "cs2", "o nome vem do catálogo");
+        let outro = r.iter().find(|x| x.id == "meujogo.exe").unwrap();
+        assert_eq!(outro.nome, "meujogo");
+        assert!(!outro.competitivo && !outro.menor_atraso);
     }
 
     #[test]

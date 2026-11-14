@@ -162,6 +162,8 @@ export const commands = {
 	bandaDesligar: () => __TAURI_INVOKE<ResultadoDaBanda_Serialize>("banda_desligar"),
 	/**  O Turbo do jogo aberto: o perfil lembrado, se o jogo é competitivo e o que o Turbo fez. `LIVRES`: só lê. */
 	turboPainel: () => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_painel"),
+	/**  As receitas do Turbo guardadas para cada jogo (a página do jogo mostra a dele). `LIVRES`: só lê. */
+	turboReceitas: () => __TAURI_INVOKE<ReceitaDoJogo_Serialize[]>("turbo_receitas"),
 	/**
 	 *  `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
 	 *  base é travado como no Frame Boost (o `travar_base` não trava no só escala).
@@ -4876,6 +4878,31 @@ export type ReceitaDaComunidade_Serialize = {
 	pcs: number,
 	ganho_fps_pct: number | null,
 	ganho_low_pct: number | null,
+};
+
+/**  Uma receita guardada, com o nome do jogo para a tela (a página do jogo, na aba Jogos). */
+export type ReceitaDoJogo = ReceitaDoJogo_Serialize | ReceitaDoJogo_Deserialize;
+
+/**  Uma receita guardada, com o nome do jogo para a tela (a página do jogo, na aba Jogos). */
+export type ReceitaDoJogo_Deserialize = {
+	id: string,
+	nome: string,
+	perfil: PerfilDoTurbo_Deserialize,
+	/**  A escolha "menor atraso" valendo para o jogo (a da pessoa, ou a sugestão de jogo competitivo). */
+	menor_atraso: boolean,
+	/**  O jogo está na lista de competitivos: sem escolha, ele vai de menor atraso. */
+	competitivo: boolean,
+};
+
+/**  Uma receita guardada, com o nome do jogo para a tela (a página do jogo, na aba Jogos). */
+export type ReceitaDoJogo_Serialize = {
+	id: string,
+	nome: string,
+	perfil: PerfilDoTurbo_Serialize,
+	/**  A escolha "menor atraso" valendo para o jogo (a da pessoa, ou a sugestão de jogo competitivo). */
+	menor_atraso: boolean,
+	/**  O jogo está na lista de competitivos: sem escolha, ele vai de menor atraso. */
+	competitivo: boolean,
 };
 
 export type ReceitaDoTurbo = ReceitaDoTurbo_Serialize | ReceitaDoTurbo_Deserialize;

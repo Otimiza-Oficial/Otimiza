@@ -66,6 +66,8 @@ import {
 } from "./tipos";
 
 export type { Ganho, Parte, Tela, VersaoDoApp } from "./tipos";
+/** Uma receita do Turbo guardada para um jogo, com o nome dele (a página do jogo mostra a sua). */
+export type ReceitaDoTurboPorJogo = Awaited<ReturnType<typeof commands.turboReceitas>>[number];
 export type Hardware = PerfilDeHardware_Serialize;
 export type Lancamento = LancamentoGerado;
 export type RelatorioDaPartida = RelatorioDaPartida_Serialize;
@@ -1074,6 +1076,31 @@ export const ponte = {
     return ligado ? { tipo: "NadaALimitar", avisos: [] } : { tipo: "Desligado" };
   },
   turbo: (): Promise<PainelDoTurbo> => (noTauri ? commands.turboPainel() : Promise.resolve(painelDemo())),
+  /** As receitas do Turbo guardadas por jogo. No navegador, a do FiveM de demonstração. */
+  turboReceitas: (): Promise<ReceitaDoTurboPorJogo[]> =>
+    noTauri
+      ? commands.turboReceitas()
+      : Promise.resolve([
+          {
+            id: "fivem",
+            nome: "FiveM",
+            perfil: {
+              receita: {
+                gargalo: "Processador",
+                escala: null,
+                multiplicador: 0,
+                energia: true,
+                memoria: false,
+                explicacao: "O processador segura o FiveM (98% num núcleo, a placa folgada). O plano de energia segura o clock e o Frame Boost dobra o que chega à tela.",
+              },
+              fps_antes: 72,
+              medido_em: Math.floor(Date.now() / 1000) - 3 * 86400,
+              prova: "Ganhou",
+            },
+            menor_atraso: false,
+            competitivo: false,
+          },
+        ]),
   ligarTurbo: async (lembrado: boolean): Promise<PainelDoTurbo> => {
     if (noTauri) return commands.turboLigar(lembrado);
     if (!jogoDemo) throw new Error("Abra o jogo primeiro: o Turbo mede o jogo aberto.");
