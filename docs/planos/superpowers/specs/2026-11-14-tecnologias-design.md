@@ -28,3 +28,10 @@ teste em placa que não temos aqui; o que precisar de jogo aberto para provar fi
 ## Ordem
 R-a → R-b → T-a → F-b → F-a → T-b. Cada um: teste do que é puro, `cargo test` do contrato quando mudar comando,
 `svelte-check`, prints, commit. Nada vai para o instalador público sem o dono testar o de teste.
+
+## Andamento
+- [x] R-a — o "quando piora" usa também o ping das partidas (`rota_historico::das_partidas`, campo `das_partidas`)
+- [x] R-b — nota da fila A+…F (`ui/src/lib/fila.ts`, com teste)
+- [ ] T-a — próximo: comando `turbo_receitas` (LIVRES, só lê) listando os perfis de `turbo.rs` com o nome do catálogo
+  (`jogos::CATALOGO` pelo id) e o cartão "Turbo neste jogo" na aba Jogos (casar por `chaveDoJogo`)
+- [ ] F-b, F-a, T-b
