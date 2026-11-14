@@ -153,6 +153,14 @@
             <span class="apoio">Hz agora</span>
           </div>
         </div>
+        {#if t.atual && t.hz_maximo_aqui && t.hz_maximo_aqui > 0}
+          {@const fr = Math.min(1, t.atual.hz / t.hz_maximo_aqui)}
+          <!-- Quanto do monitor está em uso: a barra enche até o Hz atual, a marca do fim é o que ele aguenta -->
+          <div class="medidor" class:cheio={fr >= 0.99} title={`${t.atual.hz} de ${t.hz_maximo_aqui} Hz`}>
+            <div class="trilho-hz"><div class="cheio-hz" style:width={`${Math.max(3, fr * 100)}%`}></div></div>
+            <div class="marcas"><span>0</span><span>{t.atual.hz} Hz em uso</span><span>{t.hz_maximo_aqui} Hz</span></div>
+          </div>
+        {/if}
         <p class="texto">
           <span class="ponto" data-tom={t.veredito.estado === "NoMaximo" ? "ok" : t.veredito.estado === "ModosIlegiveis" ? "neutro" : "atencao"}></span>
           {t.texto}
@@ -214,9 +222,39 @@
     gap: 6px;
   }
   .hz .numero {
-    font-size: var(--t-numero);
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+  }
+  .medidor {
+    display: grid;
+    gap: 6px;
+  }
+  .trilho-hz {
+    height: 10px;
+    border-radius: 999px;
+    background: var(--linha-forte);
+    overflow: hidden;
+  }
+  .cheio-hz {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--atencao), color-mix(in srgb, var(--atencao) 70%, #fff));
+    transition: width var(--mov-entrar) var(--curva-saida);
+  }
+  .medidor.cheio .cheio-hz {
+    background: linear-gradient(90deg, var(--ok), color-mix(in srgb, var(--ok) 70%, #fff));
+  }
+  .marcas {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--tinta-3);
+  }
+  .marcas span:nth-child(2) {
+    color: var(--tinta-2);
     font-weight: 600;
-    line-height: 1;
   }
   .texto {
     display: flex;
