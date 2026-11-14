@@ -182,7 +182,8 @@
     right: 40px;
     top: 66px;
     height: 34px;
-    z-index: 2;
+    /* Abaixo da casca (que vem depois no DOM, com o mesmo z): o menu do Fundo e o balão do Oti passam por cima do varal. */
+    z-index: 1;
     pointer-events: none;
     color: rgb(255 255 255 / 0.22);
   }

@@ -1471,6 +1471,8 @@
   /* ---------- Barra de cima ---------- */
   .topo {
     position: absolute;
+    /* Acima do painel: o menu do Fundo abre por cima dos blocos. */
+    z-index: 5;
     left: 96px;
     right: 24px;
     top: 14px;
@@ -1596,6 +1598,8 @@
     position: relative;
   }
   .fundo-menu {
+    background: rgb(250 250 252 / 0.98);
+    box-shadow: 0 20px 50px rgb(0 0 0 / 0.35);
     position: absolute;
     right: 0;
     top: 44px;
@@ -1605,6 +1609,9 @@
     min-width: 210px;
     padding: 6px;
     border-radius: 16px;
+  }
+  :global(:root[data-tema="noite"]) .fundo-menu {
+    background: rgb(30 30 34 / 0.98);
   }
   .fundo-menu button {
     display: flex;
@@ -2034,6 +2041,8 @@
     position: absolute;
     inset: 0;
     transform: rotate(-90deg);
+    /* Sem isto o brilho do anel era cortado pelo quadrado do SVG (aparecia um quadrado rosado atrás). */
+    overflow: visible;
   }
   .anel circle {
     fill: none;
