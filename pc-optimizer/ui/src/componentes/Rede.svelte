@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { notaDaFila, tomDaNota } from "../lib/fila";
   import Esqueleto from "./Esqueleto.svelte";
   // A área Rede: por onde o PC sai (cabo, Wi-Fi, VPN), a rota salto a salto com o dono de cada trecho, e a varredura
   // de Wi-Fi segurada durante o jogo. O veredito e as frases vêm prontos do Rust: a tela não reinterpreta número.
@@ -315,6 +316,15 @@
           {@const leitura = l.leitura}
           {#if leitura.estado === "lida" || (leitura.estado === "lista_vazia" && leitura.conexao)}
             {@const c = leitura.conexao!}
+            {@const pct = Math.max(0, Math.min(100, 2 * (c.rssi_dbm + 100)))}
+            <!-- O sinal em destaque: o número que a pessoa entende (a mesma conta do bloco Agora) e as quatro barrinhas -->
+            <div class="sinal-heroi">
+              <span class="barras" aria-hidden="true">
+                {#each [1, 2, 3, 4] as b (b)}<i class:acesa={pct >= b * 22} style:height={`${8 + b * 7}px`}></i>{/each}
+              </span>
+              <strong class="numero">{pct}%</strong>
+              <span class="apoio">de sinal · {c.rssi_dbm} dBm</span>
+            </div>
             <p class="destaque">Wi-Fi “{c.ssid}”, sinal {NOME_DO_SINAL[c.sinal]}</p>
             <dl class="ficha">
               <dt>Sinal</dt>
@@ -477,6 +487,17 @@
     {#if erroFila}
       <p class="erro">{erroFila}</p>
     {:else if fila && !medindoFila}
+      {@const nota = notaDaFila(fila.baixando.a_mais_ms, fila.enviando.a_mais_ms)}
+      {#if nota}
+        <!-- A nota, na escala dos testes públicos de bufferbloat, e a frase do que fazer, em uma olhada -->
+        <div class="nota-fila" data-tom={tomDaNota(nota)}>
+          <strong class="nota">{nota}</strong>
+          <div>
+            <span class="apoio">Nota da fila (bufferbloat)</span>
+            <p class="destaque">{fila.frase}</p>
+          </div>
+        </div>
+      {/if}
       <div class="fases" role="list">
         {#each [["Parado", fila.parado], ["Baixando", fila.baixando], ["Enviando", fila.enviando]] as const as [nome, f] (nome)}
           <div class="fase" role="listitem">
@@ -490,7 +511,7 @@
           </div>
         {/each}
       </div>
-      <p class="destaque">{fila.frase}</p>
+      {#if !nota}<p class="destaque">{fila.frase}</p>{/if}
     {/if}
   </section>
 
@@ -568,8 +589,8 @@
     <h2 id="rede-quando">Quando piora</h2>
     {#if !historico || historico.resumo.medidas === 0}
       <p class="apoio">
-        Cada rota que você mede fica guardada aqui. Meça em horários diferentes (de manhã e à noite, jogando) e o
-        Otimiza mostra se a sua conexão piora em algum horário.
+        Isto se enche sozinho: enquanto você joga, o Otimiza mede o ping e guarda por horário. As rotas que você mede
+        aqui também entram. Com partidas em horários diferentes, aparece se a sua conexão piora em algum deles.
       </p>
     {:else}
       <p class="destaque">
@@ -592,6 +613,15 @@
           </div>
         {/each}
       </div>
+      <p class="apoio pequeno">
+        {#if historico.das_partidas > 0}
+          {historico.das_partidas} {historico.das_partidas === 1 ? "medida veio" : "medidas vieram"} das suas partidas (gravadas sozinhas durante o jogo){historico.resumo.medidas > historico.das_partidas
+            ? `, ${historico.resumo.medidas - historico.das_partidas} das rotas que você mediu`
+            : ""}.
+        {:else}
+          Das rotas que você mediu. Jogando com o Otimiza aberto, o ping das partidas também entra aqui.
+        {/if}
+      </p>
       {#if historico.relatorio}
         <div class="chamado">
           <p class="apoio">
@@ -690,6 +720,73 @@
 </div>
 
 <style>
+  .nota-fila {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--ok) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+  }
+  .nota-fila[data-tom="atencao"] {
+    background: color-mix(in srgb, var(--atencao) 10%, transparent);
+    border-color: color-mix(in srgb, var(--atencao) 35%, transparent);
+  }
+  .nota-fila[data-tom="perigo"] {
+    background: color-mix(in srgb, var(--perigo) 10%, transparent);
+    border-color: color-mix(in srgb, var(--perigo) 35%, transparent);
+  }
+  .nota {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    font-family: var(--fonte-titulo);
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--ok);
+    background: color-mix(in srgb, var(--ok) 16%, transparent);
+  }
+  .nota-fila[data-tom="atencao"] .nota {
+    color: var(--atencao);
+    background: color-mix(in srgb, var(--atencao) 16%, transparent);
+  }
+  .nota-fila[data-tom="perigo"] .nota {
+    color: var(--perigo);
+    background: color-mix(in srgb, var(--perigo) 16%, transparent);
+  }
+  .sinal-heroi {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    margin-bottom: 4px;
+  }
+  .sinal-heroi .numero {
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+  }
+  .sinal-heroi .apoio {
+    padding-bottom: 6px;
+  }
+  .barras {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    padding-bottom: 6px;
+  }
+  .barras i {
+    width: 7px;
+    border-radius: 3px;
+    background: var(--linha-forte);
+  }
+  .barras i.acesa {
+    background: var(--tinta);
+  }
   .destaque {
     font-weight: 500;
   }

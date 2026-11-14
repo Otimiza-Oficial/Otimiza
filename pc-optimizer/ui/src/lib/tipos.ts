@@ -96,7 +96,7 @@ export const commands = {
 	redePrioridadeLigar: () => __TAURI_INVOKE<boolean>("rede_prioridade_ligar"),
 	/**  Desliga o R5 (e tira a marca na hora). `LIVRES`: desligar nunca depende de licença. */
 	redePrioridadeDesligar: () => __TAURI_INVOKE<boolean>("rede_prioridade_desligar"),
-	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
+	/**  As rotas já medidas e o ping das partidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
 	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
 	redeWifi: () => __TAURI_INVOKE<DiagnosticoDoWifi_Serialize>("rede_wifi"),
@@ -162,6 +162,13 @@ export const commands = {
 	bandaDesligar: () => __TAURI_INVOKE<ResultadoDaBanda_Serialize>("banda_desligar"),
 	/**  O Turbo do jogo aberto: o perfil lembrado, se o jogo é competitivo e o que o Turbo fez. `LIVRES`: só lê. */
 	turboPainel: () => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_painel"),
+	/**  As receitas do Turbo guardadas para cada jogo (a página do jogo mostra a dele). `LIVRES`: só lê. */
+	turboReceitas: () => __TAURI_INVOKE<ReceitaDoJogo_Serialize[]>("turbo_receitas"),
+	/**
+	 *  O Turbo de um jogo pelo nome (a página do jogo): a receita guardada e a escolha de atraso; com `menor`, grava a
+	 *  escolha antes (trocar esquece a receita montada com a outra). `LIVRES`: preferência no arquivo do Turbo.
+	 */
+	turboDoJogo: (nome: string, menor: boolean | null) => __TAURI_INVOKE<TurboDoJogo_Serialize>("turbo_do_jogo", { nome, menor }),
 	/**
 	 *  `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
 	 *  base é travado como no Frame Boost (o `travar_base` não trava no só escala).
@@ -2117,6 +2124,26 @@ export type Episodio = {
 
 export type Escolha = "SoDesempenho" | "TodosOsNucleos";
 
+export type EscolhaFbPorJogo = EscolhaFbPorJogo_Serialize | EscolhaFbPorJogo_Deserialize;
+
+export type EscolhaFbPorJogo_Deserialize = {
+	/**  0 = Auto, 1 = só escala, 2+ = fixo. */
+	multiplicador: number,
+	escala?: NivelDeEscala | null,
+	alvo_fps?: number | null,
+	manteve_pct: number | null,
+	quando: number,
+};
+
+export type EscolhaFbPorJogo_Serialize = {
+	/**  0 = Auto, 1 = só escala, 2+ = fixo. */
+	multiplicador: number,
+	escala: NivelDeEscala | null,
+	alvo_fps: number | null,
+	manteve_pct: number | null,
+	quando: number,
+};
+
 export type EscolhaMotorenergia = EscolhaMotorenergia_Serialize | EscolhaMotorenergia_Deserialize;
 
 export type EscolhaMotorenergia_Deserialize = {
@@ -2736,6 +2763,8 @@ export type HistoricoDaRede_Deserialize = {
 	resumo: ResumoDaRede_Deserialize,
 	/**  Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela). */
 	relatorio?: string | null,
+	/**  Quantas medidas do resumo vieram das partidas (o ping gravado sozinho durante o jogo), e não de rota medida. */
+	das_partidas: number,
 };
 
 export type HistoricoDaRede_Serialize = {
@@ -2744,6 +2773,8 @@ export type HistoricoDaRede_Serialize = {
 	resumo: ResumoDaRede_Serialize,
 	/**  Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela). */
 	relatorio: string | null,
+	/**  Quantas medidas do resumo vieram das partidas (o ping gravado sozinho durante o jogo), e não de rota medida. */
+	das_partidas: number,
 };
 
 export type HistoricoNaTela = HistoricoNaTela_Serialize | HistoricoNaTela_Deserialize;
@@ -4103,6 +4134,12 @@ export type PainelFrameboost_Deserialize = {
 	/**  O monitor onde o jogo está e, para cada nível de escala, a resolução em que o jogo deve rodar. */
 	monitor?: [number, number] | null,
 	escalas?: OpcaoEscala[],
+	/**  O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão): o painel oferece repetir. */
+	lembrada?: EscolhaFbPorJogo_Deserialize | null,
+	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
+	lembrada_texto?: string | null,
+	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
+	auto_competitivo: boolean,
 };
 
 export type PainelFrameboost_Serialize = {
@@ -4128,6 +4165,12 @@ export type PainelFrameboost_Serialize = {
 	/**  O monitor onde o jogo está e, para cada nível de escala, a resolução em que o jogo deve rodar. */
 	monitor: [number, number] | null,
 	escalas: OpcaoEscala[],
+	/**  O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão): o painel oferece repetir. */
+	lembrada: EscolhaFbPorJogo_Serialize | null,
+	/**  A mesma escolha em palavras ("Frame Boost 3×"). */
+	lembrada_texto: string | null,
+	/**  O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso. */
+	auto_competitivo: boolean,
 };
 
 export type PainelIntel = PainelIntel_Serialize | PainelIntel_Deserialize;
@@ -4872,6 +4915,31 @@ export type ReceitaDaComunidade_Serialize = {
 	pcs: number,
 	ganho_fps_pct: number | null,
 	ganho_low_pct: number | null,
+};
+
+/**  Uma receita guardada, com o nome do jogo para a tela (a página do jogo, na aba Jogos). */
+export type ReceitaDoJogo = ReceitaDoJogo_Serialize | ReceitaDoJogo_Deserialize;
+
+/**  Uma receita guardada, com o nome do jogo para a tela (a página do jogo, na aba Jogos). */
+export type ReceitaDoJogo_Deserialize = {
+	id: string,
+	nome: string,
+	perfil: PerfilDoTurbo_Deserialize,
+	/**  A escolha "menor atraso" valendo para o jogo (a da pessoa, ou a sugestão de jogo competitivo). */
+	menor_atraso: boolean,
+	/**  O jogo está na lista de competitivos: sem escolha, ele vai de menor atraso. */
+	competitivo: boolean,
+};
+
+/**  Uma receita guardada, com o nome do jogo para a tela (a página do jogo, na aba Jogos). */
+export type ReceitaDoJogo_Serialize = {
+	id: string,
+	nome: string,
+	perfil: PerfilDoTurbo_Serialize,
+	/**  A escolha "menor atraso" valendo para o jogo (a da pessoa, ou a sugestão de jogo competitivo). */
+	menor_atraso: boolean,
+	/**  O jogo está na lista de competitivos: sem escolha, ele vai de menor atraso. */
+	competitivo: boolean,
 };
 
 export type ReceitaDoTurbo = ReceitaDoTurbo_Serialize | ReceitaDoTurbo_Deserialize;
@@ -6326,6 +6394,25 @@ export type TrocaComOti = {
 	/**  "pessoa" ou "oti". */
 	papel: string,
 	texto: string,
+};
+
+/**  O Turbo de um jogo para a página dele: o id (quando o jogo é do catálogo ou já tem receita), a receita e o atraso. */
+export type TurboDoJogo = TurboDoJogo_Serialize | TurboDoJogo_Deserialize;
+
+/**  O Turbo de um jogo para a página dele: o id (quando o jogo é do catálogo ou já tem receita), a receita e o atraso. */
+export type TurboDoJogo_Deserialize = {
+	id?: string | null,
+	receita?: ReceitaDoJogo_Deserialize | null,
+	menor_atraso: boolean,
+	competitivo: boolean,
+};
+
+/**  O Turbo de um jogo para a página dele: o id (quando o jogo é do catálogo ou já tem receita), a receita e o atraso. */
+export type TurboDoJogo_Serialize = {
+	id: string | null,
+	receita: ReceitaDoJogo_Serialize | null,
+	menor_atraso: boolean,
+	competitivo: boolean,
 };
 
 /**  O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando). */

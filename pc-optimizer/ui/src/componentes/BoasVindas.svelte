@@ -635,6 +635,11 @@
     background: rgb(255 255 255 / 0.62);
     border: 1px solid rgb(0 0 0 / 0.06);
   }
+  /* No escuro a ficha era branca com letra branca (ilegível): vira o mesmo vidro escuro da caixa da licença. */
+  :global(:root[data-tema="noite"]) .pecas li {
+    background: rgb(255 255 255 / 0.05);
+    border-color: rgb(255 255 255 / 0.1);
+  }
   .pecas li.atencao {
     border-color: color-mix(in srgb, var(--laranja, #c2730f) 45%, transparent);
   }

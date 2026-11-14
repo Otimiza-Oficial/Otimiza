@@ -13,6 +13,7 @@
   import { onDestroy, onMount } from "svelte";
     import { listen } from "@tauri-apps/api/event";
   import { noTauri } from "../lib/ponte";
+  import Oti from "./Oti.svelte";
 
   type Situacao =
     | { situacao: "NaoSeAplica" }
@@ -136,8 +137,13 @@
 {#if folhaAberta && estado}
   <div class="veu">
     <div class="folha" role="dialog" aria-modal="true" aria-labelledby="feedback-titulo">
-      <p class="apoio pequeno">10 minutos de uso</p>
-      <h2 id="feedback-titulo">Conta pra gente como ficou</h2>
+      <div class="cabeca">
+        <span class="mascote"><Oti humor="feliz" tamanho={58} segueCursor={false} /></span>
+        <div>
+          <span class="etiqueta">10 minutos de uso</span>
+          <h2 id="feedback-titulo">Conta pra gente como ficou</h2>
+        </div>
+      </div>
       <p class="apoio">
         {estado.situacao === "Exigido" && estado.apagado
           ? "A sua mensagem não está mais no canal. Mande o feedback de novo para liberar as correções."
@@ -145,30 +151,42 @@
       </p>
       <ol class="passos">
         <li>
-          <strong>Tire um print com o FPS</strong>
-          <span class="apoio">A Prova do Otimiza ou qualquer contador de FPS servem.</span>
+          <span class="bola">1</span>
+          <div>
+            <strong>Tire um print com o FPS</strong>
+            <span class="apoio">A Prova do Otimiza ou qualquer contador de FPS servem.</span>
+          </div>
         </li>
         <li>
-          <strong>Mande no canal de feedbacks</strong>
-          <span class="apoio">Pelo menos 30 caracteres e o print. Cole este código na mensagem:</span>
-          <span class="codigo">
-            <span class="numero">{estado.maquina || "—"}</span>
-            <button class="btn quieto" onclick={copiar}>{copiado ? "Copiado" : "Copiar"}</button>
-          </span>
+          <span class="bola">2</span>
+          <div>
+            <strong>Mande no canal de feedbacks</strong>
+            <span class="apoio">Pelo menos 30 caracteres e o print, com este código na mensagem:</span>
+            <span class="codigo" class:copiado>
+              <span class="valor">{estado.maquina || "—"}</span>
+              <button onclick={copiar} aria-label="Copiar o código">{copiado ? "✓ Copiado" : "Copiar"}</button>
+            </span>
+          </div>
         </li>
         <li>
-          <strong>Volte e confirme</strong>
-          <span class="apoio">O bot leva até um minuto para ver a mensagem.</span>
+          <span class="bola">3</span>
+          <div>
+            <strong>Volte e confirme</strong>
+            <span class="apoio">O bot leva até um minuto para ver a mensagem.</span>
+          </div>
         </li>
       </ol>
       {#if recado}
         <div class="recado" role="status"><span class="ponto" data-tom={recado.tom}></span><div><span>{recado.texto}</span></div></div>
       {/if}
       <div class="acoes">
-        <button class="btn primario" onclick={abrirCanal}>Abrir o canal</button>
-        <button class="btn" disabled={conferindo} onclick={confirmar}>{conferindo ? "Conferindo…" : "Já mandei"}</button>
+        <button class="botao-discord" onclick={abrirCanal}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.6 1.3a18.4 18.4 0 0 0-5.6 0L8.6 3a19.7 19.7 0 0 0-4.9 1.5C.6 9.1-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2a19.8 19.8 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7ZM8 15.3c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.5 8 10.5s2.2 1.1 2.2 2.4S9.2 15.3 8 15.3Zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>
+          Abrir o canal
+        </button>
+        <button class="botao-ja" disabled={conferindo} onclick={confirmar}>{conferindo ? "Conferindo…" : "Já mandei"}</button>
       </div>
-      <button class="btn quieto so-medindo" onclick={soMedir}>Continuar só medindo</button>
+      <button class="so-medindo" onclick={soMedir}>Continuar só medindo</button>
     </div>
   </div>
 {/if}
@@ -213,74 +231,216 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background: rgb(10 12 20 / 0.42);
+    background: rgb(6 6 10 / 0.55);
+    backdrop-filter: blur(6px);
+    animation: aparece var(--mov-entrar) var(--curva-saida);
   }
   .folha {
+    position: relative;
     display: grid;
-    gap: 10px;
-    width: min(460px, 100%);
-    padding: 24px;
+    gap: 14px;
+    width: min(480px, 100%);
+    padding: 26px 26px 18px;
     border: 1px solid var(--linha-forte);
-    border-radius: var(--raio-3);
-    background: var(--superficie);
-    box-shadow: var(--sombra-3);
+    border-radius: 26px;
+    background:
+      radial-gradient(120% 60% at 0% 0%, var(--marca-suave), transparent 60%),
+      var(--superficie);
+    box-shadow: 0 40px 100px -20px rgb(0 0 0 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.08);
     color: var(--tinta);
+    animation: sobe var(--mov-entrar) var(--curva-saida);
   }
   :global(:root[data-tema="noite"]) .folha,
   :global(:root[data-tema="noite"]) .lembrete {
-    background: rgb(36 36 40 / 0.98);
+    background-color: rgb(30 30 34 / 0.98);
   }
-  .folha h2 {
-    font-family: var(--fonte-titulo);
-    font-size: var(--t-titulo);
-    font-weight: 600;
-  }
-  .passos {
-    display: grid;
-    gap: 12px;
-    margin: 6px 0;
-    padding-left: 20px;
-    font-size: 13px;
-  }
-  /* Os passos têm ordem de verdade: o número fica. */
-  .passos li {
-    padding-left: 4px;
-  }
-  .passos li::marker {
-    color: var(--tinta-2);
-    font-weight: 600;
-  }
-  .passos li > span,
-  .passos li > strong {
-    display: block;
-  }
-  .passos li > .codigo {
-    display: flex;
-  }
-  .codigo {
+  .cabeca {
     display: flex;
     align-items: center;
-    gap: 12px;
-    width: fit-content;
-    margin-top: 4px;
-    padding: 6px 10px;
-    border-radius: var(--raio-1);
+    gap: 14px;
+  }
+  .mascote {
+    flex: none;
+    filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--marca) 35%, transparent));
+  }
+  .etiqueta {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--marca-suave);
+    color: var(--marca);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .folha h2 {
+    margin-top: 6px;
+    font-family: var(--fonte-titulo);
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  /* Os passos numa linha do tempo: bolinha numerada e o fio entre elas. */
+  .passos {
+    list-style: none;
+    display: grid;
+    gap: 14px;
+    margin: 2px 0;
+    padding: 0;
+    font-size: 13px;
+  }
+  .passos li {
+    position: relative;
+    display: flex;
+    gap: 14px;
+  }
+  .passos li:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 30px;
+    bottom: -12px;
+    width: 2px;
+    background: var(--linha-forte);
+  }
+  .bola {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--marca);
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    box-shadow: 0 0 0 4px var(--marca-suave);
+  }
+  .passos strong,
+  .passos .apoio {
+    display: block;
+  }
+  .passos strong {
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+  .codigo {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 4px 4px 4px 12px;
+    border-radius: 12px;
+    border: 1px dashed var(--linha-forte);
     background: var(--superficie-2);
     user-select: text;
   }
+  .codigo .valor {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+  .codigo button {
+    margin-left: 8px;
+    height: 30px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 9px;
+    background: var(--tinta);
+    color: var(--contra, #fff);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .codigo.copiado {
+    border-color: var(--ok);
+  }
+  .codigo.copiado button {
+    background: var(--ok);
+    color: #fff;
+  }
   .acoes {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .botao-discord,
+  .botao-ja {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 46px;
+    border-radius: 14px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform var(--mov-rapido) var(--curva-mola), filter var(--mov-rapido) ease;
+  }
+  .botao-discord {
+    border: 0;
+    background: #5865f2;
+    color: #fff;
+    box-shadow: 0 10px 24px -8px rgb(88 101 242 / 0.7);
+  }
+  .botao-discord svg {
+    width: 20px;
+    height: 20px;
+  }
+  .botao-discord:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+  }
+  .botao-ja {
+    border: 1px solid var(--linha-forte);
+    background: var(--superficie-2);
+    color: var(--tinta);
+  }
+  .botao-ja:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .botao-ja:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
   .so-medindo {
     justify-self: center;
+    border: 0;
+    background: none;
     color: var(--tinta-2);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .so-medindo:hover {
+    color: var(--tinta);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  @keyframes aparece {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes sobe {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.98);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .veu,
+    .folha {
+      animation: none;
+    }
   }
   p {
     margin: 0;
-  }
-  .pequeno {
-    font-size: 12px;
   }
 </style>

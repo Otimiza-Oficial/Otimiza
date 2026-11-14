@@ -210,6 +210,8 @@ mod tests {
         "frame_boost_painel",
         "frame_boost_desligar",
         "turbo_painel",
+        "turbo_receitas",
+        "turbo_do_jogo",
         "turbo_desligar",
         "turbo_esquecer",
         "turbo_atraso",

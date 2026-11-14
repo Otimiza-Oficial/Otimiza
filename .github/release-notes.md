@@ -8,13 +8,43 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.0_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.1_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.1_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.1: Correções de bugs e acabamento
+
+Atualização de correções da 1.0 (número interno 4.0.1). Arrumamos o que vocês reportaram e aproveitamos para dar acabamento à interface. Tudo que o Otimiza muda continua com o valor de antes guardado e o desfazer.
+
+## Correções
+
+- O **Frame Boost** não muda mais a resolução do jogo sem você permitir (opção **Permitir a escala** nos Ajustes). A prova do Turbo também respeita a escala desligada.
+- As capas de CS2, Fortnite, Roblox e Valorant não somem mais sem internet: aparece o logo do jogo.
+- Na apresentação, a ficha do PC ficava branca com letra branca no tema escuro.
+- O menu do **Fundo** abria atrás do varal de luzes e do painel.
+- O anel de prontidão da Visão geral tinha um quadrado atrás.
+- Os enfeites das épocas do ano não caem mais por cima do texto, e param com o jogo aberto.
+
+## Acabamento da interface
+
+- Todas as abas reorganizadas: cabeçalho com ícone colorido, cada seção no seu cartão e menos parede de texto.
+- **Visão geral** com a faixa "Pronto pra jogar" e o processador ao vivo.
+- **Jogos** com cara de página de jogo; **Tela** mostra quanto do monitor está em uso (ex.: 60 de 180 Hz); **Histórico** em linha do tempo; **Turbo** com os níveis em cartões e barra de progresso.
+- **Mira** e **Cores** com a prévia em cenas reais de FiveM.
+- **Fundo:** Aurora, Brasa, Oceano, Neon, Cidade e Morro, ou **uma imagem sua**, com desfoque e escurecer ajustáveis. A imagem fica só no seu PC.
+- Natal, Ano Novo, Carnaval e as outras épocas agora mudam o app inteiro.
+
+## Ajustes finos
+
+- **Frame Boost:** no Auto, CS2, Valorant e outros competitivos usam 2× (menos atraso). O jogo mostra o que já foi provado nele, com o botão **Usar de novo**.
+- **Turbo por jogo:** escolha **Menor atraso** ou **Mais FPS** direto na página do jogo.
+- **Rede:** a nota da fila (bufferbloat) em destaque, e o "quando piora" se enche sozinho com o ping das suas partidas.
 
 ---
 

@@ -33,6 +33,13 @@
       .map(([q, v], i) => `${i ? "L" : "M"}${x(q).toFixed(1)},${y(v as number).toFixed(1)}`)
       .join(" ");
   const caminhoFps = $derived(linha(validos.map((p) => [p.quando, p.fps])));
+  // O preenchimento embaixo da curva do FPS (só quando a curva é contínua: com buraco, fica só a linha).
+  const idDoDegrade = `fps-${Math.random().toString(36).slice(2, 8)}`;
+  const areaFps = $derived.by(() => {
+    if (!caminhoFps || (caminhoFps.match(/M/g) ?? []).length !== 1 || validos.length < 2) return null;
+    const base = M.cima + h;
+    return `${caminhoFps} L${x(validos[validos.length - 1].quando)},${base} L${x(validos[0].quando)},${base} Z`;
+  });
   const caminhoLow = $derived(linha(validos.map((p) => [p.quando, p.low_1pct])));
   const marcas = $derived([0, teto / 2, teto]);
   const temLow = $derived(validos.some((p) => p.low_1pct != null));
@@ -79,6 +86,13 @@
       {/each}
       <text class="eixo" x={M.esq} y={A - 6}>0 min</text>
       <text class="eixo" x={M.esq + w} y={A - 6} text-anchor="end">{Math.round(fim)} min</text>
+      <defs>
+        <linearGradient id={idDoDegrade} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="var(--marca)" stop-opacity="0.2" />
+          <stop offset="1" stop-color="var(--marca)" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      {#if areaFps}<path class="area-fps" d={areaFps} fill={`url(#${idDoDegrade})`} />{/if}
       {#if temLow}<path class="serie low" d={caminhoLow} />{/if}
       <path class="serie fps" d={caminhoFps} />
       {#if ultimo}
@@ -135,7 +149,7 @@
     border-radius: 1px;
   }
   .traco.fps {
-    background: var(--tinta);
+    background: var(--marca);
   }
   .traco.low {
     background: var(--tinta-3);
@@ -170,7 +184,8 @@
     stroke-linecap: round;
   }
   .serie.fps {
-    stroke: var(--tinta);
+    stroke: var(--marca);
+    stroke-width: 2.5;
   }
   .serie.low {
     stroke: var(--tinta-3);
@@ -193,7 +208,7 @@
     stroke-width: 2;
   }
   .marca.fps {
-    fill: var(--tinta);
+    fill: var(--marca);
   }
   .marca.low {
     fill: var(--tinta-3);

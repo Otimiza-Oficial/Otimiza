@@ -109,6 +109,12 @@ pub struct Painel {
     pub monitor: Option<[i32; 2]>,
     #[serde(default)]
     pub escalas: Vec<geracao::escala::Opcao>,
+    /// O Frame Boost que esta máquina já provou no jogo aberto (a guarda aprovou a sessão): o painel oferece repetir.
+    pub lembrada: Option<super::fb_por_jogo::Escolha>,
+    /// A mesma escolha em palavras ("Frame Boost 3×").
+    pub lembrada_texto: Option<String>,
+    /// O jogo aberto é competitivo: o Auto liga em 2× (`multiplicador_para`), e a tela diz isso.
+    pub auto_competitivo: bool,
 }
 
 /// A frase da última vez que o Frame Boost ligou, para o painel repetir enquanto ele estiver ligado.
@@ -336,6 +342,9 @@ pub fn painel_de(
         ultima_sessao: ultima_sessao_de(gerador),
         monitor: None,
         escalas: Vec::new(),
+        lembrada: None,
+        lembrada_texto: None,
+        auto_competitivo: false,
     }
 }
 
@@ -456,6 +465,15 @@ pub fn painel() -> Painel {
         p.monitor = Some([l, a]);
         p.escalas = geracao::escala::opcoes(l, a);
     }
+    // FB8 à vista: o que ficou guardado para este jogo, para a tela oferecer "usar de novo".
+    if let Some(j) = jogo.as_ref() {
+        let id = super::historico::id_do_jogo(&j.executavel).0;
+        p.auto_competitivo = super::turbo::competitivo(&id);
+        if let Some(e) = super::fb_por_jogo::escolha(&id) {
+            p.lembrada_texto = Some(super::fb_por_jogo::descrever(&e));
+            p.lembrada = Some(e);
+        }
+    }
     p
 }
 
@@ -560,6 +578,16 @@ fn uso_da_placa_pct() -> Option<u32> {
 /// Liga o Frame Boost que o automático escolheu. O do jogo não é do Otimiza ligar (vai no menu de vídeo dele); o
 /// Smooth Motion só com o interruptor experimental; o AFMF e o gerador do Otimiza, sempre.
 #[cfg(target_os = "windows")]
+/// **Pura.** O multiplicador que vale de fato: em jogo competitivo, o Auto fica em 2× (menos atraso) em vez de encher
+/// o monitor; o resto passa como veio.
+pub fn multiplicador_para(pedido: u8, id_do_jogo: &str) -> u8 {
+    if pedido == 0 && super::turbo::competitivo(id_do_jogo) {
+        2
+    } else {
+        pedido
+    }
+}
+
 pub fn ligar(
     app: &tauri::AppHandle,
     multiplicador: u8,
@@ -581,6 +609,7 @@ pub fn ligar(
     };
     let jogo =
         super::sessao::atual().ok_or("Abra o jogo primeiro: o Frame Boost liga no jogo aberto.")?;
+    let multiplicador = multiplicador_para(multiplicador, &super::historico::id_do_jogo(&jogo.executavel).0);
     let recomendado = jogo
         .frame_boost_auto
         .clone()
@@ -718,6 +747,15 @@ pub fn medir() -> Result<Painel, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_em_jogo_competitivo_fica_em_2x() {
+        assert_eq!(multiplicador_para(0, "cs2"), 2);
+        assert_eq!(multiplicador_para(0, "valorant"), 2);
+        assert_eq!(multiplicador_para(0, "fivem"), 0, "fora da lista, o Auto continua enchendo o monitor");
+        assert_eq!(multiplicador_para(3, "cs2"), 3, "escolha fixa da pessoa passa como veio");
+        assert_eq!(multiplicador_para(1, "cs2"), 1);
+    }
 
     #[test]
     fn placa_quase_cheia_comeca_leve() {

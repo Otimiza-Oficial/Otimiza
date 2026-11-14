@@ -12,6 +12,21 @@ pub fn turbo_painel() -> Result<crate::plataforma::turbo::Painel, String> {
     Err("O Turbo só existe no Windows.".to_string())
 }
 
+/// As receitas do Turbo guardadas para cada jogo (a página do jogo mostra a dele). `LIVRES`: só lê.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn turbo_receitas() -> Vec<crate::plataforma::turbo::ReceitaDoJogo> {
+    crate::plataforma::turbo::receitas()
+}
+
+/// O Turbo de um jogo pelo nome (a página do jogo): a receita guardada e a escolha de atraso; com `menor`, grava a
+/// escolha antes (trocar esquece a receita montada com a outra). `LIVRES`: preferência no arquivo do Turbo.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn turbo_do_jogo(nome: String, menor: Option<bool>) -> Result<crate::plataforma::turbo::TurboDoJogo, String> {
+    crate::plataforma::turbo::do_jogo(&nome, menor)
+}
+
 /// `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
 /// base é travado como no Frame Boost (o `travar_base` não trava no só escala).
 #[tauri::command]

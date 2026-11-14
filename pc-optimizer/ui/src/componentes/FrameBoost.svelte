@@ -102,6 +102,8 @@
   const estimativa = $derived.by(() => {
     if (!p || mult === 1) return null;
     const dois = p.estimativas.find((e) => e.multiplicador === 2);
+    // Jogo competitivo: o Auto vira 2× (o Rust decide em `multiplicador_para`), então a estimativa é a do 2×.
+    if (mult === 0 && p.auto_competitivo) return dois?.faixa ?? null;
     if (mult === 0) {
       if (!dois || !p.hz) return null;
       const teto = alvo ?? p.hz;
@@ -185,144 +187,157 @@
   }
 </script>
 
-<section class="secao fb">
+<section class="secao fb" class:aceso={!!a}>
   <div class="topo">
     <h2>Frame Boost</h2>
-    {#if a}<span class="ligado"><span class="ponto" data-tom="ok"></span>ligado</span>{/if}
+    {#if p && rec}<span class="gerador">{rec.nome}</span>{/if}
+    {#if a}<span class="ligado"><span class="ponto" data-tom="ok"></span>Ligado</span>{/if}
   </div>
 
   {#if !p}
     {#if erro}<p class="apoio">{erro}</p>{:else}<Esqueleto />{/if}
   {:else}
-    <p class="destaque">{#if rec}<span class="apoio">Gerador escolhido</span> {rec.nome}{:else}{p.jogo ? "Nenhum gerador funciona aqui" : "Abra um jogo"}{/if}</p>
-    <p class="apoio">
-      {#if !p.jogo}
-        Com o jogo aberto, o Otimiza escolhe o melhor gerador de quadros: o do jogo, depois o do driver, depois o dele.
-      {:else if rec}
-        {motivo(rec.suporte) ?? (doOtimiza ? "Funciona por fora do jogo, sem injetar nada. Acrescenta um pouco de atraso." : "Funciona neste jogo e nesta placa.")}
-      {:else}
-        Nem o jogo, nem o driver, nem o gerador do Otimiza servem neste jogo com esta placa.
-      {/if}
-    </p>
-
-    {#if rec}
-      <div class="numero-grande">
-        {#if a}
-          <strong class="numero">{medido !== null ? n(medido) : "—"}</strong>
-          <span>{medido !== null && a.hz > 0 && medido > a.hz * 1.03 ? "FPS" : "FPS na tela"}</span>
-          {#if medido === null}
-            <span class="selo">{a.pelo_driver ? "falta medir" : "medindo"}</span>
-          {:else if a.fps_na_tela.origem === "Estimado"}
-            <span class="selo estimado" title="Quadros apresentados pelo gerador. Abra o Otimiza como administrador para medir o que chega à tela.">estimado</span>
-          {:else}
-            <span class="selo medido">medido na tela</span>
-          {/if}
-          {#if a.leve}<span class="selo">modo leve</span>{/if}
-          {#if a.escala}<span class="selo">escala {NOMES_DA_ESCALA[a.escala]}</span>{/if}
-        {:else if estimativa}
-          {@const de = n(estimativa.minimo)}
-          {@const ate = n(estimativa.maximo)}
-          <strong class="numero">{de === ate ? de : `${de}–${ate}`}</strong>
-          <span>{mult === 0 ? "FPS na tela no Auto" : `FPS na tela com ${mult}×`}</span>
-          <span class="selo estimado">estimado</span>
-        {/if}
-      </div>
-      {#if a}
-        {#if linha}<p class="apoio">{linha}</p>{/if}
-        {#if prova}<p class="apoio">{prova}</p>{/if}
-      {:else if doOtimiza && mult === 1}
-        <p class="apoio">Só escala: o jogo renderiza menor e o Otimiza amplia. O FPS a mais é do próprio jogo, sem o atraso da geração.</p>
-      {:else if estimativa}
-        <p class="apoio">Pelo último FPS nativo medido deste jogo. O número de verdade aparece medido quando ligar.</p>
-      {:else if doOtimiza}
-        <p class="apoio">Jogue um minuto para o Otimiza medir o FPS nativo e estimar o ganho. Dá para ligar mesmo assim.</p>
-      {/if}
+    {#if rec && p.jogo}
+      <p class="apoio">{motivo(rec.suporte) ?? (doOtimiza ? "Funciona por fora do jogo, sem injetar nada. Acrescenta um pouco de atraso." : "Funciona neste jogo e nesta placa.")}</p>
     {/if}
-
-    {#if doOtimiza && !a}
-      {#if !escalaPermitida}
-        <p class="apoio pequeno">Sem escala: o Frame Boost só gera quadros e não muda a resolução do jogo. Para usar a escala, ligue "Permitir a escala" nos Ajustes.</p>
-      {:else}
-      <div class="escolha">
-        <span class="rotulo">Escala</span>
-        <div class="segmento" role="radiogroup" aria-label="Escala">
-          <button role="radio" aria-checked={escala === null} onclick={() => escolherEscala(null)}>Desligada</button>
-          {#each NIVEIS as nivel (nivel)}
-            <button role="radio" aria-checked={escala === nivel} onclick={() => escolherEscala(nivel)}>{NOMES_DA_ESCALA[nivel]}</button>
-          {/each}
-        </div>
-        <p class="apoio pequeno">
-          {#if !escala}
-            O jogo renderiza numa resolução menor e o Otimiza amplia para o monitor (FSR 1): é FPS real a mais, não só quadro gerado.
-          {:else}
-            {@const o = p.escalas?.find((x) => x.nivel === escala)}
-            {o && p.monitor
-              ? `O Otimiza põe o jogo em ${o.largura}×${o.altura} e amplia para ${p.monitor[0]}×${p.monitor[1]}; ao desligar, a janela volta como estava. O jogo precisa estar em janela sem bordas.`
-              : "O Otimiza põe o jogo numa janela menor e amplia para a tela inteira. O jogo precisa estar em janela sem bordas."}
-          {/if}
+    {#if !rec}
+      <div class="vazio">
+        <strong>{p.jogo ? "Nenhum gerador funciona aqui" : "Abra um jogo"}</strong>
+        <p class="apoio">
+          {p.jogo
+            ? "Nem o jogo, nem o driver, nem o gerador do Otimiza servem neste jogo com esta placa."
+            : "Com o jogo aberto, o Otimiza escolhe o melhor gerador de quadros: o do jogo, depois o do driver, depois o dele."}
         </p>
       </div>
-      {/if}
-      <div class="escolha">
-        <span class="rotulo">Quadros gerados</span>
-        <div class="segmento" role="radiogroup" aria-label="Multiplicador">
-          {#if escala}<button role="radio" aria-checked={mult === 1} onclick={() => escolherMult(1)}>Só escala</button>{/if}
-          <button role="radio" aria-checked={mult === 0} onclick={() => escolherMult(0)}>Auto</button>
-          {#each p.multiplicadores as m (m)}
-            <button role="radio" aria-checked={mult === m} onclick={() => escolherMult(m)}>{m}×</button>
-          {/each}
-        </div>
-        {#if mult === 0}
-          <p class="apoio pequeno">
-            Auto enche o monitor: com o jogo a 60 fps num de 180 Hz, a tela recebe 180. Mais liso, mas segura o quadro real
-            por cerca de um quadro do jogo; para jogo competitivo, o 2× tem menos atraso.
-          </p>
-        {/if}
-      </div>
-      {#if mult === 0 && alvos.length}
-        <div class="escolha">
+    {:else}
+      <!-- O herói: o número que chega à tela, e à direita o que se escolhe -->
+      <div class="palco">
+        <div class="heroi">
           <span class="rotulo">FPS na tela</span>
-          <div class="segmento" role="radiogroup" aria-label="FPS alvo">
-            <button role="radio" aria-checked={alvo === null} onclick={() => escolherAlvo(null)}>Monitor ({p.hz})</button>
-            {#each alvos as v (v)}
-              <button role="radio" aria-checked={alvo === v} onclick={() => escolherAlvo(v)}>{v}</button>
-            {/each}
+          {#if a}
+            <strong class="numero gigante">{medido !== null ? n(medido) : "—"}</strong>
+            <div class="selos">
+              {#if medido === null}
+                <span class="selo">{a.pelo_driver ? "falta medir" : "medindo"}</span>
+              {:else if a.fps_na_tela.origem === "Estimado"}
+                <span class="selo estimado" title="Quadros apresentados pelo gerador. Abra o Otimiza como administrador para medir o que chega à tela.">estimado</span>
+              {:else}
+                <span class="selo medido">medido na tela</span>
+              {/if}
+              {#if a.leve}<span class="selo">modo leve</span>{/if}
+              {#if a.escala}<span class="selo">escala {NOMES_DA_ESCALA[a.escala]}</span>{/if}
+            </div>
+            {#if linha}<p class="apoio">{linha}</p>{/if}
+            {#if prova}<p class="apoio">{prova}</p>{/if}
+          {:else if estimativa}
+            {@const de = n(estimativa.minimo)}
+            {@const ate = n(estimativa.maximo)}
+            <strong class="numero gigante">{de === ate ? de : `${de}–${ate}`}</strong>
+            <div class="selos"><span class="selo estimado">estimado</span><span class="apoio">{mult === 0 ? "no Auto" : `com ${mult}×`}</span></div>
+            <p class="apoio">Pelo último FPS nativo deste jogo. O número de verdade aparece medido quando ligar.</p>
+          {:else}
+            <strong class="numero gigante apagado">—</strong>
+            <p class="apoio">
+              {doOtimiza && mult === 1
+                ? "Só escala: o jogo renderiza menor e o Otimiza amplia. O FPS a mais é do próprio jogo."
+                : doOtimiza
+                  ? "Jogue um minuto para o Otimiza medir o FPS nativo e estimar o ganho. Dá para ligar mesmo assim."
+                  : (motivo(rec.suporte) ?? "Funciona neste jogo e nesta placa.")}
+            </p>
+          {/if}
+        </div>
+
+        <div class="controles">
+          {#if doOtimiza && !a}
+            {#if escalaPermitida}
+              <div class="escolha">
+                <span class="rotulo">Escala</span>
+                <div class="segmento" role="radiogroup" aria-label="Escala">
+                  <button role="radio" aria-checked={escala === null} onclick={() => escolherEscala(null)}>Desligada</button>
+                  {#each NIVEIS as nivel (nivel)}
+                    <button role="radio" aria-checked={escala === nivel} onclick={() => escolherEscala(nivel)}>{NOMES_DA_ESCALA[nivel]}</button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+            <div class="escolha">
+              <span class="rotulo">Quadros gerados</span>
+              <div class="segmento" role="radiogroup" aria-label="Multiplicador">
+                {#if escala}<button role="radio" aria-checked={mult === 1} onclick={() => escolherMult(1)}>Só escala</button>{/if}
+                <button role="radio" aria-checked={mult === 0} onclick={() => escolherMult(0)}>Auto</button>
+                {#each p.multiplicadores as m (m)}
+                  <button role="radio" aria-checked={mult === m} onclick={() => escolherMult(m)}>{m}×</button>
+                {/each}
+              </div>
+              <p class="dica">{mult === 0 ? (p.auto_competitivo ? "Jogo competitivo: o Auto fica em 2×, com menos atraso." : "Enche o monitor. Para jogo competitivo, o 2× tem menos atraso.") : mult === 1 ? "Sem gerar quadros: só a escala." : `${mult} quadros na tela para cada um do jogo.`}</p>
+            </div>
+            {#if mult === 0 && alvos.length && !p.auto_competitivo}
+              <div class="escolha">
+                <span class="rotulo">FPS na tela</span>
+                <div class="segmento" role="radiogroup" aria-label="FPS alvo">
+                  <button role="radio" aria-checked={alvo === null} onclick={() => escolherAlvo(null)}>Monitor ({p.hz})</button>
+                  {#each alvos as v (v)}
+                    <button role="radio" aria-checked={alvo === v} onclick={() => escolherAlvo(v)}>{v}</button>
+                  {/each}
+                </div>
+                <p class="dica">{alvo ? `Menos quadros gerados: gasta menos placa e o jogo fica com mais FPS de verdade.` : "Abaixo do monitor, o gerador gasta menos placa."}</p>
+              </div>
+            {/if}
+          {/if}
+
+          {#if doOtimiza && (escala || a?.escala)}
+            <div class="escolha">
+              <span class="rotulo">Nitidez da escala</span>
+              <div class="segmento" role="radiogroup" aria-label="Nitidez da escala">
+                {#each NITIDEZES as o (o.nome)}
+                  <button role="radio" aria-checked={nitidez === o.stops} onclick={() => escolherNitidez(o.stops)}>{o.nome}</button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <div class="acoes">
+            {#if a}
+              <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostDesligar)}>Desligar Frame Boost</button>
+              {#if a.pelo_driver}
+                <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostMedir)}>{ocupado ? "Medindo 6 s…" : "Medir agora"}</button>
+              {/if}
+            {:else}
+              <button class="btn primario grande" disabled={ocupado || !liga} onclick={() => agir(() => ferramentas.frameBoostLigar(mult, escala, mult === 0 ? alvo : null))}>
+                {experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Liga pelo painel do driver"}
+              </button>
+            {/if}
+            {#if doOtimiza}<span class="atalho" title="Desliga de dentro do jogo"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>G</kbd> desliga no jogo</span>{/if}
           </div>
-          <p class="apoio pequeno">
-            {alvo
-              ? `A tela recebe ${alvo} em vez de ${p.hz}: o Otimiza gera menos quadros, gasta menos placa, e o jogo fica com mais FPS de verdade.`
-              : "Abaixo do monitor, o gerador gasta menos placa e o jogo perde menos FPS. Bom quando a placa já está no limite."}
-          </p>
+        </div>
+      </div>
+
+      {#if doOtimiza && !a && p.lembrada && p.lembrada_texto}
+        {@const l = p.lembrada}
+        <!-- O que esta máquina já provou neste jogo: um toque para repetir -->
+        <div class="lembrada">
+          <div>
+            <span class="rotulo">Da última vez neste jogo</span>
+            <p><strong>{p.lembrada_texto}</strong> · o jogo manteve {n(l.manteve_pct, 1)}% do FPS <span class="selo medido">medido</span></p>
+          </div>
+          <button
+            class="btn"
+            disabled={ocupado || !liga}
+            onclick={() => agir(() => ferramentas.frameBoostLigar(l.multiplicador, escalaPermitida ? l.escala : null, l.multiplicador === 0 ? l.alvo_fps : null))}
+          >Usar de novo</button>
         </div>
       {/if}
-    {/if}
-
-    {#if rec}
-      <div class="acoes">
-        {#if a}
-          <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostDesligar)}>Desligar Frame Boost</button>
-          {#if a.pelo_driver}
-            <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostMedir)}>{ocupado ? "Medindo 6 s…" : "Medir agora"}</button>
-          {/if}
-        {:else}
-          <button class="btn primario" disabled={ocupado || !liga} onclick={() => agir(() => ferramentas.frameBoostLigar(mult, escala, mult === 0 ? alvo : null))}>
-            {experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Liga pelo painel do driver"}
-          </button>
-        {/if}
-        {#if doOtimiza}<span class="apoio pequeno">Ctrl+Alt+G desliga de dentro do jogo</span>{/if}
-      </div>
-    {/if}
-
-    {#if doOtimiza && (escala || a?.escala)}
-      <div class="escolha">
-        <span class="rotulo">Nitidez da escala</span>
-        <div class="segmento" role="radiogroup" aria-label="Nitidez da escala">
-          {#each NITIDEZES as o (o.nome)}
-            <button role="radio" aria-checked={nitidez === o.stops} onclick={() => escolherNitidez(o.stops)}>{o.nome}</button>
-          {/each}
-        </div>
-        <p class="apoio pequeno">Muda na hora, com o Frame Boost ligado. Forte deixa a imagem ampliada mais definida; Suave, menos serrilhada.</p>
-      </div>
+      {#if doOtimiza && !a && !escalaPermitida}
+        <p class="apoio pequeno">Sem escala: o Frame Boost só gera quadros e não muda a resolução do jogo. Para usar a escala, ligue "Permitir a escala" nos Ajustes.</p>
+      {/if}
+      {#if doOtimiza && !a && escala}
+        {@const o = p.escalas?.find((x) => x.nivel === escala)}
+        <p class="apoio pequeno">
+          {o && p.monitor
+            ? `O jogo vai para ${o.largura}×${o.altura} e o Otimiza amplia para ${p.monitor[0]}×${p.monitor[1]}; ao desligar, a janela volta como estava. O jogo precisa estar em janela sem bordas.`
+            : "O Otimiza põe o jogo numa janela menor e amplia para a tela inteira. O jogo precisa estar em janela sem bordas."}
+        </p>
+      {/if}
     {/if}
 
     {#if a?.escala && !a.pelo_driver && a.situacao === "Gerando"}<ComparadorDaEscala />{/if}
@@ -366,15 +381,18 @@
     {#if erro}<p class="erro">{erro}</p>{/if}
 
     {#if p.opcoes.length}
-      <ul class="opcoes">
-        {#each p.opcoes as r (r.recurso)}
-          {@const s = selo(r.suporte)}
-          <li>
-            <div><span>{r.nome}</span>{#if motivo(r.suporte)}<p class="apoio pequeno">{motivo(r.suporte)}</p>{/if}</div>
-            <span class="selo" data-tom={s.tom}>{s.texto}</span>
-          </li>
-        {/each}
-      </ul>
+      <div class="outros">
+        <span class="rotulo">Outros geradores</span>
+        <ul class="opcoes">
+          {#each p.opcoes as r (r.recurso)}
+            {@const s = selo(r.suporte)}
+            <li title={motivo(r.suporte) ?? undefined}>
+              <span>{r.nome}</span>
+              <span class="selo" data-tom={s.tom}>{s.texto}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
     {/if}
   {/if}
 </section>
@@ -382,7 +400,20 @@
 <style>
   .fb {
     display: grid;
-    gap: 10px;
+    gap: 16px;
+  }
+  /* Ligado: uma luz da marca acende atrás do número. */
+  .fb.aceso {
+    isolation: isolate;
+  }
+  .fb.aceso::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(60% 70% at 18% 30%, var(--marca-suave), transparent 70%);
+    pointer-events: none;
   }
   .topo {
     display: flex;
@@ -392,54 +423,138 @@
   .topo h2 {
     flex: 1;
   }
+  .gerador {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bloco, var(--superficie-2));
+    border: 1px solid var(--linha);
+    color: var(--tinta-2);
+    font-size: 12px;
+    font-weight: 500;
+  }
   .ligado {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
-  }
-  .destaque {
-    font-weight: 500;
-    margin: 0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ok) 14%, transparent);
+    color: var(--ok);
+    font-size: 12px;
+    font-weight: 600;
   }
   p {
     margin: 0;
   }
-  .numero-grande {
-    display: flex;
-    align-items: baseline;
+  .vazio {
+    display: grid;
+    gap: 6px;
+    padding: 6px 0 2px;
+  }
+  .palco {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(220px, 0.9fr) 1.3fr;
+    gap: 28px;
+    align-items: start;
+  }
+  .heroi {
+    display: grid;
     gap: 8px;
+    align-content: start;
+  }
+  .gigante {
+    font-size: 84px;
+    line-height: 0.92;
+    font-weight: 700;
+    letter-spacing: -0.045em;
+  }
+  .apagado {
+    color: var(--tinta-3);
+  }
+  .selos {
+    display: flex;
+    gap: 6px;
+    align-items: center;
     flex-wrap: wrap;
   }
-  .numero-grande .numero {
-    font-size: 56px;
-    line-height: 1;
-    font-weight: 600;
-    letter-spacing: -0.03em;
-  }
-  .numero-grande > span:not(.selo) {
-    color: var(--tinta-2);
+  .controles {
+    display: grid;
+    gap: 16px;
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: var(--bloco, var(--superficie-2));
+    border: 1px solid var(--linha);
   }
   .escolha {
     display: grid;
-    gap: 6px;
+    gap: 8px;
+    justify-items: start;
   }
   .rotulo {
-    font-size: var(--t-apoio);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tinta-3);
+  }
+  .dica {
+    font-size: 12px;
     color: var(--tinta-2);
   }
   .acoes {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
     flex-wrap: wrap;
+    padding-top: 4px;
+  }
+  .grande {
+    min-height: 44px;
+    padding: 0 22px;
+    font-weight: 600;
+  }
+  .atalho {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--tinta-2);
+  }
+  kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 6px;
+    border: 1px solid var(--linha-forte);
+    border-bottom-width: 2px;
+    font-family: var(--fonte-texto);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--tinta);
+  }
+  .lembrada {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid var(--linha);
+    background: var(--bloco, var(--superficie-2));
+  }
+  .lembrada p {
+    margin-top: 4px;
+    font-size: 13px;
   }
   .linha {
     display: flex;
     gap: 12px;
     align-items: center;
     justify-content: space-between;
-    padding-top: 10px;
+    padding-top: 12px;
     border-top: 1px solid var(--linha);
   }
   .pequeno {
@@ -453,18 +568,32 @@
     color: var(--perigo);
     font-size: 13px;
   }
+  .outros {
+    display: grid;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--linha);
+  }
   .opcoes {
     list-style: none;
-    margin: 4px 0 0;
+    margin: 0;
     padding: 0;
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .opcoes li {
     display: flex;
-    gap: 12px;
-    justify-content: space-between;
+    gap: 8px;
     align-items: center;
-    font-size: 13px;
+    padding: 6px 8px 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--linha);
+    font-size: 12px;
+  }
+  @media (max-width: 1100px) {
+    .palco {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

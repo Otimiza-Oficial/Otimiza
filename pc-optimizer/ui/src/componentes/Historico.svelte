@@ -182,6 +182,7 @@
   {:else if historico && mudancas.length === 0 && historico.leitura.estado === "Ok"}
     <p class="vazio">O Otimiza não tem nenhuma mudança ativa neste PC. O que você aplicar (o "Otimizar agora", na Visão geral, ou um ajuste do Sistema) aparece aqui, cada um com o valor de antes e o desfazer.</p>
   {:else if mudancas.length > 0}
+    <section class="secao linha-do-tempo">
     <div class="topo">
       <p class="apoio">
         {mudancas.length}
@@ -246,6 +247,7 @@
         </li>
       {/each}
     </ol>
+    </section>
   {/if}
 </div>
 
@@ -265,8 +267,44 @@
     justify-content: space-between;
     gap: 12px;
   }
-  .lista > li {
+  /* A linha do tempo: um fio vertical com um ponto em cada mudança (o mais novo, com a cor da marca). */
+  .linha-do-tempo .lista > li {
+    position: relative;
     align-items: flex-start;
+    padding-left: 26px;
+    border-top: 0;
+  }
+  .linha-do-tempo .lista > li::before {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--linha-forte);
+  }
+  .linha-do-tempo .lista > li:first-child::before {
+    top: 18px;
+  }
+  .linha-do-tempo .lista > li:last-child::before {
+    bottom: calc(100% - 18px);
+  }
+  .linha-do-tempo .lista > li::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 13px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--tinta-3);
+    box-shadow: 0 0 0 4px var(--cartao-anel, rgb(30 30 34));
+  }
+  :global(:root[data-tema="dia"]) .linha-do-tempo .lista > li::after {
+    --cartao-anel: #fff;
+  }
+  .linha-do-tempo .lista > li:first-child::after {
+    background: var(--marca);
   }
   .item {
     flex: 1;

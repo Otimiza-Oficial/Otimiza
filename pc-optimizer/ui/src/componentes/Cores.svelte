@@ -5,7 +5,7 @@
   // que era antes.
   import { onMount } from "svelte";
   import { ferramentas, type CaminhoDasCores, type EstadoDasCores } from "../lib/ferramentas";
-  import { NORMAL, PREDEFINICOES, previa, type Ajuste } from "../lib/cores";
+  import { NORMAL, PREDEFINICOES, definirCena, previa, type Ajuste } from "../lib/cores";
 
   const CAMINHO: Record<CaminhoDasCores, string> = { Amd: "driver AMD", Nvidia: "driver NVIDIA", Gama: "Windows" };
   const NOME_DA_PREDEFINICAO: Record<string, string> = { natural: "Natural", vivo: "Vivo", competitivo: "Competitivo", cinema: "Cinema" };
@@ -29,7 +29,19 @@
     ["matiz", "Matiz", -30, 30],
   ]);
 
+  /** Sobe quando o quadro de jogo da prévia carrega: a prévia e as miniaturas se redesenham com ele. */
+  let cena = $state(0);
   onMount(async () => {
+    // A prévia é um quadro de FiveM de verdade; enquanto carrega (ou se falhar), fica a cena desenhada.
+    const img = new Image();
+    img.src = "/previas/fivem-rua.jpg";
+    void img
+      .decode()
+      .then(() => {
+        definirCena(img);
+        cena++;
+      })
+      .catch(() => {});
     [st, jogo] = await Promise.all([ferramentas.coresEstado().catch(() => null), ferramentas.jogoAberto().catch(() => null)]);
     const salvo = jogo ? st?.perfis.por_jogo[jogo.id] : undefined;
     // Começa do que está salvo para o jogo, ou do valor real do driver: quem já usa 100% não é jogado para 50.
@@ -41,6 +53,7 @@
 
   $effect(() => {
     const ajuste = $state.snapshot(a) as Ajuste;
+    void cena;
     if (canvas) previa(canvas, ajuste, corte / 100);
   });
 
@@ -114,7 +127,7 @@
   }
 </script>
 
-<div class="estudio">
+<div class="secao estudio">
   <!-- A cena: antes à esquerda do divisor, depois à direita. O divisor é a própria imagem. -->
   <div class="palco">
     <canvas bind:this={canvas}></canvas>
@@ -126,12 +139,12 @@
   </div>
 
   <div class="predefinicoes" role="radiogroup" aria-label="Predefinições">
-    {#each Object.keys(PREDEFINICOES) as nome (nome)}
+    {#key cena}{#each Object.keys(PREDEFINICOES) as nome (nome)}
       <button class="predef" role="radio" aria-checked={igual(a, PREDEFINICOES[nome])} onclick={() => predefinir(nome)}>
         <canvas use:miniatura={PREDEFINICOES[nome]}></canvas>
         <span>{NOME_DA_PREDEFINICAO[nome] ?? nome}</span>
       </button>
-    {/each}
+    {/each}{/key}
   </div>
 
   <div class="ajustes">

@@ -344,6 +344,8 @@ pub fn run() {
             commands::frame_boost_travar_base,
             commands::frame_boost_medir,
             commands::turbo_painel,
+            commands::turbo_receitas,
+            commands::turbo_do_jogo,
             commands::turbo_ligar,
             commands::turbo_desligar,
             commands::turbo_esquecer,

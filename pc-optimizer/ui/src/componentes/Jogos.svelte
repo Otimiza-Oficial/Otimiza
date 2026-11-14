@@ -8,9 +8,10 @@
   import Cs2Integracao from "./Cs2Integracao.svelte";
   import FivemPainel from "./FivemPainel.svelte";
   import PcsParecidos from "./PcsParecidos.svelte";
+  import TurboDoJogo from "./TurboDoJogo.svelte";
   import LinhaDoTempo from "./LinhaDoTempo.svelte";
   import Icone from "./Icone.svelte";
-  import { capaRemota, chaveDoJogo, iniciais } from "../lib/capas";
+  import { capaDepoisDaFalha, capaRemota, chaveDoJogo, iniciais } from "../lib/capas";
   import { JOGAR } from "../lib/partida";
 
   /** A "loja" de um jogo que o Otimiza mediu mas não achou instalado: sem caminho para o "Jogar". */
@@ -66,9 +67,9 @@
     }
   });
 
-  /** A foto não carregou: o jogo fica com a capa desenhada. */
+  /** A foto não carregou: vai para a capa de reserva e, sem ela, para a capa desenhada. */
   function fotoFalhou(nome: string) {
-    if (itens) itens = itens.map((i) => (i.jogo.nome === nome ? { ...i, capa: null } : i));
+    if (itens) itens = itens.map((i) => (i.jogo.nome === nome ? { ...i, capa: capaDepoisDaFalha(nome, i.capa) } : i));
   }
 
   /** `null` quando a loja não informou (0) ou o número não é uma data: a tela omite em vez de inventar. */
@@ -113,7 +114,9 @@
     <p class="vazio">Não achei jogos instalados pela Steam, pela Epic ou por instalador. Jogo instalado em outro lugar também serve: abra ele com o Otimiza aberto, e a partida é reconhecida e medida.</p>
   {:else}
     {#if atual}
-      <section class="destaque">
+      <section class="secao destaque">
+        <!-- A capa desfocada vira a luz do cartão, como a página de um jogo numa loja -->
+        {#if atual.capa}<div class="luz-da-capa" style:background-image={`url("${atual.capa}")`} aria-hidden="true"></div>{/if}
         <div class="capa-grande">
           {#if atual.capa}<img src={atual.capa} alt="" onerror={() => fotoFalhou(atual.jogo.nome)} />{:else}<span class="reserva grande">{iniciais(atual.jogo.nome)}</span>{/if}
         </div>
@@ -162,6 +165,7 @@
           {:else}
             <p class="sem-medida">Ainda não medi este jogo. Jogue uma partida com o Otimiza aberto e os números aparecem aqui.</p>
           {/if}
+          {#key atual.jogo.nome}<TurboDoJogo jogo={atual.jogo.nome} />{/key}
           <PcsParecidos jogo={atual.jogo.nome} />
           <LinhaDoTempo jogo={atual.jogo.nome} />
           {#if /fivem/i.test(atual.jogo.nome)}
@@ -174,6 +178,7 @@
       </section>
     {/if}
 
+    <section class="secao todos">
     <div class="barra">
       <label class="campo-busca">
         <Icone nome="busca" tamanho={14} />
@@ -203,6 +208,7 @@
         {/each}
       </div>
     {/if}
+    </section>
   {/if}
   <OndeOsJogosMoram />
 </div>
@@ -226,14 +232,29 @@
 
   .destaque {
     display: flex;
-    gap: 20px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid var(--linha);
+    gap: 26px;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .luz-da-capa {
+    position: absolute;
+    inset: -30%;
+    z-index: -1;
+    background-size: cover;
+    background-position: center;
+    filter: blur(60px) saturate(1.3);
+    opacity: 0.28;
+    pointer-events: none;
+  }
+  /* No claro, capa escura desfocada vira um cinza sujo: só um toque, clareado. */
+  :global(:root[data-tema="dia"]) .luz-da-capa {
+    opacity: 0.1;
+    filter: blur(60px) saturate(1.6) brightness(1.5);
   }
   .capa-grande {
     flex: none;
     align-self: flex-start;
-    width: 150px;
+    width: 176px;
     aspect-ratio: 2 / 3;
     border-radius: 14px;
     overflow: hidden;
@@ -269,21 +290,32 @@
   .info h3 {
     margin: 0;
     font-family: var(--fonte-titulo);
-    font-size: 22px;
-    font-weight: 600;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
   }
   .numeros {
     display: flex;
     flex-wrap: wrap;
-    gap: 22px;
+    gap: 10px;
+    margin: 6px 0 2px;
+  }
+  /* Cada número num ladrilho de vidro: o número grande, o nome embaixo. */
+  .numeros > div {
+    min-width: 104px;
+    padding: 12px 16px 10px;
+    border-radius: 14px;
+    background: var(--bloco, var(--superficie-2));
+    border: 1px solid var(--linha);
   }
   .numeros div {
     display: grid;
   }
   .valor {
-    font-size: 28px;
-    font-weight: 600;
-    line-height: 1.1;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
   }
   .ganhos > li {
     padding: 9px 0;

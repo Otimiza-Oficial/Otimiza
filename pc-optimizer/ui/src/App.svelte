@@ -26,7 +26,7 @@
   import { areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
   import { contextoDa } from "./lib/contexto";
   import { avisos as lerAvisos } from "./lib/clima";
-  import { capaRemota, iniciais } from "./lib/capas";
+  import { capaDepoisDaFalha, capaRemota, iniciais } from "./lib/capas";
   import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, receitaMedida, type Acao, type Fala } from "./lib/conversa";
   import { fraseDaComparacao, JOGAR, montarCartao, ofereceLiso, textoParaCompartilhar, type Cartao, type Terminada } from "./lib/partida";
   import {
@@ -46,10 +46,21 @@
     type TrocaComOti,
     type VersaoDoApp,
   } from "./lib/ponte";
+  import {
+    CHAVE_DA_IMAGEM,
+    CHAVE_DO_AJUSTE,
+    CHAVE_DO_FUNDO,
+    lerAjusteGuardado,
+    lerFundoGuardado,
+    opcaoDo,
+    type AjusteDoFundo,
+    type Fundo,
+  } from "./lib/fundos";
+  import PapelDeFundo from "./componentes/PapelDeFundo.svelte";
+  import MenuDoFundo from "./componentes/MenuDoFundo.svelte";
 
   type Tema = "claro" | "escuro";
   const CHAVE_DO_TEMA = "otimiza.tema";
-  const CHAVE_DO_FUNDO = "otimiza.fundo";
   /** Abaixo disto livre ao tocar em Jogar, o Oti avisa: FiveM e jogos atuais pedem uns 3 GB a mais na partida. */
   const MEMORIA_LIVRE_MINIMA_GB = 3;
   /** A apresentação já foi vista nesta máquina (ou pulada): não abre de novo sozinha. */
@@ -62,6 +73,36 @@
     prova: "relogio",
     ajustes: "ajustes",
   };
+  /** A cor do ladrilho de cada área no cabeçalho (ícone branco por cima): reconhecer a área de relance. */
+  const COR_DA_AREA: Partial<Record<IdDaArea, string>> = {
+    turbo: "#ff9f0a",
+    jogos: "#ff3b30",
+    rede: "#0a84ff",
+    latencia: "#bf5af2",
+    energia: "#30d158",
+    tela: "#32ade6",
+    sistema: "#8e8e93",
+    prova: "#5e5ce6",
+    historico: "#636366",
+    mira: "#ff375f",
+    cores: "#af52de",
+    ajustes: "#8e8e93",
+  };
+  /** O ícone no cabeçalho de cada área. */
+  const ICONE_DA_AREA: Partial<Record<IdDaArea, NomeDoIcone>> = {
+    turbo: "raio",
+    jogos: "controle",
+    rede: "wifi",
+    latencia: "cronometro",
+    energia: "energia",
+    tela: "monitor",
+    sistema: "chip",
+    prova: "grafico",
+    historico: "relogio",
+    mira: "mira",
+    cores: "gota",
+    ajustes: "ajustes",
+  };
   /** A última área aberta em cada aba: voltar à aba volta para onde a pessoa estava. */
   const ultimaDoGrupo: Partial<Record<IdDoGrupo, IdDaArea>> = {};
   const nomeDaAba = (id: IdDaArea) => (id === "inicio" ? "Visão geral" : (areas.find((a) => a.id === id)?.nome ?? id));
@@ -69,6 +110,20 @@
   let versao = $state<VersaoDoApp | null>(null);
   let hardware = $state<Hardware | null>(null);
   let metricas = $state<MetricasAoVivo | null>(null);
+  /** As últimas leituras do processador (uma a cada 2 s): o gráfico vivo do bloco Agora. */
+  let historicoCpu = $state<number[]>([]);
+  const curvaCpu = $derived.by(() => {
+    const v = historicoCpu;
+    if (v.length < 3) return null;
+    // A curva ocupa a largura toda desde as primeiras leituras e vai ficando mais fina até juntar 2 minutos.
+    const passo = 120 / (v.length - 1);
+    const x0 = 0;
+    // O teto acompanha o maior valor (no mínimo 25%): com o PC parado a 15% a curva ainda mostra o que mexe.
+    const teto = Math.min(100, Math.max(25, Math.max(...v) * 1.3));
+    const pts = v.map((c, i) => `${(x0 + i * passo).toFixed(2)},${(34 - (Math.max(0, Math.min(teto, c)) / teto) * 30).toFixed(2)}`);
+    const linha = "M" + pts.join(" L");
+    return { linha, area: `${linha} L120,36 L${x0.toFixed(2)},36 Z` };
+  });
   let jogo = $state<JogoAberto | null>(null);
   let biblioteca = $state<ResumoDoJogo[]>([]);
   let instalados = $state<{ jogo: JogoDaLoja; capa: string | null }[]>([]);
@@ -77,8 +132,18 @@
   let wifi = $state<DiagnosticoDoWifi | null>(null);
   let mudancas = $state<number | null>(null);
   let tema = $state<Tema>(lerTema());
-  /** Sem fundo: o cômodo some e a área de trabalho aparece entre os cards (a janela é transparente). A pessoa escolhe. */
-  let semFundo = $state(lerFundo());
+  /** A imagem que a pessoa escolheu para o fundo (JPEG reduzido, em data URL), guardada só neste PC. */
+  let imagemDoFundo = $state<string | null>(lerGuardado(CHAVE_DA_IMAGEM));
+  /** O desfoque e o quanto escurece nas fotos. */
+  let ajusteDoFundo = $state<AjusteDoFundo>(lerAjusteGuardado(lerGuardado(CHAVE_DO_AJUSTE)));
+  /** O fundo atrás do vidro. "Área de trabalho": a janela fica transparente e o Windows aparece entre os cards. */
+  let fundo = $state<Fundo>(lerFundoGuardado(lerGuardado(CHAVE_DO_FUNDO), lerGuardado(CHAVE_DA_IMAGEM) !== null));
+  const nomeDoFundo = $derived(opcaoDo(fundo).nome);
+  const fundoPapel = $derived(opcaoDo(fundo).tipo === "cena" || opcaoDo(fundo).tipo === "foto");
+  const semFundo = $derived(fundo === "area");
+  let menuDoFundo = $state(false);
+  /** O fundo que volta quando a apresentação desliga a "área de trabalho". */
+  let fundoAntes: Fundo = "limpo";
   /** A apresentação aberta: inteira (primeira vez, ou pedida nos Ajustes) ou só o passo da licença (botão da barra). */
   let boasVindas = $state<ModoDasBoasVindas | null>(null);
   let licenca = $state<EstadoDaLicenca | null>(null);
@@ -89,8 +154,6 @@
   let busca = $state("");
   let filtroDeJogo = $state("");
   let mostrarAvisos = $state(false);
-  let medindoDpc = $state(false);
-  let recadoDpc = $state<string | null>(null);
 
   // O Oti fala num balão que desce da busca.
   let fala = $state<Fala | null>(null);
@@ -156,17 +219,23 @@
   );
   /** Capas que não carregaram (sem internet, arte retirada): esses jogos ficam com a capa desenhada. */
   let semFoto = $state(new Set<string>());
+  /** A capa da última partida depois que a arte da loja falhou (a de reserva, ou nenhuma). */
+  let reservaDaUltima = $state<string | null>(null);
   /** O "player": o jogo aberto, se houver; senão a última partida. Os números só aparecem se forem DESSE jogo. */
   const jogoDoPlayer = $derived(jogo?.nome ?? ultima?.nome ?? null);
   const partidaDoPlayer = $derived(ultima && ultima.nome === jogoDoPlayer ? ultima : null);
   const capaDaUltima = $derived(
     jogoDoPlayer
-      ? (instalados.find((i) => i.jogo.nome === jogoDoPlayer)?.capa ?? (semFoto.has(jogoDoPlayer) ? null : capaRemota(jogoDoPlayer, null)))
+      ? (instalados.find((i) => i.jogo.nome === jogoDoPlayer)?.capa ?? (semFoto.has(jogoDoPlayer) ? reservaDaUltima : capaRemota(jogoDoPlayer, null)))
       : null
   );
+  /** A arte da loja não carregou (sem internet, CDN fora): vai para a capa de reserva e, sem ela, para as iniciais. */
   function fotoFalhou(nome: string) {
-    semFoto = new Set(semFoto).add(nome);
-    instalados = instalados.map((i) => (i.jogo.nome === nome ? { ...i, capa: null } : i));
+    if (nome === jogoDoPlayer) {
+      reservaDaUltima = capaDepoisDaFalha(nome, capaDaUltima);
+      semFoto = new Set(semFoto).add(nome);
+    }
+    instalados = instalados.map((i) => (i.jogo.nome === nome ? { ...i, capa: capaDepoisDaFalha(nome, i.capa) } : i));
   }
   const telaPrincipal = $derived(hardware?.telas.find((t) => t.principal) ?? hardware?.telas[0] ?? null);
   const memoriaPct = $derived.by(() => {
@@ -180,6 +249,33 @@
     const c = l.leitura.estado === "lida" ? l.leitura.conexao : l.leitura.estado === "lista_vazia" ? l.leitura.conexao : null;
     return c ? c.qualidade : null;
   });
+  /** "Pronto pra jogar": o que o Otimiza sabe conferir, item a item. Só entra o que foi lido (nada de item inventado);
+   *  cada um diz o que falta e leva para onde se resolve. */
+  type ItemDaProntidao = { id: string; ok: boolean; texto: string; acao: () => void; botao?: string };
+  const prontidao = $derived.by(() => {
+    const itens: ItemDaProntidao[] = [];
+    const t = telaPrincipal;
+    if (t) {
+      const max = t.hz_atual >= t.hz_maximo;
+      itens.push({ id: "tela", ok: max, texto: max ? `Monitor a ${t.hz_atual} Hz` : `Monitor ${t.hz_atual} de ${t.hz_maximo} Hz`, acao: () => abrir("tela") });
+    }
+    // Os dois interruptores do "Durante o jogo": o item desligado liga com um toque (o mesmo do bloco).
+    if (banda && (banda.ligado || banda.impedimento === null))
+      itens.push({ id: "banda", ok: banda.ligado, texto: banda.ligado ? "Downloads segurados" : "Downloads soltos", acao: alternarBanda, botao: banda.ligado ? undefined : "Segurar" });
+    if (wifi?.ligacao.tipo === "wi_fi" && varredura)
+      itens.push({ id: "wifi", ok: varredura.ligado, texto: varredura.ligado ? "Wi-Fi sem varredura" : "Wi-Fi varrendo redes", acao: alternarVarredura, botao: varredura.ligado ? undefined : "Ligar" });
+    if (mudancas != null) itens.push({ id: "otimizado", ok: mudancas > 0, texto: mudancas > 0 ? `${mudancas} ajustes ativos` : "Ainda não otimizado", acao: () => abrir(mudancas ? "historico" : "turbo") });
+    // O aviso do monitor já é o primeiro item; aqui entram os outros.
+    const avisoSerio = lista.find((a) => !a.id.startsWith("hz-"));
+    itens.push({ id: "avisos", ok: !avisoSerio, texto: avisoSerio ? avisoSerio.titulo : "Nenhum aviso", acao: () => (avisoSerio ? abrir(areaDoAviso(avisoSerio.id)) : undefined) });
+    const ok = itens.filter((i) => i.ok).length;
+    return { itens, ok, total: itens.length, fracao: itens.length ? ok / itens.length : 0 };
+  });
+  const saudacaoDaHora = $derived.by(() => {
+    const h = hoje.getHours();
+    return h < 5 ? "Boa madrugada" : h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  });
+
   /** O bloco "Agora": quatro leituras, cada uma com nome e valor por extenso. Barra só fica em cor quando há o que fazer. */
   const medidores = $derived.by(() => {
     const t = telaPrincipal;
@@ -224,32 +320,62 @@
     }),
   );
   const jogosFiltrados = $derived(
-    instalados.filter((i) => i.jogo.nome.toLowerCase().includes(filtroDeJogo.trim().toLowerCase())).slice(0, 3)
+    instalados.filter((i) => i.jogo.nome.toLowerCase().includes(filtroDeJogo.trim().toLowerCase())).slice(0, 4)
   );
 
   function lerTema(): Tema {
     try {
-      return localStorage.getItem(CHAVE_DO_TEMA) === "escuro" ? "escuro" : "claro";
+      // Quem nunca escolheu começa no escuro: o grafite é a cara do Otimiza.
+      return localStorage.getItem(CHAVE_DO_TEMA) === "claro" ? "claro" : "escuro";
     } catch {
-      return "claro";
+      return "escuro";
     }
   }
 
-  function lerFundo(): boolean {
+  function lerGuardado(chave: string): string | null {
     try {
-      return localStorage.getItem(CHAVE_DO_FUNDO) === "sem";
+      return localStorage.getItem(chave);
     } catch {
-      return false;
+      return null;
     }
   }
 
-  function alternarFundo() {
-    semFundo = !semFundo;
+  function escolherFundo(f: Fundo) {
+    if (f !== "area") fundoAntes = f;
+    fundo = f;
+    // As fotos pedem o ajuste à mão: o menu fica aberto nelas. Os outros fecham na hora.
+    if (opcaoDo(f).tipo !== "foto") menuDoFundo = false;
     try {
-      localStorage.setItem(CHAVE_DO_FUNDO, semFundo ? "sem" : "com");
+      localStorage.setItem(CHAVE_DO_FUNDO, f);
     } catch {
       // Só não lembra na próxima abertura.
     }
+  }
+
+  /** Guarda (ou tira) a imagem do fundo. Falso quando não coube no armazenamento: a de antes continua. */
+  function guardarImagemDoFundo(dados: string | null): boolean {
+    try {
+      if (dados) localStorage.setItem(CHAVE_DA_IMAGEM, dados);
+      else localStorage.removeItem(CHAVE_DA_IMAGEM);
+    } catch {
+      return false;
+    }
+    imagemDoFundo = dados;
+    return true;
+  }
+
+  function mudarAjusteDoFundo(a: AjusteDoFundo) {
+    ajusteDoFundo = a;
+    try {
+      localStorage.setItem(CHAVE_DO_AJUSTE, JSON.stringify(a));
+    } catch {
+      // Vale até fechar o app.
+    }
+  }
+
+  /** A apresentação só liga e desliga a área de trabalho. */
+  function alternarFundo() {
+    escolherFundo(fundo === "area" ? fundoAntes : "area");
   }
 
   function abrirBoasVindas(modo: ModoDasBoasVindas) {
@@ -279,6 +405,11 @@
     document.documentElement.classList.toggle("jogo-aberto", jogoNaTela);
     document.documentElement.dataset.tema = tema === "escuro" ? "noite" : "dia";
     document.documentElement.classList.toggle("janela-transparente", semFundo);
+    document.documentElement.classList.toggle("fundo-limpo", fundo === "limpo");
+    document.documentElement.classList.toggle("fundo-papel", fundoPapel);
+    // A época na raiz: os tokens (cor da marca, filete dos cartões, geada do Natal) mudam o app inteiro.
+    if (temporada) document.documentElement.dataset.epoca = temporada.id;
+    else delete document.documentElement.dataset.epoca;
   });
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -547,18 +678,6 @@
     varredura = await ponte.definirVarredura(!varredura.ligado).catch(() => varredura);
   }
 
-  async function medirDpc() {
-    if (medindoDpc) {
-      await ponte.cancelarDpc().catch(() => {});
-      return;
-    }
-    medindoDpc = true;
-    recadoDpc = "Medindo 10 s…";
-    const r = await ponte.capturarDpc(10).catch((e) => ({ estado: "Falhou" as const, etapa: "", codigo: 0, texto: String(e) }));
-    medindoDpc = false;
-    recadoDpc = r.estado === "Medido" ? r.relatorio.veredito.texto : r.texto;
-  }
-
   // ---------------------------------------------------------------------------------------------------------------
 
   function pct(v: number | null | undefined) {
@@ -636,7 +755,13 @@
     const laco = async () => {
       if (!vivo) return;
       jogo = await ponte.jogoAberto().catch(() => null);
-      if (!jogo && !document.hidden) metricas = await ponte.metricas().catch(() => metricas);
+      if (!jogo && !document.hidden) {
+        const lido = await ponte.metricas().catch(() => null);
+        if (lido) {
+          metricas = lido;
+          if (lido.cpu.overall != null) historicoCpu = [...historicoCpu.slice(-59), lido.cpu.overall];
+        }
+      }
       espera = setTimeout(laco, jogo ? 5000 : document.hidden ? 4000 : 2000);
     };
     void laco();
@@ -721,6 +846,7 @@
 </script>
 
 <!-- O cômodo desfocado atrás do vidro. Feito em CSS: parede, janela com luz, chão, sofá e luminária. -->
+<div class="limpo" data-epoca={temporada?.id ?? null} aria-hidden="true"></div>
 <div class="comodo" data-epoca={temporada?.id ?? null} aria-hidden="true">
   <div class="parede"></div>
   <div class="janela-luz"></div>
@@ -729,6 +855,7 @@
   <div class="luminaria"><span></span></div>
   <div class="mesa"></div>
 </div>
+<PapelDeFundo {fundo} imagem={imagemDoFundo} ajuste={ajusteDoFundo} />
 
 {#if temporada}
   <EfeitoDeEpoca efeito={temporada.efeito} />
@@ -765,9 +892,24 @@
       {#if licenca && !licenca.ativa}
         <button class="ativar-botao" onclick={() => abrirBoasVindas("licenca")}>Ativar licença</button>
       {/if}
-      <button class="fundo-botao" aria-pressed={semFundo} title={semFundo ? "Voltar o fundo" : "Tirar o fundo e ver a área de trabalho"} onclick={alternarFundo}>
-        Sem fundo
-      </button>
+      <div class="fundo-escolha">
+        <button class="fundo-botao" aria-haspopup="menu" aria-expanded={menuDoFundo} title="O que fica atrás do painel" onclick={() => (menuDoFundo = !menuDoFundo)}>
+          Fundo: {nomeDoFundo}
+        </button>
+        {#if menuDoFundo}
+          <div in:entrar>
+            <MenuDoFundo
+              {fundo}
+              imagem={imagemDoFundo}
+              ajuste={ajusteDoFundo}
+              onescolher={escolherFundo}
+              onimagem={guardarImagemDoFundo}
+              onajuste={mudarAjusteDoFundo}
+              onfechar={() => (menuDoFundo = false)}
+            />
+          </div>
+        {/if}
+      </div>
       <button class="redondo" aria-label="Avisos" onclick={() => (mostrarAvisos = !mostrarAvisos)}>
         <Icone nome="sino" tamanho={18} />
         {#if lista.length > 0}<span class="contador">{lista.length}</span>{/if}
@@ -840,7 +982,47 @@
       <div class="conteudo" in:entrar>
         {#if aberta === "inicio"}
           <div class="grade">
-            <!-- Seus jogos: busca e as três capas mais recentes -->
+            <!-- Pronto pra jogar: a prontidão lida neste PC, item a item, e as duas ações da tela -->
+            <section class="bloco b-heroi" use:brilho>
+              <div class="heroi-ola">
+                <span class="heroi-oti"><Oti acessorio={temporada?.acessorio ?? null} humor={prontidao.ok === prontidao.total ? "feliz" : humor} tamanho={64} segueCursor={false} /></span>
+                <div>
+                  <p class="sec">{temporada?.saudacao ?? saudacaoDaHora}</p>
+                  <h2 class="heroi-titulo">{prontidao.ok === prontidao.total ? "Pronto pra jogar" : prontidao.total - prontidao.ok === 1 ? "Quase pronto pra jogar" : "Dá pra deixar melhor"}</h2>
+                  <p class="sec">{prontidao.ok} de {prontidao.total} em ordem neste PC</p>
+                </div>
+              </div>
+              <ul class="heroi-itens">
+                {#each prontidao.itens as it (it.id)}
+                  <li>
+                    <button class="item-pronto" class:ok={it.ok} onclick={it.acao} disabled={it.ok && it.id !== "otimizado"} title={it.botao ? `${it.botao} durante o jogo` : undefined}>
+                      <span class="marca-pronto" aria-hidden="true">{it.ok ? "✓" : "!"}</span>
+                      <span class="texto-pronto">{it.texto}</span>
+                      {#if it.botao}<span class="seta-pronto" aria-hidden="true">›</span>{/if}
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+              <div class="heroi-acoes">
+                <div class="anel" style:--fr={prontidao.fracao} aria-label={`${prontidao.ok} de ${prontidao.total} em ordem`}>
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <circle cx="32" cy="32" r="27" class="anel-fundo" />
+                    <circle cx="32" cy="32" r="27" class="anel-cheio" pathLength="100" />
+                  </svg>
+                  <span class="numero">{Math.round(prontidao.fracao * 100)}<small>%</small></span>
+                </div>
+                <div class="heroi-botoes">
+                  <button class="botao-principal" onclick={() => abrir("turbo")}>Otimizar agora</button>
+                  {#if jogoDoPlayer && !jogo}
+                    <button class="botao-secundario" onclick={() => jogoDoPlayer && jogarJogo(jogoDoPlayer)}>Jogar {jogoDoPlayer}</button>
+                  {:else if mudancas}
+                    <button class="botao-secundario" onclick={() => abrir("historico")}>O que foi mudado ({mudancas})</button>
+                  {/if}
+                </div>
+              </div>
+            </section>
+
+            <!-- Seus jogos: busca e as capas mais recentes -->
             <section class="bloco b-jogos" use:brilho>
               <label class="campo-busca">
                 <Icone nome="busca" tamanho={15} />
@@ -851,6 +1033,7 @@
                   <div class="capa-jogo">
                     <button class="capa-abrir" onclick={() => abrir("jogos")} title={j.nome} aria-label={`${j.nome}: ver partidas`}>
                       {#if capa}<img src={capa} alt="" onerror={() => fotoFalhou(j.nome)} />{:else}<span class="ini">{iniciais(j.nome)}</span>{/if}
+                      {#if partidaDoPlayer?.ultima && j.nome === partidaDoPlayer.nome}<span class="fps-na-capa"><strong>{inteiro(partidaDoPlayer.ultima.fps_nativo)}</strong> FPS</span>{/if}
                     </button>
                     <div class="capa-pe">
                       <span class="capa-nome">{j.nome}</span>
@@ -919,31 +1102,11 @@
               {/if}
             </section>
 
-            <!-- Otimizar: a ação principal da tela e os atalhos que respondem uma pergunta -->
-            <section class="bloco b-acoes" use:brilho>
-              <h3>Otimizar</h3>
-              <p class="sec pequeno">Ajustes conferidos neste PC. Cada um fica no Histórico com o valor de antes.</p>
-              <button class="botao-principal" onclick={() => abrir("turbo")}>Otimizar agora</button>
-              <ul class="atalhos">
-                <li><button onclick={() => abrir("rede")}>Medir a rota até o jogo<Icone nome="seta_direita" tamanho={14} /></button></li>
-                <li><button onclick={() => abrir("latencia")}>Achar o driver que trava<Icone nome="seta_direita" tamanho={14} /></button></li>
-                <li><button onclick={() => abrir("prova")}>Provar antes e depois<Icone nome="seta_direita" tamanho={14} /></button></li>
-                <li>
-                  <button onclick={() => abrir("historico")}>
-                    <span>O que foi mudado{mudancas ? ` (${mudancas})` : ""}</span><Icone nome="seta_direita" tamanho={14} />
-                  </button>
-                </li>
-              </ul>
-              {#if mudancas}
-                <button class="link desfazer" onclick={() => abrir("historico")}><Icone nome="desfazer" tamanho={14} /> Desfazer tudo</button>
-              {/if}
-            </section>
-
             <!-- Agora: os quatro números do PC, cada um com nome -->
             <section class="bloco b-agora" use:brilho>
               <h3>Agora</h3>
               <ul class="medidores">
-                {#each medidores as m (m.nome)}
+                {#each medidores.slice(0, 2) as m (m.nome)}
                   <li>
                     <div class="medidor-linha">
                       <span>{m.nome}</span>
@@ -953,6 +1116,20 @@
                   </li>
                 {/each}
               </ul>
+              {#if curvaCpu && !jogo}
+                <figure class="vivo">
+                  <svg viewBox="0 0 120 36" preserveAspectRatio="none" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="vivo-preenchido" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="currentColor" stop-opacity="0.22" />
+                        <stop offset="1" stop-color="currentColor" stop-opacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path d={curvaCpu.area} fill="url(#vivo-preenchido)" />
+                    <path d={curvaCpu.linha} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+                  </svg>
+                </figure>
+              {/if}
               {#if jogo}<p class="sec pequeno">Leitura pausada com o jogo aberto.</p>{/if}
               <button class="link" onclick={() => abrir("sistema", "agora")}>Ver quem está pesando <Icone nome="seta_direita" tamanho={14} /></button>
             </section>
@@ -985,33 +1162,7 @@
                   </div>
                   <button class="chave" role="switch" aria-checked={varredura?.ligado ?? false} aria-label="Wi-Fi sem procurar redes durante o jogo" disabled={!varredura} onclick={alternarVarredura}></button>
                 </li>
-                <li>
-                  <div>
-                    <span>Driver que trava</span>
-                    <span class="sec pequeno">{recadoDpc ?? "Mede 10 s e aponta o culpado. Não muda nada."}</span>
-                  </div>
-                  <button class="botao-pequeno" onclick={medirDpc}>{medindoDpc ? "Parar" : "Medir"}</button>
-                </li>
               </ul>
-            </section>
-
-            <!-- Avisos: cada um leva para onde se resolve -->
-            <section class="bloco b-avisos" use:brilho>
-              <h3>Avisos</h3>
-              {#if lista.length === 0}
-                <p class="aviso-linha sec"><span class="ponto" data-tom="ok"></span>Nada atrapalhando no que eu sei olhar.</p>
-              {:else}
-                <ul class="lembretes">
-                  {#each lista.slice(0, 3) as a (a.id)}
-                    <li>
-                      <button class="aviso-linha" onclick={() => abrir(areaDoAviso(a.id))}>
-                        <span class="ponto" data-tom={a.gravidade === "serio" ? "perigo" : "atencao"}></span>
-                        <span>{a.titulo}</span>
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
             </section>
 
             <!-- Tela: a taxa em uso contra a que o monitor aguenta -->
@@ -1037,11 +1188,12 @@
         {:else}
           <div class="area-aberta">
             <header class="area-topo">
-              <div>
+              <span class="area-icone" style:--cor-area={COR_DA_AREA[aberta] ?? "#8e8e93"}><Icone nome={ICONE_DA_AREA[aberta] ?? "grade"} tamanho={24} /></span>
+              <div class="area-nome">
                 <h2>{area.nome}</h2>
                 {#if area.pergunta}<p class="sec">{area.pergunta}</p>{/if}
-                {#if contexto}<p class="contexto"><span class="ponto" data-tom={contexto.tom}></span>{contexto.texto}</p>{/if}
               </div>
+              {#if contexto}<p class="contexto"><span class="ponto" data-tom={contexto.tom}></span>{contexto.texto}</p>{/if}
             </header>
             <div class="area-corpo">
               {#if aberta === "historico"}
@@ -1114,6 +1266,42 @@
 </div>
 
 <style>
+  /* ---------- O fundo limpo (padrão): grafite com uma luz de cima e um respiro da marca embaixo ---------- */
+  .limpo {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    display: none;
+    background:
+      radial-gradient(70% 55% at 50% -10%, rgb(255 255 255 / 0.07), transparent 70%),
+      radial-gradient(60% 40% at 50% 115%, color-mix(in srgb, var(--marca) 14%, transparent), transparent 70%),
+      linear-gradient(180deg, #121215 0%, #0b0b0d 100%);
+  }
+  :global(:root[data-tema="dia"]) .limpo {
+    background:
+      radial-gradient(70% 55% at 50% -10%, rgb(255 255 255 / 0.95), transparent 70%),
+      radial-gradient(60% 40% at 50% 115%, color-mix(in srgb, var(--marca) 8%, transparent), transparent 70%),
+      linear-gradient(180deg, #f3f4f7 0%, #e6e8ee 100%);
+  }
+  :global(:root.fundo-limpo) .limpo {
+    display: block;
+  }
+  :global(:root.fundo-limpo) .comodo,
+  :global(:root.fundo-papel) .comodo {
+    display: none;
+  }
+  /* A luz da época também entra no fundo limpo, bem mais baixa que no cômodo (lá ela passa pelo desfoque). */
+  .limpo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  .limpo[data-epoca]::after {
+    opacity: 0.55;
+  }
+
   /* ---------- O cômodo atrás do vidro ---------- */
   .comodo {
     position: fixed;
@@ -1133,39 +1321,46 @@
   .comodo[data-epoca]::after {
     opacity: 1;
   }
-  .comodo[data-epoca="natal"]::after {
+  .comodo[data-epoca="natal"]::after,
+  .limpo[data-epoca="natal"]::after {
     background:
       radial-gradient(ellipse 40% 50% at 12% 70%, rgb(214 47 58 / 0.35), transparent 70%),
       radial-gradient(ellipse 35% 45% at 88% 30%, rgb(34 139 84 / 0.3), transparent 70%),
       radial-gradient(ellipse 30% 30% at 60% 85%, rgb(255 210 120 / 0.35), transparent 70%);
   }
-  .comodo[data-epoca="ano-novo"]::after {
+  .comodo[data-epoca="ano-novo"]::after,
+  .limpo[data-epoca="ano-novo"]::after {
     background:
       radial-gradient(ellipse 45% 50% at 80% 25%, rgb(230 180 34 / 0.35), transparent 70%),
       radial-gradient(ellipse 40% 40% at 20% 80%, rgb(255 255 255 / 0.35), transparent 70%);
   }
-  .comodo[data-epoca="carnaval"]::after {
+  .comodo[data-epoca="carnaval"]::after,
+  .limpo[data-epoca="carnaval"]::after {
     background:
       radial-gradient(ellipse 40% 45% at 15% 30%, rgb(122 43 214 / 0.3), transparent 70%),
       radial-gradient(ellipse 40% 45% at 85% 70%, rgb(255 79 154 / 0.3), transparent 70%),
       radial-gradient(ellipse 30% 35% at 55% 20%, rgb(46 196 182 / 0.25), transparent 70%);
   }
-  .comodo[data-epoca="pascoa"]::after {
+  .comodo[data-epoca="pascoa"]::after,
+  .limpo[data-epoca="pascoa"]::after {
     background:
       radial-gradient(ellipse 45% 50% at 20% 30%, rgb(255 182 200 / 0.4), transparent 70%),
       radial-gradient(ellipse 45% 50% at 80% 75%, rgb(190 230 200 / 0.4), transparent 70%);
   }
-  .comodo[data-epoca="festa-junina"]::after {
+  .comodo[data-epoca="festa-junina"]::after,
+  .limpo[data-epoca="festa-junina"]::after {
     background:
       radial-gradient(ellipse 50% 45% at 50% 95%, rgb(255 140 40 / 0.4), transparent 70%),
       radial-gradient(ellipse 35% 35% at 15% 20%, rgb(250 204 21 / 0.3), transparent 70%);
   }
-  .comodo[data-epoca="dia-das-criancas"]::after {
+  .comodo[data-epoca="dia-das-criancas"]::after,
+  .limpo[data-epoca="dia-das-criancas"]::after {
     background:
       radial-gradient(ellipse 40% 45% at 20% 25%, rgb(59 130 246 / 0.3), transparent 70%),
       radial-gradient(ellipse 40% 45% at 80% 75%, rgb(250 204 21 / 0.3), transparent 70%);
   }
-  .comodo[data-epoca="halloween"]::after {
+  .comodo[data-epoca="halloween"]::after,
+  .limpo[data-epoca="halloween"]::after {
     background:
       radial-gradient(ellipse 45% 50% at 20% 75%, rgb(249 115 22 / 0.4), transparent 70%),
       radial-gradient(ellipse 45% 45% at 85% 25%, rgb(88 28 135 / 0.4), transparent 70%);
@@ -1278,6 +1473,24 @@
     --vidro-borda: rgb(255 255 255 / 0.12);
     --bloco-solto: rgb(38 38 42 / 0.94);
   }
+  /* Fundo limpo: o vidro vira grafite firme (o desfoque não tem o que desfocar e só gastaria placa). */
+  :global(:root.fundo-limpo) .casca {
+    --vidro-fundo: rgb(250 250 252 / 0.82);
+    --vidro-borda: rgb(255 255 255 / 0.9);
+    --bloco: rgb(0 0 0 / 0.035);
+    --bloco-solto: rgb(255 255 255 / 0.92);
+    --bloco-2: rgb(0 0 0 / 0.06);
+  }
+  :global(:root.fundo-limpo[data-tema="noite"]) .casca {
+    --vidro-fundo: rgb(24 24 27 / 0.86);
+    --vidro-borda: rgb(255 255 255 / 0.08);
+    --bloco: rgb(255 255 255 / 0.045);
+    --bloco-solto: rgb(26 26 30 / 0.96);
+    --bloco-2: rgb(255 255 255 / 0.09);
+  }
+  :global(:root.fundo-limpo) .vidro,
+  :global(:root.fundo-limpo) .vidro-forte,
+  :global(:root.fundo-limpo) .painel.solto .bloco,
   :global(:root.janela-transparente) .vidro,
   :global(:root.janela-transparente) .vidro-forte,
   :global(:root.janela-transparente) .painel.solto .bloco {
@@ -1314,6 +1527,8 @@
   /* ---------- Barra de cima ---------- */
   .topo {
     position: absolute;
+    /* Acima do painel: o menu do Fundo abre por cima dos blocos. */
+    z-index: 5;
     left: 96px;
     right: 24px;
     top: 14px;
@@ -1435,10 +1650,8 @@
     font-size: 13px;
     cursor: pointer;
   }
-  .fundo-botao[aria-pressed="true"] {
-    background: var(--texto);
-    color: var(--contra, #fff);
-    border-color: transparent;
+  .fundo-escolha {
+    position: relative;
   }
   .segmento {
     display: flex;
@@ -1712,11 +1925,11 @@
     min-height: 500px;
     display: grid;
     grid-template-columns: 1fr 1fr 1.1fr 1.15fr;
-    grid-template-rows: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 0.9fr);
+    grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr);
     grid-template-areas:
-      "jogos jogos partida acoes"
-      "agora fundo fundo acoes"
-      "agora avisos avisos tela";
+      "heroi heroi heroi heroi"
+      "jogos jogos jogos partida"
+      "agora fundo fundo tela";
     gap: 12px;
   }
   .b-jogos {
@@ -1725,18 +1938,181 @@
   .b-partida {
     grid-area: partida;
   }
-  .b-acoes {
-    grid-area: acoes;
+  /* A faixa "Pronto pra jogar": saudação e o Oti, os itens lidos, o anel e as duas ações. */
+  .bloco.b-heroi {
+    grid-area: heroi;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 24px;
+    padding: 16px 20px;
+    background:
+      radial-gradient(60% 120% at 0% 0%, var(--marca-suave), transparent 60%),
+      radial-gradient(260px circle at var(--mx) var(--my), rgb(255 255 255 / 0.18), transparent 60%),
+      var(--bloco);
   }
+  .heroi-ola {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .heroi-titulo {
+    font-family: var(--fonte-titulo);
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin: 2px 0;
+  }
+  .heroi-itens {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 8px;
+  }
+  .heroi-itens .item-pronto {
+    width: 100%;
+  }
+  .texto-pronto {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+  .item-pronto {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 6px 0 5px;
+    border-radius: 999px;
+    border: 1px solid var(--vidro-borda);
+    background: var(--bloco-2);
+    color: var(--texto);
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background var(--mov-rapido) ease, transform var(--mov-rapido) var(--curva-mola);
+  }
+  .item-pronto:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .item-pronto:disabled {
+    cursor: default;
+  }
+  .marca-pronto {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--atencao) 22%, transparent);
+    color: var(--atencao);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .item-pronto.ok .marca-pronto {
+    background: color-mix(in srgb, var(--ok) 20%, transparent);
+    color: var(--ok);
+  }
+  .item-pronto.ok .texto-pronto {
+    color: var(--sec);
+  }
+  .seta-pronto {
+    padding: 0 4px;
+    color: var(--sec);
+    font-size: 16px;
+    line-height: 1;
+  }
+  .heroi-acoes {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .anel {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    display: grid;
+    place-items: center;
+  }
+  .anel svg {
+    position: absolute;
+    inset: 0;
+    transform: rotate(-90deg);
+    /* Sem isto o brilho do anel era cortado pelo quadrado do SVG (aparecia um quadrado rosado atrás). */
+    overflow: visible;
+  }
+  .anel circle {
+    fill: none;
+    stroke-width: 6;
+  }
+  .anel-fundo {
+    stroke: var(--bloco-2);
+  }
+  .anel-cheio {
+    stroke: var(--marca);
+    stroke-linecap: round;
+    stroke-dasharray: 100;
+    stroke-dashoffset: calc(100 - var(--fr) * 100);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--marca) 60%, transparent));
+    transition: stroke-dashoffset 900ms var(--curva-saida);
+  }
+  .anel .numero {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .anel small {
+    font-size: 13px;
+    color: var(--sec);
+  }
+  .heroi-botoes {
+    display: grid;
+    gap: 8px;
+    width: 176px;
+  }
+  .botao-secundario {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 12px;
+    border: 1px solid var(--vidro-borda);
+    background: var(--bloco-2);
+    color: var(--texto);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fps-na-capa {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.55);
+    color: #fff;
+    font-size: 11px;
+  }
+  .fps-na-capa strong {
+    font-family: var(--fonte-titulo);
+    font-size: 13px;
+  }
+
   .b-agora {
     grid-area: agora;
   }
   .b-fundo {
     grid-area: fundo;
   }
-  .b-avisos {
-    grid-area: avisos;
-  }
+
   .b-tela {
     grid-area: tela;
   }
@@ -2097,43 +2473,8 @@
   }
 
   /* Otimizar */
-  .b-acoes .botao-principal {
+  .b-heroi .botao-principal {
     margin: 2px 0 6px;
-  }
-  .atalhos {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-  .atalhos li + li {
-    border-top: 1px solid var(--vidro-borda);
-  }
-  .atalhos button {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    width: 100%;
-    min-height: 42px;
-    padding: 0 2px;
-    border: 0;
-    background: none;
-    color: var(--texto);
-    font-size: 13px;
-    text-align: left;
-    cursor: pointer;
-  }
-  .atalhos button :global(.icone) {
-    color: var(--sec);
-    transition: transform var(--mov-rapido) ease;
-  }
-  .atalhos button:hover :global(.icone) {
-    color: var(--texto);
-    transform: translateX(2px);
-  }
-  .desfazer {
-    margin-top: 4px;
-    color: var(--sec);
   }
 
   /* Agora */
@@ -2202,37 +2543,22 @@
     font-size: 13px;
   }
 
-  /* Avisos */
-  .lembretes {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  /* O gráfico vivo do processador: desce até o rodapé do bloco Agora. */
+  .vivo {
     display: grid;
-    gap: 2px;
-  }
-  .aviso-linha {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    width: 100%;
-    padding: 4px 0;
-    border: 0;
-    background: none;
+    gap: 4px;
+    margin: auto 0 0;
     color: var(--texto);
-    font-size: 13px;
-    line-height: 1.35;
-    text-align: left;
   }
-  button.aviso-linha {
-    cursor: pointer;
+  .vivo svg {
+    width: 100%;
+    height: 30px;
+    opacity: 0.85;
   }
-  button.aviso-linha:hover span:last-child {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-  .aviso-linha .ponto {
-    transform: translateY(-1px);
-  }
+
+  /* Com um aviso só (ou nenhum), o Oti ocupa o resto do bloco em vez de deixar um buraco. */
+
+  /* Avisos */
 
   /* Tela */
   .gigante {
@@ -2257,11 +2583,11 @@
       grid-template-rows: none;
       grid-auto-rows: minmax(180px, auto);
       grid-template-areas:
+        "heroi heroi"
         "jogos jogos"
-        "partida acoes"
-        "agora acoes"
+        "partida agora"
         "fundo fundo"
-        "avisos tela";
+        "tela tela";
     }
     /* Com a grade rolando, a altura vem do conteúdo: sem isto a capa (em pé) cresce com a largura da janela. */
     .tres {
@@ -2273,10 +2599,10 @@
   /* ---------- Área aberta dentro do painel ---------- */
   .area-aberta {
     display: grid;
-    gap: 8px;
-    max-width: 860px;
+    gap: 14px;
+    max-width: 1000px;
     margin: 0 auto;
-    padding: 6px 10px;
+    padding: 10px 14px 24px;
     /* As áreas usam os tokens de `tokens.css` (os mesmos tons da casca); aqui só as superfícies viram vidro. */
     --superficie: rgb(255 255 255 / 0.4);
     --superficie-2: rgb(255 255 255 / 0.5);
@@ -2289,31 +2615,68 @@
     --acao: #f5f5f7;
     --acao-forte: #fff;
   }
+  /* O cabeçalho da área: ícone num quadrado de vidro, nome grande, a pergunta, e o estado lido à direita. */
   .area-topo {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding-bottom: 6px;
+    gap: 16px;
+    padding: 4px 4px 6px;
+  }
+  /* O ladrilho colorido da área: degradê da cor, brilho de vidro no alto, ícone branco e uma sombra da mesma cor. */
+  .area-icone {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    background:
+      radial-gradient(120% 80% at 30% 0%, rgb(255 255 255 / 0.45), transparent 55%),
+      linear-gradient(160deg, color-mix(in srgb, var(--cor-area) 75%, #fff), var(--cor-area) 55%, color-mix(in srgb, var(--cor-area) 80%, #000));
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      inset 0 -1px 0 rgb(0 0 0 / 0.15),
+      0 10px 24px -6px color-mix(in srgb, var(--cor-area) 60%, transparent);
+    color: #fff;
+  }
+  .area-icone :global(svg) {
+    filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.25));
+  }
+  .area-nome {
+    flex: 1;
+    min-width: 0;
+  }
+  .area-topo h2 {
+    font-family: var(--fonte-titulo);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  .area-topo .area-nome .sec {
+    margin-top: 2px;
+    font-size: 14px;
   }
   .area-topo .contexto {
     display: flex;
     align-items: center;
-    gap: 7px;
-    margin: 6px 0 0;
+    gap: 8px;
+    flex: none;
+    max-width: 46%;
+    margin: 0;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--bloco);
+    border: 1px solid var(--vidro-borda);
     font-size: 13px;
     font-weight: 500;
     color: var(--texto);
   }
-  .area-topo h2 {
-    font-family: var(--fonte-titulo);
-    font-size: 20px;
-    font-weight: 600;
-  }
+  /* O corpo não é mais uma caixa: cada seção vira o seu cartão (`tokens.css`, `.area-corpo .secao`). */
   .area-corpo {
-    padding: 4px 18px 18px;
-    border-radius: 24px;
-    background: var(--bloco);
-    border: 1px solid var(--vidro-borda);
+    display: grid;
+    gap: 12px;
   }
   .em-breve {
     display: grid;
@@ -2363,6 +2726,25 @@
   .aba.ativa {
     color: var(--ativo-texto);
     font-weight: 600;
+  }
+  /* O pontinho da marca embaixo da aba ativa: o único vermelho fixo da tela. */
+  .aba::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 5px;
+    width: 4px;
+    height: 4px;
+    margin-left: -2px;
+    border-radius: 50%;
+    background: var(--marca);
+    opacity: 0;
+    transform: scale(0.4);
+    transition: opacity var(--mov-medio) ease, transform var(--mov-medio) var(--curva-mola);
+  }
+  .aba.ativa::after {
+    opacity: 1;
+    transform: scale(1);
   }
 
   .pausado {
