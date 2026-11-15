@@ -7,6 +7,7 @@
   import OndeOsJogosMoram from "./OndeOsJogosMoram.svelte";
   import Cs2Integracao from "./Cs2Integracao.svelte";
   import FivemPainel from "./FivemPainel.svelte";
+  import CatalogoDoJogo from "./CatalogoDoJogo.svelte";
   import PcsParecidos from "./PcsParecidos.svelte";
   import TurboDoJogo from "./TurboDoJogo.svelte";
   import LinhaDoTempo from "./LinhaDoTempo.svelte";
@@ -171,7 +172,11 @@
           {#if /fivem/i.test(atual.jogo.nome)}
             <FivemPainel />
           {/if}
+          {#if /valorant/i.test(atual.jogo.nome)}
+            {#key atual.jogo.nome}<CatalogoDoJogo jogo="valorant" />{/key}
+          {/if}
           {#if atual.jogo.appid === 730 || /counter-strike 2|^cs2$/i.test(atual.jogo.nome)}
+            {#key atual.jogo.nome}<CatalogoDoJogo jogo="cs2" />{/key}
             <Cs2Integracao />
           {/if}
         </div>

@@ -10,6 +10,7 @@ pub mod comunidade;
 pub mod contador_fivem;
 pub mod cores;
 pub mod cs2;
+pub mod cs2_treino;
 pub mod discord;
 pub mod energia_jogo;
 pub mod feedback;

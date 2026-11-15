@@ -92,6 +92,19 @@ fn locais() -> Vec<(&'static str, &'static str, PathBuf)> {
             local.join("D3DSCache"),
         ),
     ]
+    .into_iter()
+    .chain(shadercache_da_steam(730).map(|p| ("steam_cs2", "Cache de shader do CS2 (Steam)", p)))
+    .collect()
+}
+
+/// A pasta `steamapps\shadercache\<appid>` fica na biblioteca onde o jogo está, que pode ser outro disco.
+fn shadercache_da_steam(appid: u32) -> Option<PathBuf> {
+    let steam = super::jogos::pasta_da_steam()?;
+    let lista = std::fs::read_to_string(steam.join(r"steamapps\libraryfolders.vdf")).unwrap_or_default();
+    std::iter::once(steam)
+        .chain(super::jogos::raizes_steam(&lista))
+        .map(|r| r.join("steamapps").join("shadercache").join(appid.to_string()))
+        .find(|p| p.is_dir())
 }
 
 fn medir(dir: &Path) -> (u64, usize, Option<std::time::SystemTime>) {
