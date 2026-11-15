@@ -8,13 +8,28 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.3_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.3_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.4_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.4_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.4: Correções de bugs no Jogo liso e no Turbo
+
+Atualização da 1.0 (número interno 4.0.4).
+
+## Correções
+
+- **Jogo liso** não trava mais o jogo na metade do monitor. Em monitor de 144 Hz, um jogo que rodava a 140 FPS podia ser travado em 72. Agora o teto nunca tira mais que 15% do FPS, e a tela mostra quanto ele tira antes de você travar.
+- **Jogo liso** usa o FPS de costume do jogo, tirado das suas últimas partidas, e não só os 20 segundos da medição. Um momento ruim, como cidade cheia ou cenário carregando, não vira o teto da noite inteira.
+- **Travar em X fps** grava exatamente o número que aparece na tela. Antes ele media de novo e podia gravar outro.
+- **Energia de jogo e prova do Turbo:** quem trocou ou apagou o plano de energia do Windows ficava com a energia de jogo travada e a prova do Turbo parando no meio. Corrigido.
+
+Se o seu jogo ficou mais pesado depois de usar o Jogo liso, abra **Histórico** e desfaça o "limitado a ... FPS", ou meça e trave de novo nesta versão.
 
 ---
 
