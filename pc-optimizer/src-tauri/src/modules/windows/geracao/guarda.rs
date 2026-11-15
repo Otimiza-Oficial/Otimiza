@@ -15,9 +15,10 @@ pub const INTERVALO_DE_ROTINA: f64 = 300.0;
 pub const MINIMO_DE_AMOSTRAS: usize = 3;
 pub const RAZAO_MINIMA: f64 = 0.96;
 /// Já no modo leve, a régua para desligar de vez. Com 0,96 nas duas, o log do dono mostrou o gerador desligando com o
-/// jogo mantendo 95,5% do FPS: a tela perdia o 2× inteiro (uns 80% de quadros a mais) por 4,5% do jogo. Abaixo de 90%,
-/// sim, o jogo sente, e desliga.
-pub const RAZAO_MINIMA_LEVE: f64 = 0.90;
+/// jogo mantendo 95,5% do FPS: a tela perdia o 2× inteiro (uns 80% de quadros a mais) por 4,5% do jogo. Com 0,90, um
+/// cliente com a placa no limite via o Frame Boost sumir minutos depois de ligar e o jogo "voltar ao normal": com 2×,
+/// 80% do jogo ainda é 1,6× na tela. Só abaixo de 75% (a tela perde metade do ganho e o mouse pesa) desliga.
+pub const RAZAO_MINIMA_LEVE: f64 = 0.75;
 /// Medido nesta máquina (PresentMon 2.6.0 no dwm, `presentmon::tests::vivo_conta_o_dwm`): os quadros chegam de 3,1 a
 /// 3,9 s depois de apresentados (lote do ETW mais o que o PresentMon segura para calcular as métricas). Cinco dão folga.
 pub const ATRASO_DA_CONTAGEM: f64 = 5.0;
@@ -221,8 +222,11 @@ mod tests {
         // Fora do modo leve, a mesma perda ainda pede o modo leve primeiro.
         let (_, acoes) = simular(64.4, 70.0, 120.0, 0.0);
         assert!(acoes.contains(&Acao::Desligar));
-        // 80% do FPS: o jogo sente; no modo leve, desliga.
-        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 56.0, 70.0, 120.0, 0.0);
+        // 82% do FPS (placa no limite): com 2× a tela ainda ganha 1,6×; no modo leve, o gerador fica.
+        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 57.4, 70.0, 600.0, 0.0);
+        assert!(!acoes.contains(&Acao::Desligar), "{:?}", acoes);
+        // 65% do FPS: o jogo sente de verdade; no modo leve, desliga.
+        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 45.5, 70.0, 120.0, 0.0);
         assert!(acoes.contains(&Acao::Desligar));
     }
 
