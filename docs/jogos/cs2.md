@@ -13,6 +13,9 @@
 | `setting.videocfg_shadow_quality` | 0 | qualidade das sombras no mínimo |
 | `setting.videocfg_ao_detail` | 0 | oclusão de ambiente: cara e não ajuda a ver ninguém |
 | `setting.videocfg_particle_detail` | 0 | partículas pesam em granada e fumaça |
+| `setting.shaderquality` | 0 | luz e reflexos mais simples, FPS em todo mapa |
+| `setting.mat_vsync` | 0 | sincronia vertical soma atraso no clique |
+| `setting.r_low_latency` | 1 | NVIDIA Reflex: a placa não acumula fila (placa sem Reflex ignora) |
 
 **Não toca** nas sombras dinâmicas dos jogadores: elas entregam posição (há teste que garante).
 

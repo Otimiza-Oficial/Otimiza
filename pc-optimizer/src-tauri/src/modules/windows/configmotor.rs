@@ -167,8 +167,48 @@ pub const PERFIS: &[PerfilDeJogo] = &[
                 valor: "0",
                 por_que: "Partículas: pesam em granada e fumaça, o pior momento para cair FPS.",
             },
+            Mudanca {
+                chave: "setting.shaderquality",
+                valor: "0",
+                por_que: "Detalhe de shader baixo: a luz e os reflexos ficam mais simples, e o FPS sobe em todo mapa.",
+            },
+            Mudanca {
+                chave: "setting.mat_vsync",
+                valor: "0",
+                por_que: "Sincronia vertical desligada: ela segura cada quadro até a tela pedir e soma atraso no clique.",
+            },
+            Mudanca {
+                chave: "setting.r_low_latency",
+                valor: "1",
+                por_que: "NVIDIA Reflex ligado: a placa não acumula quadros na fila, e o clique chega antes na tela. Em placa sem Reflex o jogo ignora.",
+            },
         ],
         ficha: "docs/jogos/cs2.md",
+    },
+    PerfilDeJogo {
+        id: "valorant",
+        nome: "Valorant",
+        formato: Formato::IniDaUnreal {
+            secao: "ScalabilityGroups",
+        },
+        mudancas: &[
+            Mudanca {
+                chave: "sg.ShadowQuality",
+                valor: "0",
+                por_que: "Sombras no mínimo: das opções mais caras, e no Valorant não mostram inimigo antes da hora.",
+            },
+            Mudanca {
+                chave: "sg.PostProcessQuality",
+                valor: "0",
+                por_que: "Pós-processamento (brilho e distorção): custa e embaça a leitura da tela.",
+            },
+            Mudanca {
+                chave: "sg.EffectsQuality",
+                valor: "0",
+                por_que: "Efeitos das habilidades no mínimo: pesam justo na hora da troca de tiro. A habilidade continua aparecendo inteira.",
+            },
+        ],
+        ficha: "docs/jogos/valorant.md",
     },
     PerfilDeJogo {
         id: "apex",
@@ -253,6 +293,18 @@ pub fn arquivos(id: &str) -> Vec<PathBuf> {
             .map(|u| u.join(r"Saved Games\Respawn\Apex\local\videoconfig.txt"))
             .into_iter()
             .collect(),
+        // Um por conta Riot (`<id>-<região>`), e o genérico de antes do primeiro login.
+        "valorant" => env("LOCALAPPDATA")
+            .map(|l| l.join(r"VALORANT\Saved\Config"))
+            .and_then(|c| std::fs::read_dir(&c).ok().map(|d| (c, d)))
+            .map(|(c, contas)| {
+                contas
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path().join(r"Windows\GameUserSettings.ini"))
+                    .chain(std::iter::once(c.join(r"Windows\GameUserSettings.ini")))
+                    .collect()
+            })
+            .unwrap_or_default(),
         "cs2" => super::jogos::pasta_da_steam()
             .and_then(|s| std::fs::read_dir(s.join("userdata")).ok())
             .map(|contas| {
@@ -445,6 +497,28 @@ mod tests {
                 assert!(!m.por_que.trim().is_empty(), "{}: {} sem o porquê", p.id, m.chave);
             }
         }
+    }
+
+    #[test]
+    fn o_valorant_muda_so_o_visual_pesado_e_nunca_a_textura_nem_o_serrilhado() {
+        let v = perfil("valorant").unwrap();
+        let ini = "[ScalabilityGroups]\r\nsg.ResolutionQuality=100.000000\r\nsg.AntiAliasingQuality=2\r\nsg.ShadowQuality=2\r\n\
+                   sg.PostProcessQuality=3\r\nsg.TextureQuality=2\r\nsg.EffectsQuality=2\r\n";
+        let (novo, mudou) = aplicar_no_texto(v, ini);
+        assert_eq!(mudou, ["sg.ShadowQuality", "sg.PostProcessQuality", "sg.EffectsQuality"]);
+        assert_eq!(ini_valor(&novo, "ScalabilityGroups", "sg.TextureQuality"), Some("2"));
+        assert_eq!(ini_valor(&novo, "ScalabilityGroups", "sg.AntiAliasingQuality"), Some("2"));
+        assert_eq!(ini_valor(&novo, "ScalabilityGroups", "sg.ResolutionQuality"), Some("100.000000"));
+    }
+
+    #[test]
+    fn o_cs2_desliga_a_sincronia_e_liga_o_reflex_so_se_o_arquivo_ja_tem_a_chave() {
+        let cs2 = perfil("cs2").unwrap();
+        let kv = "\t\"setting.mat_vsync\"\t\t\"1\"\n\t\"setting.r_low_latency\"\t\t\"0\"\n";
+        let (novo, mudou) = aplicar_no_texto(cs2, kv);
+        assert_eq!(mudou, ["setting.mat_vsync", "setting.r_low_latency"]);
+        assert_eq!(kv_valor(&novo, "setting.mat_vsync"), Some("0"));
+        assert_eq!(kv_valor(&novo, "setting.r_low_latency"), Some("1"));
     }
 
     #[test]
