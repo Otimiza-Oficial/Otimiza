@@ -139,6 +139,12 @@ export const commands = {
 	cs2Ligar: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_ligar"),
 	/**  Apaga o arquivo da integração. `LIVRES`: é desfazer. */
 	cs2Desligar: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_desligar"),
+	/**  `LIVRES`: só lê. */
+	cs2TreinoPainel: () => __TAURI_INVOKE<TreinoDoCs2>("cs2_treino_painel"),
+	/**  Escreve `otimiza_treino.cfg` e `otimiza_mira.cfg` na pasta `cfg` do CS2. `EXIGEM_LICENCA`. */
+	cs2TreinoInstalar: () => __TAURI_INVOKE<TreinoDoCs2>("cs2_treino_instalar"),
+	/**  Apaga só os arquivos de treino do Otimiza. `LIVRES`: é desfazer. */
+	cs2TreinoRemover: () => __TAURI_INVOKE<TreinoDoCs2>("cs2_treino_remover"),
 	/**  A tela avisa o humor do Oti; o ícone da bandeja muda junto. `LIVRES`: só a aparência do próprio Otimiza. */
 	bandejaHumor: (humor: string) => __TAURI_INVOKE<null>("bandeja_humor", { humor }),
 	/**  Esta versão sabe falar com o Discord (o ID da aplicação entrou na compilação). `LIVRES`. */
@@ -6382,6 +6388,12 @@ export type TrechoDaRota = "casa" |
 "internet" | "caminho" | "servidor" | 
 /**  O roteador nunca respondeu. */
 "sem_resposta";
+
+/**  As configs de treino do CS2 (`plataforma::cs2_treino`): o CS2 foi achado e os arquivos do Otimiza estão lá. */
+export type TreinoDoCs2 = {
+	jogo_achado: boolean,
+	instalado: boolean,
+};
 
 export type Troca = {
 	campo: Campo,

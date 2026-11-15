@@ -134,3 +134,124 @@ export function treinar(cv: HTMLCanvasElement, segundos: number, fim: (pct: numb
   };
   requestAnimationFrame(passo);
 }
+
+export function sensCs2DeValorant(sensValorant: number): number | null {
+  return sensValorant > 0 ? sensValorant * 3.18 : null;
+}
+
+const limitar = (v: number, min: number, max: number) => Math.min(max, Math.max(min, Math.round(v)));
+const fracao = (v: number) => String(Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000);
+
+/**
+ * O código de perfil de mira do Valorant (Configurações > Mira > Importar perfil). Lá a mira do Otimiza por cima do jogo
+ * é barrada pelo Vanguard: o caminho é a mira do próprio jogo. Cor personalizada (`c;8;u;RRGGBBAA`), linhas internas
+ * para a cruz, ponto central, linhas externas e erro de tiro/movimento desligados. Círculo e T não existem no Valorant:
+ * saem como a cruz mais parecida, e a `nota` diz isso.
+ */
+export function codigoValorant(m: Mira): { codigo: string; nota: string | null } {
+  const cor = /^#[0-9a-f]{6}$/i.test(m.cor) ? m.cor.slice(1).toUpperCase() : "FFFFFF";
+  const ponto = m.estilo === "ponto" || m.estilo === "cruz-ponto" || m.estilo === "circulo";
+  const linhas = m.estilo !== "ponto";
+  const partes = ["0", "P", "c", "8", "u", `${cor}FF`, "h", m.contorno ? "1" : "0"];
+  if (m.contorno) partes.push("t", "1", "o", "1");
+  partes.push("d", ponto ? "1" : "0");
+  if (ponto) partes.push("z", String(limitar(m.espessura, 1, 6)), "a", fracao(m.opacidade));
+  partes.push("0b", linhas ? "1" : "0");
+  if (linhas) {
+    partes.push(
+      "0t", String(limitar(m.espessura, 0, 10)),
+      "0l", String(limitar(m.tamanho, 0, 20)),
+      "0o", String(limitar(m.abertura, 0, 20)),
+      "0a", fracao(m.opacidade),
+      "0m", "0", "0f", "0",
+    );
+  }
+  partes.push("1b", "0");
+  const nota =
+    m.estilo === "circulo" || m.estilo === "t"
+      ? `O Valorant não tem mira em ${m.estilo === "t" ? "T" : "círculo"}: o código traz a cruz mais parecida.`
+      : m.tamanho > 20
+        ? "O Valorant vai até 20 de tamanho: o código usa 20."
+        : null;
+  return { codigo: partes.join(";"), nota };
+}
+
+export interface ResultadoDoFlick {
+  acertos: number;
+  erros: number;
+  /** Acertos sobre cliques, em %. */
+  precisao: number;
+  /** Do alvo aparecer até o clique certo, mediana em ms. */
+  reacao_ms: number | null;
+}
+
+/** Pura: o resumo do treino de flick. */
+export function resumirFlick(acertos: number, erros: number, tempos: number[]): ResultadoDoFlick {
+  const ordenados = [...tempos].sort((a, b) => a - b);
+  const meio = ordenados.length >> 1;
+  const mediana =
+    ordenados.length === 0 ? null : ordenados.length % 2 ? ordenados[meio] : (ordenados[meio - 1] + ordenados[meio]) / 2;
+  const cliques = acertos + erros;
+  return {
+    acertos,
+    erros,
+    precisao: cliques ? Math.round((acertos / cliques) * 100) : 0,
+    reacao_ms: mediana == null ? null : Math.round(mediana),
+  };
+}
+
+/** Treino de flick: um alvo por vez em lugar sorteado; clicar nele traz o próximo. Conta acerto, erro e reação. */
+export function treinarFlick(cv: HTMLCanvasElement, segundos: number, fim: (r: ResultadoDoFlick) => void) {
+  const r = cv.getBoundingClientRect();
+  cv.width = r.width * 2;
+  cv.height = r.height * 2;
+  const x = cv.getContext("2d")!;
+  const raio = 18;
+  let alvo = { x: 0, y: 0, desde: 0 };
+  let acertos = 0;
+  let erros = 0;
+  const tempos: number[] = [];
+  const sortear = () => {
+    const m = raio * 2;
+    alvo = { x: m + Math.random() * (cv.width - 2 * m), y: m + Math.random() * (cv.height - 2 * m), desde: performance.now() };
+  };
+  const clicar = (e: PointerEvent) => {
+    const b = cv.getBoundingClientRect();
+    const px = (e.clientX - b.left) * 2;
+    const py = (e.clientY - b.top) * 2;
+    if (Math.hypot(px - alvo.x, py - alvo.y) <= raio * 1.15) {
+      acertos++;
+      tempos.push(performance.now() - alvo.desde);
+      sortear();
+    } else {
+      erros++;
+    }
+  };
+  cv.addEventListener("pointerdown", clicar);
+  sortear();
+  const t0 = performance.now();
+
+  const passo = (t: number) => {
+    const s = (t - t0) / 1000;
+    const W = cv.width;
+    const H = cv.height;
+    x.fillStyle = "rgba(5,5,5,.9)";
+    x.fillRect(0, 0, W, H);
+    x.beginPath();
+    x.arc(alvo.x, alvo.y, raio, 0, 7);
+    x.fillStyle = "#fff";
+    x.shadowColor = "#fff";
+    x.shadowBlur = 18;
+    x.fill();
+    x.shadowBlur = 0;
+    x.fillStyle = "rgba(255,255,255,.7)";
+    x.font = "500 22px GeistMono, monospace";
+    x.fillText(`${Math.max(0, segundos - s).toFixed(1)} s · ${acertos} acertos · ${erros} erros`, 18, 34);
+    if (s < segundos) requestAnimationFrame(passo);
+    else {
+      cv.removeEventListener("pointerdown", clicar);
+      fim(resumirFlick(acertos, erros, tempos));
+    }
+  };
+  requestAnimationFrame(passo);
+}

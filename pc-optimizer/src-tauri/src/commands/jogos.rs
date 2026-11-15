@@ -552,3 +552,73 @@ pub fn cs2_desligar() -> Result<PainelDoCs2, String> {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
+
+/// As configs de treino do CS2 (`plataforma::cs2_treino`): o CS2 foi achado e os arquivos do Otimiza estão lá.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct TreinoDoCs2 {
+    pub jogo_achado: bool,
+    pub instalado: bool,
+}
+
+#[cfg(target_os = "windows")]
+fn cfg_do_cs2() -> Option<std::path::PathBuf> {
+    crate::plataforma::cs2::maquina::pasta_do_cs2().map(|p| crate::plataforma::cs2_treino::pasta_cfg(&p))
+}
+
+#[cfg(target_os = "windows")]
+fn treino_do_cs2() -> TreinoDoCs2 {
+    let cfg = cfg_do_cs2();
+    TreinoDoCs2 {
+        jogo_achado: cfg.is_some(),
+        instalado: cfg.is_some_and(|c| crate::plataforma::cs2_treino::instalado(&c)),
+    }
+}
+
+/// `LIVRES`: só lê.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn cs2_treino_painel() -> Result<TreinoDoCs2, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(treino_do_cs2())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Escreve `otimiza_treino.cfg` e `otimiza_mira.cfg` na pasta `cfg` do CS2. `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn cs2_treino_instalar() -> Result<TreinoDoCs2, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        let cfg = cfg_do_cs2().ok_or("Não achei o Counter-Strike 2 na biblioteca da Steam.")?;
+        crate::plataforma::cs2_treino::instalar(&cfg)?;
+        Ok(treino_do_cs2())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Apaga só os arquivos de treino do Otimiza. `LIVRES`: é desfazer.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn cs2_treino_remover() -> Result<TreinoDoCs2, String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(cfg) = cfg_do_cs2() {
+            crate::plataforma::cs2_treino::remover(&cfg)?;
+        }
+        Ok(treino_do_cs2())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}

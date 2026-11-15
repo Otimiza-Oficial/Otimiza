@@ -1,10 +1,17 @@
 <script lang="ts">
   // A área Mira (trazida da 3.3, `src/v33/app.ts`, `telaMira`): a mira numa janela do Otimiza por cima do jogo (sem
   // tocar nele), os comandos para a mira do próprio CS2, a sensibilidade em cm por volta, o treino de tracking e, para
-  // o FiveM, o campo de visão e o contador de FPS do jogo. Nada aqui mira por ninguém.
+  // o FiveM, o campo de visão e o contador de FPS do jogo. Na 1.0.3: o código da mira para o Valorant (lá a janela por
+  // cima é barrada pelo Vanguard), o treino de flick e as configs de treino do CS2. Nada aqui mira por ninguém.
   import { onDestroy, onMount } from "svelte";
   import { ferramentas, type ContadorFivem, type FovFivem } from "../lib/ferramentas";
-  import { cmPorVolta, CORES, desenharMira, ESTILOS, gravarMira, lerMira, sensValorant, treinar, type Mira } from "../lib/mira";
+  import { como } from "../lib/contrato";
+  import { noTauri } from "../lib/ponte";
+  import { commands } from "../lib/tipos";
+  import {
+    cmPorVolta, codigoValorant, CORES, desenharMira, ESTILOS, gravarMira, lerMira, sensCs2DeValorant, sensValorant, treinar,
+    treinarFlick, type Mira,
+  } from "../lib/mira";
 
   const CONTROLES: [keyof Pick<Mira, "tamanho" | "espessura" | "abertura" | "opacidade">, string, number, number, number][] = [
     ["tamanho", "Tamanho", 2, 30, 1],
@@ -27,15 +34,21 @@
   let treinando = $state(false);
   let resultado = $state<string | null>(null);
   let recorde = $state(lerRecorde());
+  let modo = $state<"tracking" | "flick">("tracking");
+  let recordeFlick = $state(lerRecorde("otimiza-recorde-flick"));
+
+  type Treino = { jogo_achado: boolean; instalado: boolean };
+  let treinoCs2 = $state<Treino | null>(null);
+  let treinoRecado = $state<{ texto: string; tom: "ok" | "atencao" } | null>(null);
 
   let fov = $state<FovFivem | null>(null);
   let fovPosicao = $state(5);
   let fovErro = $state<string | null>(null);
   let contador = $state<ContadorFivem | null>(null);
 
-  function lerRecorde() {
+  function lerRecorde(chave = "otimiza-recorde-tracking") {
     try {
-      return Number(localStorage.getItem("otimiza-recorde-tracking") ?? 0);
+      return Number(localStorage.getItem(chave) ?? 0);
     } catch {
       return 0;
     }
@@ -46,7 +59,47 @@
     fov = await ferramentas.fovFivem().catch(() => null);
     fovPosicao = fov?.pedido ?? fov?.atual ?? 5;
     contador = await ferramentas.contadorFivem().catch(() => null);
+    treinoCs2 = noTauri ? await como<Treino>(commands.cs2TreinoPainel()).catch(() => null) : { jogo_achado: true, instalado: false };
   });
+
+  async function treino(instalar: boolean) {
+    treinoRecado = null;
+    try {
+      if (!noTauri) {
+        treinoCs2 = { jogo_achado: true, instalado: instalar };
+      } else {
+        treinoCs2 = await como<Treino>(instalar ? commands.cs2TreinoInstalar() : commands.cs2TreinoRemover());
+      }
+      treinoRecado = instalar
+        ? { texto: "Pronto. No CS2, abra um servidor seu (Jogar > Praticar) e digite no console: exec otimiza_treino ou exec otimiza_mira.", tom: "ok" }
+        : { texto: "Tirei os arquivos de treino do Otimiza da pasta do CS2.", tom: "ok" };
+    } catch (e) {
+      treinoRecado = { texto: String(e), tom: "atencao" };
+    }
+  }
+
+  async function copiarValorant() {
+    const { codigo, nota } = codigoValorant($state.snapshot(mira) as Mira);
+    try {
+      await navigator.clipboard.writeText(codigo);
+      recado = {
+        texto: `Código copiado. No Valorant: Configurações > Mira > Importar perfil, e cole.${nota ? ` ${nota}` : ""}`,
+        tom: nota ? "atencao" : "ok",
+      };
+    } catch (e) {
+      recado = { texto: String(e), tom: "atencao" };
+    }
+  }
+
+  function definirValorant(v: number) {
+    const cs2 = sensCs2DeValorant(v);
+    if (cs2) sens = Math.round(cs2 * 1000) / 1000;
+  }
+
+  function escolherModo(m: "tracking" | "flick") {
+    modo = m;
+    resultado = null;
+  }
   onDestroy(() => clearTimeout(enviar));
 
   // Cada mudança vai para a prévia na hora, fica guardada e, com 120 ms de calma, para a janela no jogo.
@@ -90,6 +143,21 @@
   function comecarTreino() {
     if (!canvas) return;
     treinando = true;
+    if (modo === "flick") {
+      treinarFlick(canvas, 30, (r) => {
+        treinando = false;
+        if (r.acertos > recordeFlick) {
+          recordeFlick = r.acertos;
+          try {
+            localStorage.setItem("otimiza-recorde-flick", String(r.acertos));
+          } catch {
+            // Sem armazenamento: o recorde vale nesta sessão.
+          }
+        }
+        resultado = `${r.acertos} acertos em 30 s, ${r.precisao}% de precisão${r.reacao_ms != null ? `, reação de ${r.reacao_ms} ms` : ""}. Precisão primeiro: a velocidade vem depois.`;
+      });
+      return;
+    }
     treinar(canvas, 15, (pct) => {
       treinando = false;
       if (pct > recorde) {
@@ -200,6 +268,7 @@
       <div class="acoes">
         <button class="btn" class:primario={!ligada} onclick={alternar}>{ligada ? "Tirar do jogo" : "Mostrar no jogo"}</button>
         <button class="btn" onclick={copiarCs2}>Copiar para o CS2</button>
+        <button class="btn" onclick={copiarValorant}>Copiar para o Valorant</button>
       </div>
       {#if recado}
         <p class="recado" data-tom={recado.tom}>
@@ -211,7 +280,8 @@
   </section>
   <p class="apoio pequeno nota">
     A mira fica numa janela do Otimiza por cima do jogo, sem tocar nele. Aparece com o jogo em janela ou sem bordas; em tela
-    cheia exclusiva o Windows não deixa nada por cima. "Copiar para o CS2" leva a mesma mira para o console do jogo.
+    cheia exclusiva o Windows não deixa nada por cima. "Copiar para o CS2" leva a mesma mira para o console do jogo, e
+    "Copiar para o Valorant" gera o código de perfil de mira: no Valorant a janela por cima é barrada pelo Vanguard.
   </p>
 
   <section class="dupla">
@@ -224,23 +294,68 @@
       <div class="entradas">
         <label>DPI do mouse <input class="campo" type="number" min="100" max="32000" bind:value={dpi} /></label>
         <label>Sensibilidade no CS2 <input class="campo" type="number" min="0.05" step="0.05" bind:value={sens} /></label>
+        <label>
+          ou no Valorant
+          <input
+            class="campo"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={val == null ? "" : Math.round(val * 1000) / 1000}
+            onchange={(e) => definirValorant(Number(e.currentTarget.value))}
+          />
+        </label>
       </div>
       <p class="apoio pequeno">
-        No Valorant, a mesma volta é <b class="numero">{n(val, 3)}</b>. CS2, Apex e Valorant giram 0,022° por contagem do mouse:
-        mesma volta em centímetros, mesma memória muscular.
+        No Valorant, a mesma volta é <b class="numero">{n(val, 3)}</b>; no CS2, <b class="numero">{n(sens, 3)}</b>. Mude
+        qualquer um dos dois: mesma volta em centímetros, mesma memória muscular.
       </p>
     </div>
     <div class="cartao">
-      <h2>Treino de tracking {#if recorde}<span class="apoio pequeno">recorde {recorde}%</span>{/if}</h2>
+      <h2>
+        Treino de mira
+        {#if modo === "tracking" && recorde}<span class="apoio pequeno">recorde {recorde}%</span>{/if}
+        {#if modo === "flick" && recordeFlick}<span class="apoio pequeno">recorde {recordeFlick} acertos</span>{/if}
+      </h2>
+      <div class="segmento" role="radiogroup" aria-label="Tipo de treino">
+        <button role="radio" aria-checked={modo === "tracking"} disabled={treinando} onclick={() => escolherModo("tracking")}>Tracking</button>
+        <button role="radio" aria-checked={modo === "flick"} disabled={treinando} onclick={() => escolherModo("flick")}>Flick</button>
+      </div>
       <div class="treino">
         <canvas bind:this={canvas}></canvas>
         {#if !treinando}
-          <div class="sobre"><button class="btn primario" onclick={comecarTreino}>{resultado ? "De novo" : "Começar · 15 s"}</button></div>
+          <div class="sobre"><button class="btn primario" onclick={comecarTreino}>{resultado ? "De novo" : modo === "flick" ? "Começar · 30 s" : "Começar · 15 s"}</button></div>
         {/if}
       </div>
-      <p class="apoio pequeno">{resultado ?? "Mantenha o cursor sobre o alvo. Mede quanto tempo você ficou nele."}</p>
+      <p class="apoio pequeno">
+        {resultado ??
+          (modo === "flick"
+            ? "Clique em cada alvo assim que ele aparecer. Mede acertos, precisão e o tempo de reação."
+            : "Mantenha o cursor sobre o alvo. Mede quanto tempo você ficou nele.")}
+      </p>
     </div>
   </section>
+
+  {#if treinoCs2?.jogo_achado}
+    <section class="cartao">
+      <h2>Treino no CS2</h2>
+      <p class="apoio">
+        Duas configs de treino na pasta do CS2, como as que a comunidade troca: <b>otimiza_treino</b> mostra a trajetória da
+        granada antes de jogar, com munição e dinheiro infinitos e rodada sem fim; <b>otimiza_mira</b> põe 8 bots parados que
+        renascem, para treinar flick. Só funcionam num servidor seu: o VAC não se importa, e o servidor oficial recusa.
+      </p>
+      <div class="acoes">
+        {#if treinoCs2.instalado}
+          <button class="btn" onclick={() => navigator.clipboard.writeText("exec otimiza_treino")}>Copiar "exec otimiza_treino"</button>
+          <button class="btn" onclick={() => navigator.clipboard.writeText("exec otimiza_mira")}>Copiar "exec otimiza_mira"</button>
+          <button class="btn quieto" onclick={() => treino(false)}>Tirar do CS2</button>
+        {:else}
+          <button class="btn primario" onclick={() => treino(true)}>Colocar no CS2</button>
+        {/if}
+      </div>
+      {#if treinoRecado}<p class="recado" data-tom={treinoRecado.tom}>{treinoRecado.texto}</p>{/if}
+    </section>
+  {/if}
 
   <section class="cartao">
     <h2>FiveM</h2>
