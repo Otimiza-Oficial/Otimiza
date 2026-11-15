@@ -8,13 +8,40 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.2_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.2_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.3_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.3_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.3: Valorant, CS2 e correções de bugs
+
+Atualização da 1.0 (número interno 4.0.3). Além do FiveM, o Otimiza agora otimiza forte o Valorant e o CS2, com ferramentas de mira que a comunidade pediu. E corrigimos o Frame Boost que parava sozinho depois de um tempo.
+
+## Correções
+
+- O **Frame Boost** não para mais sozinho depois de alguns minutos com a placa de vídeo no limite. Ele desligava quando o jogo perdia um pouco de FPS real, mesmo com a tela ganhando quase o dobro de quadros. Agora, no modo leve, só desliga se o jogo perder mais de 25%, quando o mouse começa a pesar de verdade.
+
+## Novo: catálogo do Valorant e do CS2
+
+Em **Jogos**, escolha o Valorant ou o CS2 e veja o painel de cada um:
+
+- **Configuração do jogo:** o perfil leve tira o que pesa na placa sem tirar o que mostra o inimigo. No Valorant: sombras, pós-processamento e efeitos. No CS2: sombras, oclusão, partículas e detalhe de shader, com a sincronia vertical desligada e o NVIDIA Reflex ligado. Só muda o que já existe no arquivo do jogo, com o jogo fechado, e o **Desfazer** devolve o arquivo exatamente como era.
+- **Cache de shader:** limpa o cache do driver e, no CS2, o da Steam. É ele que causa as travadinhas depois de atualizar o driver ou o jogo.
+- **Windows e anticheat:** o que o Otimiza faz em cada jogo. No Valorant, o Vanguard não deixa nada desenhar por cima do jogo: o Otimiza respeita, e o ganho vem da configuração, do cache e do Turbo.
+
+## Novo: ferramentas de mira
+
+Na área **Mira**:
+
+- **Copiar para o Valorant:** a mira que você desenha vira um código de perfil. No Valorant: Configurações > Mira > Importar perfil.
+- **Treino de flick:** alvos em lugares sorteados por 30 segundos, com acertos, precisão e tempo de reação. O treino de tracking continua lá.
+- **Sensibilidade nos dois sentidos:** digite a do CS2 ou a do Valorant, e o Otimiza mostra a outra e os centímetros por volta.
+- **Treino no CS2:** duas configs de treino na pasta do jogo. `exec otimiza_treino` mostra a trajetória da granada, com munição e dinheiro infinitos. `exec otimiza_mira` põe 8 bots parados que renascem, para treinar flick. Só funcionam num servidor seu.
 
 ---
 
