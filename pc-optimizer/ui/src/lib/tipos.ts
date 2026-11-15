@@ -408,8 +408,11 @@ export const commands = {
 	laboratorioDeStreaming: () => __TAURI_INVOKE<LaboratorioNaTela_Serialize>("laboratorio_de_streaming"),
 	/**  Mede o jogo aberto e devolve o plano de ritmo estável (o teto que deixa o jogo liso). `LIVRES`: só mede. */
 	jogoLisoMedir: () => __TAURI_INVOKE<PlanoJogoLiso_Serialize>("jogo_liso_medir"),
-	/**  Aplica o teto de FPS estável no perfil do jogo (guardando o anterior). Vale ao reabrir o jogo. `EXIGEM_LICENCA`. */
-	jogoLisoAplicar: () => __TAURI_INVOKE<PlanoJogoLiso_Serialize>("jogo_liso_aplicar"),
+	/**
+	 *  Grava no perfil do jogo o teto que a medição mostrou (guardando o anterior). Vale ao reabrir o jogo. Grava o número
+	 *  que a pessoa viu: antes media de novo e gravava o resultado da segunda medição. `EXIGEM_LICENCA`.
+	 */
+	jogoLisoAplicar: (teto: number, hz: number) => __TAURI_INVOKE<number>("jogo_liso_aplicar", { teto, hz }),
 	/**  `LIVRES`: só mede (PresentMon e contadores do Windows); nada é alterado. Motor V2 da causa da travada. */
 	investigarTravadas: (segundos: number) => __TAURI_INVOKE<ResultadoDaInvestigacao_Serialize>("investigar_travadas", { segundos }),
 	/**  As mudanças vêm do `changelog` na hora: duas listas do mesmo fato discordam. */
@@ -4675,6 +4678,10 @@ export type PlanoJogoLiso = PlanoJogoLiso_Serialize | PlanoJogoLiso_Deserialize;
 export type PlanoJogoLiso_Deserialize = {
 	/**  FPS que o jogo entrega (mediana medida agora). */
 	fps_agora: number | null,
+	/**  O FPS de costume deste jogo nesta máquina (mediana das últimas medições automáticas); `None` com poucas. */
+	fps_tipico?: number | null,
+	/**  Quanto o teto tira do FPS de referência (o maior entre o de agora e o de costume), em %. 0 sem teto. */
+	perda_pct: number,
 	hz: number,
 	/**  O teto escolhido, ou `None` se o jogo já roda liso / passa do monitor. */
 	teto?: number | null,
@@ -4693,6 +4700,10 @@ export type PlanoJogoLiso_Deserialize = {
 export type PlanoJogoLiso_Serialize = {
 	/**  FPS que o jogo entrega (mediana medida agora). */
 	fps_agora: number | null,
+	/**  O FPS de costume deste jogo nesta máquina (mediana das últimas medições automáticas); `None` com poucas. */
+	fps_tipico: number | null,
+	/**  Quanto o teto tira do FPS de referência (o maior entre o de agora e o de costume), em %. 0 sem teto. */
+	perda_pct: number,
 	hz: number,
 	/**  O teto escolhido, ou `None` se o jogo já roda liso / passa do monitor. */
 	teto: number | null,

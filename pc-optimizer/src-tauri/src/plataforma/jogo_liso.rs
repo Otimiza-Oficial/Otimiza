@@ -15,6 +15,10 @@ use crate::modules::windows::presentmon::{Apresentacao, GargaloProvavel};
 pub struct Plano {
     /// FPS que o jogo entrega (mediana medida agora).
     pub fps_agora: f64,
+    /// O FPS de costume deste jogo nesta máquina (mediana das últimas medições automáticas); `None` com poucas.
+    pub fps_tipico: Option<f64>,
+    /// Quanto o teto tira do FPS de referência (o maior entre o de agora e o de costume), em %. 0 sem teto.
+    pub perda_pct: u32,
     pub hz: u32,
     /// O teto escolhido, ou `None` se o jogo já roda liso / passa do monitor.
     pub teto: Option<u32>,
@@ -81,36 +85,80 @@ pub fn aviso_de_tela(apresentacao: Apresentacao, gargalo: GargaloProvavel, por_c
 /// dela sobra ~15% de processador para absorver o pico, e é isso que tira o tranco.
 pub const FOLGA_DO_PROCESSADOR: f64 = 0.85;
 
+/// O máximo que o teto pode tirar do FPS de referência. Num cliente (GTX 1650, 144 Hz) a fração do monitor abaixo de
+/// 85% da mediana era 72, metade do monitor, e o FiveM, que costuma rodar de 105 a 160, foi travado em 72: "piorou
+/// muito, o frame tá dropando". A fração do monitor só vale quando cabe nesta régua.
+pub const PERDA_MAXIMA: f64 = 0.15;
+
+/// Medições automáticas que contam para o FPS de costume (as mais recentes), e o mínimo para confiar nelas.
+pub const MEDICOES_DO_COSTUME: usize = 10;
+pub const MINIMO_PARA_COSTUME: usize = 3;
+
+/// **Pura.** O FPS de costume: a mediana das medições (as mais recentes no fim). `None` com menos de
+/// `MINIMO_PARA_COSTUME`.
+pub fn fps_de_costume(fps: &[f64]) -> Option<f64> {
+    let mut v: Vec<f64> = fps
+        .iter()
+        .rev()
+        .filter(|x| x.is_finite() && **x > 0.0)
+        .take(MEDICOES_DO_COSTUME)
+        .copied()
+        .collect();
+    if v.len() < MINIMO_PARA_COSTUME {
+        return None;
+    }
+    v.sort_by(|a, b| a.total_cmp(b));
+    let m = v.len() / 2;
+    Some(if v.len() % 2 == 0 { (v[m - 1] + v[m]) / 2.0 } else { v[m] })
+}
+
 /// Abaixo disto por minuto o jogo já está liso (a régua do `fluidez`: quadro acima de 2,5× a média).
 pub const JA_LISO_TRANCOS: f64 = 2.0;
 
-pub fn planejar(fps_mediana: f64, hz: u32, trancos_por_minuto: f64) -> Plano {
+/// `fps_tipico`: o FPS de costume do jogo (`fps_de_costume`). Uma medição de 20 s num momento ruim (cidade cheia,
+/// cenário carregando) não pode virar o teto da noite inteira: a referência é o maior dos dois.
+pub fn planejar(fps_mediana: f64, fps_tipico: Option<f64>, hz: u32, trancos_por_minuto: f64) -> Plano {
+    let referencia = fps_tipico.map_or(fps_mediana, |t| t.max(fps_mediana));
+    let passa_do_monitor = hz > 0 && referencia >= hz as f64;
     // Jogo que já passa dos Hz trava no próprio monitor; abaixo deles, com a folga para o processador.
-    let base = if hz > 0 && fps_mediana >= hz as f64 {
-        fps_mediana
+    let base = if passa_do_monitor {
+        referencia
     } else {
-        fps_mediana * FOLGA_DO_PROCESSADOR
+        referencia * FOLGA_DO_PROCESSADOR
     };
     // Já liso (medido no dono, com a Energia de jogo: 6 → 0 trancos/min a 80 fps): travar abaixo só tiraria FPS. Acima
     // dos Hz o teto nos Hz continua: quadro que o monitor não mostra é só calor e atraso.
-    let ja_liso = trancos_por_minuto < JA_LISO_TRANCOS && !(hz > 0 && fps_mediana >= hz as f64);
-    let teto = if ja_liso {
+    let ja_liso = trancos_por_minuto < JA_LISO_TRANCOS && !passa_do_monitor;
+    let piso = (referencia * (1.0 - PERDA_MAXIMA)).floor();
+    let teto = if ja_liso || base < 24.0 {
         None
-    } else {
+    } else if passa_do_monitor {
         super::ritmo_estavel::teto_estavel(hz, base)
+    } else {
+        // A fração do monitor (o ritmo que fecha com os Hz) só se não tirar mais que `PERDA_MAXIMA`; senão, a folga.
+        let fracao = super::ritmo_estavel::teto_estavel(hz, base).filter(|f| *f as f64 >= piso);
+        Some(fracao.unwrap_or_else(|| base.round() as u32))
     };
+    let perda_pct = teto
+        .map(|t| ((1.0 - t as f64 / referencia) * 100.0).round().max(0.0) as u32)
+        .unwrap_or(0);
     let multiplicador = teto
         .map(|t| super::ritmo_estavel::multiplicador_para_o_monitor(t, hz))
         .unwrap_or(1);
     let motivo = match teto {
+        Some(t) if passa_do_monitor => format!(
+            "O jogo passa dos {} Hz do monitor: travar em {} não tira nada que você veja, e tira o calor e o atraso dos \
+             quadros que o monitor joga fora.",
+            hz, t
+        ),
         Some(t) if trancos_por_minuto >= 10.0 => format!(
             "O jogo entrega {:.0} fps mas trava {:.0} vezes por minuto: travar em {} deixa o ritmo constante (o que o olho \
-             sente como liso).",
-            fps_mediana, trancos_por_minuto, t
+             sente como liso), tirando no máximo {}% do FPS nos melhores momentos.",
+            referencia, trancos_por_minuto, t, perda_pct
         ),
         Some(t) => format!(
-            "Travar o jogo em {} deixa o ritmo mais constante num monitor de {} Hz.",
-            t, hz
+            "Travar o jogo em {} deixa o ritmo mais constante, tirando no máximo {}% do FPS nos melhores momentos.",
+            t, perda_pct
         ),
         None if ja_liso => format!(
             "O jogo já está liso: {:.0} fps e {:.0} trancos por minuto. Travar agora só tiraria FPS — deixe como está.",
@@ -120,6 +168,8 @@ pub fn planejar(fps_mediana: f64, hz: u32, trancos_por_minuto: f64) -> Plano {
     };
     Plano {
         fps_agora: fps_mediana,
+        fps_tipico,
+        perda_pct,
         hz,
         teto,
         multiplicador_do_boost: multiplicador,
@@ -168,7 +218,7 @@ pub fn medir(processo: &str, segundos: u32) -> Result<Plano, String> {
             quando: crate::modules::changelog::now_timestamp(),
         },
     );
-    let mut plano = planejar(r.fps_do_jogo_mediana, hz, r.engasgos_por_minuto);
+    let mut plano = planejar(r.fps_do_jogo_mediana, fps_tipico(processo), hz, r.engasgos_por_minuto);
     plano.teto_no_driver = teto_no_driver(processo);
     plano.aviso_do_teto = aviso_do_teto(teto_gravado(processo), plano.teto_no_driver);
     let por_cima = super::por_cima::agora(pid, &nome);
@@ -179,6 +229,19 @@ pub fn medir(processo: &str, segundos: u32) -> Result<Plano, String> {
         por_cima,
     });
     Ok(plano)
+}
+
+/// O FPS de costume deste jogo, das medições automáticas (todas as versões do FiveM contam como o mesmo jogo).
+#[cfg(target_os = "windows")]
+pub fn fps_tipico(executavel: &str) -> Option<f64> {
+    let (id, _) = super::historico::id_do_jogo(executavel);
+    let medicoes = crate::modules::medicoes::ler().ok()?;
+    let fps: Vec<f64> = medicoes
+        .iter()
+        .filter(|m| super::historico::id_do_jogo(&m.jogo).0 == id)
+        .map(|m| m.fps)
+        .collect();
+    fps_de_costume(&fps)
 }
 
 /// O teto do perfil que o driver usa para o jogo aberto, achado pelo caminho dele. Só NVIDIA; `None` sem leitura.
@@ -236,7 +299,7 @@ pub fn gravar_depois_da_partida(
     log: &mut crate::modules::changelog::ChangeLog,
 ) -> Result<LisoGravado, String> {
     crate::modules::licenca::exigir()?;
-    let plano = planejar(fps, hz_principal(), trancos_por_minuto);
+    let plano = planejar(fps, fps_tipico(executavel), hz_principal(), trancos_por_minuto);
     let Some(teto) = plano.teto else {
         return Ok(LisoGravado { teto: None, motivo: plano.motivo });
     };
@@ -251,19 +314,38 @@ pub fn gravar_depois_da_partida(
     })
 }
 
+/// **Pura.** O teto que a tela mostrou pode ser gravado? Antes, "Travar em X" media o jogo de novo e gravava o que
+/// saísse dessa segunda medição, que podia ser outro número. Agora grava o que a pessoa viu, se for jogável e não cortar
+/// mais que `PERDA_MAXIMA` do FPS de costume (com 2 fps de folga do arredondamento). Teto nos Hz do monitor sempre vale.
+pub fn teto_aceitavel(teto: u32, fps_tipico: Option<f64>, hz: u32) -> Result<(), String> {
+    if !(24..=1000).contains(&teto) {
+        return Err(format!("Teto de {} fps fora do que dá para jogar.", teto));
+    }
+    if hz > 0 && teto >= hz {
+        return Ok(());
+    }
+    if let Some(t) = fps_tipico {
+        let piso = (t * (1.0 - PERDA_MAXIMA)).floor() - 2.0;
+        if (teto as f64) < piso {
+            return Err(format!(
+                "Travar em {} tiraria demais: este jogo costuma rodar a {:.0} fps aqui. Meça de novo.",
+                teto, t
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Aplica o teto do plano pelo driver (guardando o anterior, no `ChangeLog`), para a PRÓXIMA abertura do jogo. O
 /// executável é o nome do processo aberto (ex. `FiveM_b3258_GTAProcess.exe`).
 #[cfg(target_os = "windows")]
 pub async fn aplicar(
     executavel: &str,
-    plano: &Plano,
+    teto: u32,
+    hz: u32,
     log: &mut crate::modules::changelog::ChangeLog,
 ) -> Result<(), String> {
-    let Some(teto) = plano.teto else {
-        return Err(
-            "Não há teto a aplicar: o jogo já roda num ritmo que fecha o monitor.".to_string(),
-        );
-    };
+    teto_aceitavel(teto, fps_tipico(executavel), hz)?;
     let caminho = crate::modules::windows::frames::caminho_do_processo(executavel);
     crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(
         executavel,
@@ -320,23 +402,21 @@ mod tests {
     #[test]
     fn plano_do_fivem_do_dono() {
         // A medição do dono que deu "não mudou nada": mediana 60, e o teto saiu 60 (na média, sem folga). Agora: 45.
-        let p = planejar(60.0, 180, 74.0);
-        assert_eq!(
-            p.teto,
-            Some(45),
-            "abaixo da mediana, com folga para o processador"
-        );
-        assert_eq!(p.multiplicador_do_boost, 4);
+        // Depois: 45 tirava 25%; o teto nunca tira mais que `PERDA_MAXIMA`, então fica na folga exata (51).
+        let p = planejar(60.0, None, 180, 74.0);
+        assert_eq!(p.teto, Some(51), "abaixo da mediana, com folga para o processador");
+        assert_eq!(p.multiplicador_do_boost, 3);
         assert!(p.motivo.contains("74"));
+        assert_eq!(p.perda_pct, 15);
     }
 
     #[test]
     fn jogo_ja_liso_nao_perde_fps_para_um_teto() {
         // O print do dono com a Energia de jogo ligada: 80 fps, 0 trancos/min — o cartão sugeria travar em 60.
-        let p = planejar(80.0, 180, 0.0);
+        let p = planejar(80.0, None, 180, 0.0);
         assert_eq!(p.teto, None);
         assert!(p.motivo.contains("já está liso"));
-        assert_eq!(planejar(68.0, 180, 6.0).teto, Some(45));
+        assert_eq!(planejar(68.0, None, 180, 6.0).teto, Some(58));
     }
 
     #[test]
@@ -370,9 +450,50 @@ mod tests {
 
     #[test]
     fn jogo_rapido_nao_recebe_teto() {
-        let p = planejar(190.0, 180, 2.0);
+        let p = planejar(190.0, None, 180, 2.0);
         assert_eq!(p.teto, Some(180), "trava nos Hz quando passa deles");
-        let p = planejar(300.0, 180, 1.0);
+        let p = planejar(300.0, None, 180, 1.0);
         assert_eq!(p.teto, Some(180));
+    }
+
+    #[test]
+    fn o_fivem_do_cliente_nao_e_mais_travado_na_metade_do_monitor() {
+        // 15/11, GTX 1650 a 144 Hz: o FiveM rodava de 105 a 159 e o Jogo liso gravou 72.
+        for fps in [85.0, 100.0, 120.0, 140.0] {
+            let p = planejar(fps, None, 144, 12.0);
+            let t = p.teto.expect("com trancos, há teto");
+            assert!(t as f64 >= fps * 0.85 - 1.0, "{} fps virou teto {}", fps, t);
+            assert!(p.perda_pct <= 15, "{}", p.perda_pct);
+        }
+        // A fração do monitor continua quando cabe: 85 fps → 72 (metade de 144) tira 15%.
+        assert_eq!(planejar(85.0, None, 144, 12.0).teto, Some(72));
+    }
+
+    #[test]
+    fn um_momento_ruim_nao_vira_o_teto_da_noite() {
+        // Medido numa queda (85 fps) num jogo que costuma rodar a 130: a referência é o costume.
+        let p = planejar(85.0, Some(130.0), 144, 12.0);
+        assert_eq!(p.teto, Some(111));
+        assert_eq!(p.fps_tipico, Some(130.0));
+        // Costume abaixo do de agora: vale o de agora.
+        assert_eq!(planejar(130.0, Some(90.0), 144, 12.0).teto, Some(111));
+    }
+
+    #[test]
+    fn costume_e_a_mediana_das_ultimas_medicoes() {
+        assert_eq!(fps_de_costume(&[100.0, 140.0]), None, "poucas");
+        assert_eq!(fps_de_costume(&[105.0, 91.0, 86.0, 143.0, 111.0]), Some(105.0));
+        assert_eq!(fps_de_costume(&[100.0, 0.0, f64::NAN, 120.0, 140.0]), Some(120.0));
+        let muitas: Vec<f64> = (0..30).map(|i| if i < 20 { 10.0 } else { 100.0 }).collect();
+        assert_eq!(fps_de_costume(&muitas), Some(100.0), "só as 10 mais recentes");
+    }
+
+    #[test]
+    fn o_teto_gravado_e_o_que_a_tela_mostrou_e_nunca_corta_demais() {
+        assert!(teto_aceitavel(111, Some(130.0), 144).is_ok());
+        assert!(teto_aceitavel(72, Some(130.0), 144).is_err(), "72 num jogo de 130");
+        assert!(teto_aceitavel(72, None, 144).is_ok(), "sem costume, vale o que foi medido agora");
+        assert!(teto_aceitavel(10, None, 144).is_err());
+        assert!(teto_aceitavel(144, Some(300.0), 144).is_ok(), "teto nos Hz do monitor");
     }
 }

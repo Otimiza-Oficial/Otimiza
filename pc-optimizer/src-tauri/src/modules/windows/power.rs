@@ -31,6 +31,18 @@ pub fn set_active_scheme(guid: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// **Pura.** A saída de `powercfg /list` tem este plano? Compara só o GUID (o texto em volta muda com o idioma).
+pub fn lista_tem_plano(saida: &str, guid: &str) -> bool {
+    saida.to_lowercase().contains(&guid.trim().to_lowercase())
+}
+
+/// O plano ainda existe no Windows. `None` sem leitura: quem chama não pode concluir que sumiu.
+pub fn plano_existe(guid: &str) -> Option<bool> {
+    shell::run_checked("powercfg", &["/list"])
+        .ok()
+        .map(|saida| lista_tem_plano(&saida, guid))
+}
+
 /// `None` é NÃO CONSEGUI LER, não "desligada": com `bool`, a leitura quebrada dizia "já desativada" com o
 /// `hiberfil.sys` no disco, e a mesma função conferia a escrita, validando a si mesma.
 pub fn hibernation_enabled() -> Option<bool> {
@@ -270,6 +282,15 @@ pub fn set_reserved_storage(enabled: bool) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plano_apagado_nao_esta_na_lista_e_o_idioma_nao_importa() {
+        let lista = "Esquemas de Energia Existentes (* Ativo)\n-----------------------------------\n\
+            GUID do Esquema de Energia: A4516AD7-3593-4FE5-A578-DD7449AA3246  (OTIMIZA) *\n\
+            GUID do Esquema de Energia: 381b4222-f694-41f0-9685-ff5bb260df2e  (Equilibrado)\n";
+        assert!(lista_tem_plano(lista, "a4516ad7-3593-4fe5-a578-dd7449aa3246"));
+        assert!(!lista_tem_plano(lista, "28f59d30-0414-430a-827c-b4765224d5c3"));
+    }
 
     #[test]
     fn leitura_recusada_nao_vira_recurso_inexistente() {

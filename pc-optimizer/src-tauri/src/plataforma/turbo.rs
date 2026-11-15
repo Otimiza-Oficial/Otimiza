@@ -654,7 +654,7 @@ pub fn ritmo_a_oferecer(r: &Receita, mediana: f64, trancos_por_minuto: f64, hz: 
     if r.escala.is_some() || r.multiplicador.is_some() || trancos_por_minuto < super::jogo_liso::JA_LISO_TRANCOS {
         return None;
     }
-    super::jogo_liso::planejar(mediana, hz, trancos_por_minuto)
+    super::jogo_liso::planejar(mediana, None, hz, trancos_por_minuto)
         .teto
         .map(|teto| Ritmo { fps: mediana, trancos_por_minuto, teto })
 }

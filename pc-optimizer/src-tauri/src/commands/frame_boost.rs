@@ -362,25 +362,27 @@ pub async fn jogo_liso_depois_da_partida(
     }
 }
 
-/// Aplica o teto de FPS estável no perfil do jogo (guardando o anterior). Vale ao reabrir o jogo. `EXIGEM_LICENCA`.
+/// Grava no perfil do jogo o teto que a medição mostrou (guardando o anterior). Vale ao reabrir o jogo. Grava o número
+/// que a pessoa viu: antes media de novo e gravava o resultado da segunda medição. `EXIGEM_LICENCA`.
 #[tauri::command(async)]
 #[cfg_attr(test, specta::specta)]
 pub async fn jogo_liso_aplicar(
+    teto: u32,
+    hz: u32,
     state: State<'_, AppState>,
-) -> Result<crate::plataforma::jogo_liso::Plano, String> {
+) -> Result<u32, String> {
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
     {
         let jogo =
             crate::plataforma::sessao::atual().ok_or("Abra o jogo e entre na partida antes.")?;
-        let plano = crate::plataforma::jogo_liso::medir(&jogo.executavel, 20)?;
         let mut log = state.changes.lock().await;
-        crate::plataforma::jogo_liso::aplicar(&jogo.executavel, &plano, &mut log).await?;
-        Ok(plano)
+        crate::plataforma::jogo_liso::aplicar(&jogo.executavel, teto, hz, &mut log).await?;
+        Ok(teto)
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = state;
+        let _ = (teto, hz, state);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
