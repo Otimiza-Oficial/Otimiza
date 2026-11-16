@@ -14,15 +14,24 @@
   } as const;
 
   let monitores = $state<Monitor[] | null>(null);
+  let falhou = $state(false);
 
   onMount(async () => {
     monitores = noTauri
-      ? await como<Monitor[]>(commands.vrrDosMonitores()).catch(() => null)
+      ? await como<Monitor[]>(commands.vrrDosMonitores()).catch(() => {
+          falhou = true;
+          return null;
+        })
       : [{ nome: "AOC 24G2", min_hz: 48, max_hz: 144, vrr: "Anunciado" }];
   });
 </script>
 
-{#if monitores && monitores.length}
+{#if falhou}
+  <section class="secao">
+    <h2>Taxa variável (VRR)</h2>
+    <p class="aviso">Não consegui ler os monitores agora. Abra esta área de novo para tentar outra vez.</p>
+  </section>
+{:else if monitores && monitores.length}
   <section class="secao">
     <h2>Taxa variável (VRR)</h2>
     {#each monitores as m, i (i)}

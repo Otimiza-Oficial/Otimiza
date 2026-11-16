@@ -447,7 +447,7 @@
     padding: 4px 10px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--ok) 14%, transparent);
-    color: var(--ok);
+    color: var(--ok-texto);
     font-size: 12px;
     font-weight: 600;
   }

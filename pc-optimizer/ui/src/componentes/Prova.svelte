@@ -270,7 +270,7 @@
     text-align: right;
   }
   .bom {
-    color: var(--ok);
+    color: var(--ok-texto);
     font-weight: 600;
   }
   .ruim {

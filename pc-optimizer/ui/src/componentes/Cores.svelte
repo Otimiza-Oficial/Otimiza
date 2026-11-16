@@ -368,10 +368,10 @@
     font-size: 12px;
   }
   .recado[data-tom="ok"] {
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .recado[data-tom="atencao"] {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   @media (max-width: 760px) {
     .predefinicoes {

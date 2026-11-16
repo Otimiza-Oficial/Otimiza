@@ -446,7 +446,7 @@
     margin: 0;
   }
   .atencao {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .erro {
     color: var(--perigo);

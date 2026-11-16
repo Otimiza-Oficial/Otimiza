@@ -1892,6 +1892,8 @@
   .conteudo {
     height: 100%;
     overflow: auto;
+    /* O espaço da barra fica reservado: a página não pula de lado quando uma sub-aba é curta e a outra rola. */
+    scrollbar-gutter: stable;
     padding: 16px;
   }
   .grade {
@@ -1985,13 +1987,13 @@
     height: 22px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--atencao) 22%, transparent);
-    color: var(--atencao);
+    color: var(--atencao-texto);
     font-size: 12px;
     font-weight: 800;
   }
   .item-pronto.ok .marca-pronto {
     background: color-mix(in srgb, var(--ok) 20%, transparent);
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .item-pronto.ok .texto-pronto {
     color: var(--sec);

@@ -38,6 +38,7 @@
 
   /* Estado: só em ponto, ícone pequeno ou texto curto. */
   --ok: #1d936e;
+  --ok-texto: #157a5a; /* o verde em texto miúdo: 4,5:1 sobre o cartão */
   --atencao: #b8741a;
   --atencao-texto: #8a5410; /* o âmbar em texto miúdo: 4,5:1 sobre o cartão */
   --veu: rgb(6 6 10 / 0.5);
@@ -98,6 +99,7 @@
   --marca: #ff3b3b;
   --marca-suave: rgb(255 59 59 / 0.14);
   --ok: #4cc59a;
+  --ok-texto: #4cc59a;
   --atencao: #e2a34f;
   --atencao-texto: #e2a34f;
   --veu: rgb(0 0 0 / 0.55);
@@ -410,7 +412,7 @@ h2 {
   background: none;
 }
 .selo[data-tom="ok"] {
-  color: var(--ok);
+  color: var(--ok-texto);
 }
 .selo[data-tom="atencao"] {
   color: var(--atencao-texto);
@@ -425,6 +427,23 @@ h2 {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+/* A barra de rolagem fina, na cor das linhas do tema, no lugar da cinza do navegador. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--linha-forte) padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tinta-3) padding-box;
 }
 
 /* Texto miúdo de apoio dentro de uma linha. */

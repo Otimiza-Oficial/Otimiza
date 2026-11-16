@@ -71,7 +71,7 @@
     flex: 1;
   }
   .numero {
-    color: var(--ok);
+    color: var(--ok-texto);
     font-weight: 600;
   }
 </style>

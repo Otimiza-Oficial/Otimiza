@@ -621,10 +621,10 @@
     font-size: var(--t-linha);
   }
   .recado[data-tom="ok"] {
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .recado[data-tom="atencao"] {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .nota {
     margin: -6px 0 0;

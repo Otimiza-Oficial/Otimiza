@@ -4,6 +4,7 @@
   // abre junto com o Windows, a limpeza de temporários e o ponto de restauração. Ajuste que pode custar FPS diz quando;
   // ajuste que não deu para verificar diz isso, em vez de fingir "já está bom".
   import { onMount } from "svelte";
+  import { confirmar } from "../lib/confirmar";
   import AoVivo from "./AoVivo.svelte";
   import Bios from "./Bios.svelte";
   import SistemaAvancado from "./SistemaAvancado.svelte";
@@ -118,6 +119,7 @@
   }
 
   async function limpar(item: ItemDaLimpeza) {
+    if (!(await confirmar({ titulo: `Apagar ${tamanho(item.bytes)} de ${item.nome}?`, texto: "Só arquivo com mais de 2 dias; o que estiver em uso fica. Apagar não tem volta.", sim: "Apagar", perigo: true }))) return;
     ocupado = `limpa:${item.id}`;
     recado = null;
     try {
@@ -209,7 +211,7 @@
                     {ocupado === a.id ? "Desfazendo…" : "Desfazer"}
                   </button>
                 {:else if a.state === "Available"}
-                  <button class="btn primario" disabled={ocupado !== null} onclick={() => alternarAjuste(a)}>
+                  <button class="btn" disabled={ocupado !== null} onclick={() => alternarAjuste(a)}>
                     {ocupado === a.id ? "Aplicando…" : "Aplicar"}
                   </button>
                 {/if}
@@ -351,7 +353,7 @@
   }
   .risco {
     font-size: 12px;
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .comando {
     overflow: hidden;

@@ -162,7 +162,7 @@
     font-size: var(--t-linha);
   }
   .atencao {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .marcos {
     list-style: none;

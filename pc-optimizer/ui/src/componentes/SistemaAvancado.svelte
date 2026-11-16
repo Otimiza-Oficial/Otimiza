@@ -210,10 +210,10 @@
     gap: 12px;
   }
   .estado[data-tom="ok"] {
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .estado[data-tom="atencao"] {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .secao > .btn {
     justify-self: start;

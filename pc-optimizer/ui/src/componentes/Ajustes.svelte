@@ -471,7 +471,7 @@
     gap: 2px;
   }
   .info.atencao {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .controles {
     display: flex;
