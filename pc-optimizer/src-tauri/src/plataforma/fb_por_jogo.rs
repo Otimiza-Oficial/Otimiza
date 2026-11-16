@@ -85,6 +85,17 @@ pub fn escolha(id_do_jogo: &str) -> Option<Escolha> {
     ler_tudo().remove(id_do_jogo)
 }
 
+/// Tira a escolha lembrada deste jogo. Devolve se havia uma.
+pub fn esquecer(id_do_jogo: &str) -> bool {
+    let mut tudo = ler_tudo();
+    if tudo.remove(id_do_jogo).is_none() {
+        return false;
+    }
+    serde_json::to_string_pretty(&tudo)
+        .ok()
+        .is_some_and(|json| fs::write(caminho(), json).is_ok())
+}
+
 pub fn lembrar(id_do_jogo: &str, e: Escolha) -> Result<(), String> {
     let mut tudo = ler_tudo();
     tudo.insert(id_do_jogo.to_string(), e);
@@ -120,6 +131,16 @@ pub fn ao_fechar_o_jogo(executavel: &str) {
         desligou_por_perda: e.situacao == Situacao::DesligadoPorPerdaDeFps,
         so_escala,
     };
+    if vista.desligou_por_perda {
+        // A guarda viu o jogo perder FPS real: uma escolha antiga aprovada não pode trazer o gerador de volta no "Jogar".
+        if esquecer(&id) {
+            crate::utils::Logger::info(&format!(
+                "frame boost: a guarda desligou em {}; a escolha lembrada foi esquecida",
+                id
+            ));
+        }
+        return;
+    }
     if !aprovada(&vista) {
         return;
     }

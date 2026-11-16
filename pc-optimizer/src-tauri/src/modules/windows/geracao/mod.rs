@@ -1576,6 +1576,8 @@ fn sessao(
     let mut composto_do_real: Option<f64> = None;
     let mut atraso_medio: Option<f64> = None;
     let mut guarda = guarda::Guarda::nova(0.0);
+    // Quantas comparações da guarda já foram para o log: cada uma vai com a razão (o log do suporte só via a decisão).
+    let mut razoes_anotadas = 0usize;
     // A guarda conta os quadros do PRÓPRIO jogo pelo PresentMon; sem ele, a captura da tela (presa ao Hz do monitor),
     // como antes. Com ele, a pausa da guarda é o jogo puro: sem sobreposição e sem captura.
     let mut vivo = match super::presentmon::Vivo::iniciar(pid) {
@@ -1794,6 +1796,19 @@ fn sessao(
                     })
                 });
                 let gerando = ultimo_real.elapsed() <= Duration::from_secs(2);
+                if guarda.razoes.len() < razoes_anotadas {
+                    razoes_anotadas = 0; // a guarda recomeçou (modo leve)
+                }
+                if let Some(r) = guarda.razoes.get(razoes_anotadas..).and_then(|novas| novas.last()).copied() {
+                    razoes_anotadas = guarda.razoes.len();
+                    crate::utils::Logger::info(&format!(
+                        "gerador: comparação {} da guarda{}: o jogo manteve {:.0}% do FPS real (média {:.0}%)",
+                        razoes_anotadas,
+                        if gpu.leve() { " no modo leve" } else { "" },
+                        r * 100.0,
+                        guarda.razao_media().unwrap_or(r) * 100.0
+                    ));
+                }
                 let comparacoes = guarda.razoes.len() as u32;
                 publicar(|e| {
                     e.fps_reais = (reais as f64 / dt * 10.0).round() / 10.0;

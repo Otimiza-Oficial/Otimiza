@@ -262,11 +262,8 @@ pub async fn frame_boost_destravar_base(
     #[cfg(target_os = "windows")]
     {
         let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
-        let id = crate::modules::windows::nvdriver::id_do_limite(&jogo.executavel);
         let mut log = state.changes.lock().await;
-        if log.is_applied(&id) {
-            crate::modules::windows::WindowsOptimizer::new().revert(&id, &mut log)?;
-        }
+        crate::plataforma::teto_do_jogo::soltar_base(&jogo.executavel, &mut log)?;
         drop(log);
         // A escolha fica: ligar o Frame Boost de novo não trava outra vez sozinho.
         crate::plataforma::base_do_jogo::soltar(&jogo.executavel, true);

@@ -207,14 +207,24 @@ pub fn ativo_de(e: &geracao::Estado) -> Option<Ativo> {
     })
 }
 
+/// **Pura.** A frase de quando a guarda desligou o gerador, com o número medido. O FPS base que o Frame Boost travou sai
+/// junto com ele quando o jogo fechar (`teto_do_jogo`), e ele não volta sozinho neste jogo (`fb_por_jogo::esquecer`).
+pub fn aviso_de_perda(razao: Option<f64>) -> String {
+    let quanto = razao
+        .filter(|r| *r > 0.0 && *r < 1.0)
+        .map(|r| format!(" (o jogo ficava com {:.0}% do FPS real)", r * 100.0))
+        .unwrap_or_default();
+    format!(
+        "O Frame Boost desligou sozinho: o jogo perdeu FPS de verdade com ele ligado{}. Nesta placa ele não volta \
+         sozinho neste jogo. Para deixar o jogo mais constante sem gastar a placa, use o Jogo liso.",
+        quanto
+    )
+}
+
 /// Pura: o motivo de o gerador ter parado sozinho.
 pub fn aviso_de(e: &geracao::Estado) -> Option<String> {
     match e.situacao {
-        Situacao::DesligadoPorPerdaDeFps => Some(
-            "O Frame Boost desligou sozinho: o jogo perdeu FPS de verdade com ele ligado. Nesta placa, neste jogo, \
-             jogar sem ele rende mais."
-                .to_string(),
-        ),
+        Situacao::DesligadoPorPerdaDeFps => Some(aviso_de_perda(e.razao_fps)),
         Situacao::Erro => e.erro.clone(),
         _ => None,
     }
@@ -859,6 +869,9 @@ mod tests {
         };
         assert!(ativo_de(&e).is_none());
         assert!(aviso_de(&e).unwrap().contains("perdeu FPS"));
+        let m = aviso_de_perda(Some(0.72));
+        assert!(m.contains("72%") && m.contains("Jogo liso") && m.contains("não volta"), "{}", m);
+        assert!(!aviso_de_perda(None).contains("%"), "sem medida, sem número inventado");
     }
 
     #[test]

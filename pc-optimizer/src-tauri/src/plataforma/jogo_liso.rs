@@ -219,6 +219,12 @@ pub fn medir(processo: &str, segundos: u32) -> Result<Plano, String> {
         },
     );
     let mut plano = planejar(r.fps_do_jogo_mediana, fps_tipico(processo), hz, r.engasgos_por_minuto);
+    // Com o Frame Boost cuidando do jogo, o teto é dele (`teto_do_jogo`): a tela mostra a medição e diz por que não trava.
+    if plano.teto.is_some() && super::teto_do_jogo::frame_boost_no_jogo(processo) {
+        plano.teto = None;
+        plano.perda_pct = 0;
+        plano.motivo = super::teto_do_jogo::FRAME_BOOST_CUIDANDO.to_string();
+    }
     plano.teto_no_driver = teto_no_driver(processo);
     plano.aviso_do_teto = aviso_do_teto(teto_gravado(processo), plano.teto_no_driver);
     let por_cima = super::por_cima::agora(pid, &nome);
@@ -303,7 +309,11 @@ pub fn gravar_depois_da_partida(
     let Some(teto) = plano.teto else {
         return Ok(LisoGravado { teto: None, motivo: plano.motivo });
     };
-    crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(executavel, caminho, teto, log)?;
+    if let super::teto_do_jogo::Decisao::Recusar(motivo) =
+        super::teto_do_jogo::aplicar(executavel, caminho, super::teto_do_jogo::Pedido::JogoLiso(teto), log)?
+    {
+        return Ok(LisoGravado { teto: None, motivo });
+    }
     crate::utils::Logger::info(&format!(
         "jogo liso depois da partida: teto de {} fps no perfil de {} ({:.0} fps, {:.1} trancos/min)",
         teto, executavel, fps, trancos_por_minuto
@@ -346,13 +356,11 @@ pub async fn aplicar(
     log: &mut crate::modules::changelog::ChangeLog,
 ) -> Result<(), String> {
     teto_aceitavel(teto, fps_tipico(executavel), hz)?;
-    let caminho = crate::modules::windows::frames::caminho_do_processo(executavel);
-    crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(
-        executavel,
-        caminho.as_deref(),
-        teto,
-        log,
-    )?;
+    if let super::teto_do_jogo::Decisao::Recusar(motivo) =
+        super::teto_do_jogo::aplicar(executavel, None, super::teto_do_jogo::Pedido::JogoLiso(teto), log)?
+    {
+        return Err(motivo);
+    }
     crate::utils::Logger::info(&format!(
         "jogo liso: teto de {} fps no perfil de {} (vale ao reabrir o jogo)",
         teto, executavel

@@ -517,6 +517,14 @@ pub fn run() {
                                 plataforma::prioridade_jogo::limpar();
                             })
                             .await;
+                            // O teto da base do Frame Boost sai junto com ele, se ele não volta sozinho neste jogo
+                            // (antes ficava no driver e o jogo abria preso em 72, sem quadro gerado).
+                            #[cfg(target_os = "windows")]
+                            {
+                                let estado = handle.state::<AppState>();
+                                let mut log = estado.changes.lock().await;
+                                plataforma::teto_do_jogo::ao_fechar_o_jogo(&executavel, pelo_jogar, &mut log);
+                            }
                             let _ = handle.emit(
                                 "partida:terminou",
                                 plataforma::partida::Terminada {

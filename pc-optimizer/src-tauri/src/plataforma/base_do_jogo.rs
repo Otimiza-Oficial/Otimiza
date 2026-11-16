@@ -257,13 +257,8 @@ pub fn travar(
             )
         });
     };
-    let caminho = crate::modules::windows::frames::caminho_do_processo(executavel);
-    crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(
-        executavel,
-        caminho.as_deref(),
-        teto,
-        log,
-    )?;
+    // Pela porta única do teto: guarda o teto do Jogo liso que existia, para devolver quando o Frame Boost sair do jogo.
+    super::teto_do_jogo::aplicar(executavel, None, super::teto_do_jogo::Pedido::FrameBoost(teto), log)?;
     crate::utils::Logger::info(&format!(
         "frame boost: FPS base de {} travado em {} (mediana medida {:.0}, {} Hz)",
         executavel, teto, base.mediana, hz
