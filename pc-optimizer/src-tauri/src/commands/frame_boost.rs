@@ -180,7 +180,7 @@ pub async fn frame_boost_ligar(
         .await
         .map_err(|e| e.to_string())
         .and_then(|r| r);
-        *log = crate::modules::changelog::ChangeLog::load();
+        log.recarregar();
         ligado?;
         crate::plataforma::frameboost::travar_base(&mut log);
         drop(log);
@@ -268,7 +268,7 @@ pub async fn frame_boost_destravar_base(
     {
         let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
         let mut log = state.changes.lock().await;
-        crate::plataforma::teto_do_jogo::soltar_base(&jogo.executavel, &mut log)?;
+        crate::plataforma::teto_do_jogo::soltar_base(&jogo.executavel, true, &mut log)?;
         drop(log);
         // A escolha fica: ligar o Frame Boost de novo não trava outra vez sozinho.
         crate::plataforma::base_do_jogo::soltar(&jogo.executavel, true);
@@ -321,7 +321,7 @@ pub async fn frame_boost_desligar(
             .await
             .map_err(|e| e.to_string())
             .and_then(|r| r);
-        *log = crate::modules::changelog::ChangeLog::load();
+        log.recarregar();
         return r;
     }
     #[cfg(not(target_os = "windows"))]

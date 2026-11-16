@@ -1399,7 +1399,7 @@ async fn preparar_partida(app: &tauri::AppHandle, jogo: String, executavel: &str
                     Ok(()) => {
                         let estado = app.state::<AppState>();
                         let mut log = estado.changes.lock().await;
-                        *log = modules::changelog::ChangeLog::load();
+                        log.recarregar();
                         plataforma::frameboost::travar_base(&mut log);
                         drop(log);
                         let passo = format!(

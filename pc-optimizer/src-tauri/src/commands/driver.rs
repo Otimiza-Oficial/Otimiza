@@ -296,7 +296,7 @@ pub async fn limitar_fps_nvidia(
             fps,
             &mut log,
         )?;
-        crate::plataforma::teto_do_jogo::da_pessoa(&executavel);
+        crate::plataforma::teto_do_jogo::da_pessoa(&executavel, fps);
         Ok(feito)
     }
 

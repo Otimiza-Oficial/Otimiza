@@ -17,6 +17,8 @@ use std::path::PathBuf;
 pub enum Origem {
     FrameBoost,
     JogoLiso,
+    /// Gravado na mão (Boost → limite do driver): nem o Frame Boost nem o Turbo mexem nele.
+    Pessoa,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,12 +50,24 @@ pub enum Decisao {
 pub const FRAME_BOOST_CUIDANDO: &str = "O Frame Boost está cuidando do ritmo deste jogo: ele trava o FPS base numa fração \
      do monitor e completa o resto com quadros gerados. Para usar o Jogo liso, desligue o Frame Boost neste jogo.";
 
+/// **Pura.** A frase de quando o Frame Boost quer travar a base de um jogo que a pessoa travou na mão.
+pub fn teto_da_pessoa(fps: u32) -> String {
+    format!(
+        "Você travou este jogo em {} FPS: o Frame Boost não troca o seu teto. Para ele travar a base, desfaça o seu \
+         teto pelo Histórico.",
+        fps
+    )
+}
+
 /// **Pura.** O que fazer com o teto deste jogo. `atual`: o registro que vale agora (já conferido contra o histórico).
 /// `frame_boost_no_jogo`: o Frame Boost está ligado neste jogo ou volta sozinho na próxima partida.
 pub fn decidir(atual: Option<&Registro>, pedido: Pedido, frame_boost_no_jogo: bool) -> Decisao {
     match pedido {
         Pedido::JogoLiso(_) if frame_boost_no_jogo => Decisao::Recusar(FRAME_BOOST_CUIDANDO.to_string()),
         Pedido::JogoLiso(fps) => Decisao::Gravar(Registro { origem: Origem::JogoLiso, fps, antes: None }),
+        Pedido::FrameBoost(_) if atual.is_some_and(|r| r.origem == Origem::Pessoa) => {
+            Decisao::Recusar(teto_da_pessoa(atual.map_or(0, |r| r.fps)))
+        }
         Pedido::FrameBoost(fps) => {
             let antes = match atual {
                 Some(r) if r.origem == Origem::JogoLiso => Some(r.fps),
@@ -116,9 +130,13 @@ pub fn quem_pos(registro: Option<&Registro>, no_driver: Option<u32>) -> Option<S
             "Teto valendo: {} FPS, posto pelo Frame Boost (a base que ele multiplica). Sai quando o Frame Boost sair do jogo.",
             fps
         ),
+        Some(r) if r.fps == fps && r.origem == Origem::Pessoa => {
+            format!("Teto valendo: {} FPS, posto por você. Desfaz pelo Histórico.", fps)
+        }
         Some(r) if r.fps == fps => format!("Teto valendo: {} FPS, posto pelo Jogo liso. Desfaz pelo Histórico.", fps),
         _ => format!(
-            "Teto valendo: {} FPS, posto fora do Jogo liso e do Frame Boost (por você, pelo app da NVIDIA ou por uma              versão antiga do Otimiza). Desfaz pelo Histórico ou no app da NVIDIA.",
+            "Teto valendo: {} FPS, posto fora do Jogo liso e do Frame Boost (pelo app da NVIDIA ou por uma \
+             versão antiga do Otimiza). Desfaz pelo Histórico ou no app da NVIDIA.",
             fps
         ),
     })
@@ -129,9 +147,10 @@ pub fn registro(executavel: &str) -> Option<Registro> {
     todos().remove(&executavel.to_lowercase())
 }
 
-/// A pessoa gravou o teto na mão: ele não é do Frame Boost nem do Jogo liso, e o fechar do jogo não o tira.
-pub fn da_pessoa(executavel: &str) {
-    guardar(executavel, None);
+/// A pessoa gravou o teto na mão: fica com dono `Pessoa`. O fechar do jogo, o Desligar Turbo e o Destravar não o tiram,
+/// e o Frame Boost não o troca (antes o registro era apagado, e "sem registro" era tratado como teto antigo do Otimiza).
+pub fn da_pessoa(executavel: &str, fps: u32) {
+    guardar(executavel, Some(Registro { origem: Origem::Pessoa, fps, antes: None }));
 }
 
 /// O registro deste jogo, se o teto dele ainda está aplicado no histórico. Teto desfeito por fora (Histórico,
@@ -153,7 +172,16 @@ pub fn atual(executavel: &str, log: &crate::modules::changelog::ChangeLog) -> Op
 #[cfg(target_os = "windows")]
 pub fn frame_boost_no_jogo(executavel: &str) -> bool {
     let e = crate::modules::windows::geracao::estado();
-    e.processo.eq_ignore_ascii_case(executavel) && super::frameboost::ativo_de(&e).is_some()
+    // Só escala não trava a base (o mesmo critério do `travar_base`): o Jogo liso fica livre.
+    let so_escala = e.escala.is_some() && !e.automatico && e.multiplicador <= 1;
+    e.processo.eq_ignore_ascii_case(executavel) && super::frameboost::ativo_de(&e).is_some() && !so_escala
+}
+
+/// O gerador do Otimiza rodou de fato neste jogo nesta partida (pelo menos o mínimo do resumo da sessão).
+#[cfg(target_os = "windows")]
+fn gerou_nesta_partida(executavel: &str) -> bool {
+    let e = crate::modules::windows::geracao::estado();
+    e.processo.eq_ignore_ascii_case(executavel) && e.sessao.resumo().is_some()
 }
 
 #[cfg(target_os = "windows")]
@@ -207,11 +235,12 @@ pub fn aplicar(
     Ok(decisao)
 }
 
-/// **Pura.** O teto da base do Frame Boost fica no driver depois que o jogo fecha? Só se a partida abriu pelo "Jogar" e
-/// o Frame Boost volta nele (escolha lembrada ou receita do Turbo que gera): o "Jogar" é o único caminho que o religa.
-/// Quem abre o jogo direto voltaria preso na base, sem quadro gerado.
-pub fn manter_ao_fechar(pelo_jogar: bool, volta_no_jogar: bool) -> bool {
-    pelo_jogar && volta_no_jogar
+/// **Pura.** O teto da base do Frame Boost fica no driver depois que o jogo fecha? Só se a partida abriu pelo "Jogar", o
+/// Frame Boost volta nele (escolha lembrada ou receita do Turbo que gera) E o gerador rodou de fato nesta partida. Quem
+/// abre o jogo direto voltaria preso na base, sem quadro gerado; e um "Jogar" em que o Frame Boost não ligou (licença
+/// vencida, modo seguro, anticheat) prenderia o jogo na base partida após partida.
+pub fn manter_ao_fechar(pelo_jogar: bool, volta_no_jogar: bool, gerou_nesta_partida: bool) -> bool {
+    pelo_jogar && volta_no_jogar && gerou_nesta_partida
 }
 
 /// O jogo fechou: se o teto é do Frame Boost e ele não volta na próxima partida, o teto sai (ou volta o do Jogo liso).
@@ -219,7 +248,7 @@ pub fn manter_ao_fechar(pelo_jogar: bool, volta_no_jogar: bool) -> bool {
 #[cfg(target_os = "windows")]
 pub fn ao_fechar_o_jogo(executavel: &str, pelo_jogar: bool, log: &mut crate::modules::changelog::ChangeLog) {
     let (id, _) = super::historico::id_do_jogo(executavel);
-    if manter_ao_fechar(pelo_jogar, volta_sozinho(&id)) {
+    if manter_ao_fechar(pelo_jogar, volta_sozinho(&id), gerou_nesta_partida(executavel)) {
         return;
     }
     if let Err(e) = aplicar(executavel, None, Pedido::FimDoFrameBoost, log) {
@@ -228,12 +257,13 @@ pub fn ao_fechar_o_jogo(executavel: &str, pelo_jogar: bool, log: &mut crate::mod
 }
 
 /// Solta o teto da base do Frame Boost deste jogo (Destravar, Desligar Turbo, prova que piorou), devolvendo o do Jogo
-/// liso que existia antes. Teto sem registro (gravado antes da 1.0.5) é revertido como antes; teto do Jogo liso ou da
-/// pessoa fica.
+/// liso que existia antes. Teto do Jogo liso ou da pessoa fica. `legado`: quem chama sabe que um teto SEM registro é da
+/// base (gravado antes da 1.0.5): o Turbo, só pela marca dele (`turbo::base_do_turbo`); o Destravar, porque a pessoa
+/// pediu.
 #[cfg(target_os = "windows")]
-pub fn soltar_base(executavel: &str, log: &mut crate::modules::changelog::ChangeLog) -> Result<(), String> {
+pub fn soltar_base(executavel: &str, legado: bool, log: &mut crate::modules::changelog::ChangeLog) -> Result<(), String> {
     let sem_registro = atual(executavel, log).is_none();
-    if aplicar(executavel, None, Pedido::FimDoFrameBoost, log)? == Decisao::Nada && sem_registro {
+    if aplicar(executavel, None, Pedido::FimDoFrameBoost, log)? == Decisao::Nada && sem_registro && legado {
         let id = crate::modules::windows::nvdriver::id_do_limite(executavel);
         if log.is_applied(&id) {
             crate::modules::windows::WindowsOptimizer::new().revert(&id, log)?;
@@ -298,9 +328,23 @@ mod tests {
 
     #[test]
     fn so_o_jogar_mantem_o_teto_da_base_para_a_proxima_partida() {
-        assert!(manter_ao_fechar(true, true));
-        assert!(!manter_ao_fechar(false, true), "aberto direto: o Frame Boost não religa, o teto não pode ficar");
-        assert!(!manter_ao_fechar(true, false), "nada lembrado: o Frame Boost não volta");
+        assert!(manter_ao_fechar(true, true, true));
+        assert!(!manter_ao_fechar(false, true, true), "aberto direto: o Frame Boost não religa, o teto não pode ficar");
+        assert!(!manter_ao_fechar(true, false, true), "nada lembrado: o Frame Boost não volta");
+        assert!(!manter_ao_fechar(true, true, false), "Jogar em que o Frame Boost não ligou (licença vencida): solta");
+    }
+
+    #[test]
+    fn o_teto_da_pessoa_ninguem_troca_nem_solta() {
+        let p = r(Origem::Pessoa, 90, None);
+        match decidir(Some(&p), Pedido::FrameBoost(72), false) {
+            Decisao::Recusar(m) => assert!(m.contains("90") && m.contains("Histórico"), "{}", m),
+            d => panic!("{:?}", d),
+        }
+        assert_eq!(decidir(Some(&p), Pedido::FimDoFrameBoost, false), Decisao::Nada);
+        assert!(quem_pos(Some(&p), Some(90)).unwrap().contains("por você"));
+        // O Jogo liso é a pessoa pedindo de novo: grava.
+        assert_eq!(decidir(Some(&p), Pedido::JogoLiso(111), false), Decisao::Gravar(r(Origem::JogoLiso, 111, None)));
     }
 
     #[test]

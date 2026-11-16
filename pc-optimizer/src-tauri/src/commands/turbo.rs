@@ -97,7 +97,7 @@ pub async fn turbo_ligar(
         .map_err(|e| e.to_string())??;
         let mut log = state.changes.lock().await;
         // O Frame Boost (Smooth Motion, AFMF) grava no histórico do disco: relido antes de gravar por cima dele.
-        *log = crate::modules::changelog::ChangeLog::load();
+        log.recarregar();
         let trava = sessao_do_turbo().map(|exe| (crate::modules::windows::nvdriver::id_do_limite(&exe), exe));
         let ja_travada = trava.as_ref().is_some_and(|(id, _)| log.is_applied(id));
         crate::plataforma::frameboost::travar_base(&mut log);
@@ -168,14 +168,15 @@ async fn provar_o_turbo(
     if let Ok(prova) = &r {
         let estado = app.state::<AppState>();
         let mut log = estado.changes.lock().await;
-        *log = crate::modules::changelog::ChangeLog::load();
+        log.recarregar();
         if prova.desfecho != crate::modules::provaalternada::Desfecho::Piorou {
             crate::plataforma::frameboost::travar_base(&mut log);
         } else {
             soltar_governador_do_turbo(&mut log);
             // Piorou: o Turbo saiu, e a trava do FPS base que ele pôs (vale ao reabrir o jogo) sai junto, pela porta do teto
             // (o teto do Jogo liso que existia antes volta).
-            if let Err(e) = crate::plataforma::teto_do_jogo::soltar_base(&prova.jogo, &mut log) {
+            let da_marca = crate::plataforma::turbo::base_do_turbo().is_some_and(|b| b.eq_ignore_ascii_case(&prova.jogo));
+            if let Err(e) = crate::plataforma::teto_do_jogo::soltar_base(&prova.jogo, da_marca, &mut log) {
                 crate::utils::Logger::warn(&format!("turbo: não soltei o FPS base depois da prova: {}", e));
             }
             crate::plataforma::turbo::marcar_base(None);
@@ -274,7 +275,7 @@ pub async fn turbo_desligar(state: State<'_, AppState>) -> Result<crate::platafo
             .await
             .map_err(|e| e.to_string())??;
         let mut log = state.changes.lock().await;
-        *log = crate::modules::changelog::ChangeLog::load();
+        log.recarregar();
         soltar_governador_do_turbo(&mut log);
         soltar_base_do_turbo(&mut log);
         drop(log);
@@ -319,8 +320,10 @@ fn sessao_do_turbo() -> Option<String> {
 #[cfg(target_os = "windows")]
 fn soltar_base_do_turbo(log: &mut crate::modules::changelog::ChangeLog) {
     // O jogo da marca, ou o aberto: com um teto do Jogo liso já valendo, o Turbo não marcava a base que pôs por cima.
-    let Some(exe) = crate::plataforma::turbo::base_do_turbo().or_else(sessao_do_turbo) else { return };
-    if let Err(e) = crate::plataforma::teto_do_jogo::soltar_base(&exe, log) {
+    let marca = crate::plataforma::turbo::base_do_turbo();
+    let Some(exe) = marca.clone().or_else(sessao_do_turbo) else { return };
+    // Teto sem registro só sai pela marca do Turbo: o da sessão aberta pode ser da pessoa ou de um Jogo liso antigo.
+    if let Err(e) = crate::plataforma::teto_do_jogo::soltar_base(&exe, marca.is_some(), log) {
         crate::utils::Logger::warn(&format!("turbo: não soltei o FPS base: {}", e));
         return;
     }

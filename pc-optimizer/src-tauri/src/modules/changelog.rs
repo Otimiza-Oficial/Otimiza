@@ -425,6 +425,18 @@ impl ChangeLog {
         }
     }
 
+    /// Relê do disco depois de um trabalho que gravou no histórico do disco (o Frame Boost, a prova da placa). Só troca a
+    /// memória se a leitura deu certo: um arquivo preso por um instante (antivírus) viraria um histórico vazio, e a
+    /// próxima gravação apagaria todo o desfazer.
+    pub fn recarregar(&mut self) {
+        let novo = Self::load();
+        if matches!(novo.leitura, LeituraDoHistorico::Ok) {
+            *self = novo;
+        } else {
+            crate::utils::Logger::warn("histórico: não consegui reler do disco; fica o da memória");
+        }
+    }
+
     pub fn leitura(&self) -> &LeituraDoHistorico {
         &self.leitura
     }

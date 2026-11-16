@@ -258,7 +258,11 @@ pub fn travar(
         });
     };
     // Pela porta única do teto: guarda o teto do Jogo liso que existia, para devolver quando o Frame Boost sair do jogo.
-    super::teto_do_jogo::aplicar(executavel, None, super::teto_do_jogo::Pedido::FrameBoost(teto), log)?;
+    if let super::teto_do_jogo::Decisao::Recusar(motivo) =
+        super::teto_do_jogo::aplicar(executavel, None, super::teto_do_jogo::Pedido::FrameBoost(teto), log)?
+    {
+        return Ok(nota_de_antes + &motivo);
+    }
     crate::utils::Logger::info(&format!(
         "frame boost: FPS base de {} travado em {} (mediana medida {:.0}, {} Hz)",
         executavel, teto, base.mediana, hz

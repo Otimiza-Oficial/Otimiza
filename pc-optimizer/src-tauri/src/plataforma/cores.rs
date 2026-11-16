@@ -179,12 +179,14 @@ impl Originais {
     }
 }
 
-/// O que existe na máquina agora, para saber se um original ainda tem onde voltar.
+/// O que existe na máquina agora, para saber se um original ainda tem onde voltar. `None` = não consegui ler (driver
+/// sem responder por um instante): aí nada daquele tipo é descartado, porque a mesma falha que impede devolver também
+/// esconderia o alvo, e o original de verdade se perderia.
 #[derive(Debug, Clone, Default)]
 pub struct Presentes {
-    pub monitores: Vec<String>,
-    pub saidas_nvidia: Vec<u32>,
-    pub monitores_amd: usize,
+    pub monitores: Option<Vec<String>>,
+    pub saidas_nvidia: Option<Vec<u32>>,
+    pub monitores_amd: Option<usize>,
 }
 
 /// **Pura.** Dos originais que NÃO voltaram, o que fica para tentar de novo: só o que ainda tem alvo. Antes o arquivo
@@ -194,9 +196,17 @@ pub struct Presentes {
 pub fn a_manter(falhou: Originais, p: &Presentes) -> (Originais, usize) {
     let antes = falhou.rampas.len() + falhou.nvidia.len() + falhou.amd.len();
     let manter = Originais {
-        rampas: falhou.rampas.into_iter().filter(|(m, _)| p.monitores.iter().any(|x| x.eq_ignore_ascii_case(m))).collect(),
-        nvidia: falhou.nvidia.into_iter().filter(|(i, _)| p.saidas_nvidia.contains(i)).collect(),
-        amd: falhou.amd.into_iter().filter(|(m, _, _)| *m < p.monitores_amd).collect(),
+        rampas: falhou
+            .rampas
+            .into_iter()
+            .filter(|(m, _)| p.monitores.as_ref().map_or(true, |l| l.iter().any(|x| x.eq_ignore_ascii_case(m))))
+            .collect(),
+        nvidia: falhou
+            .nvidia
+            .into_iter()
+            .filter(|(i, _)| p.saidas_nvidia.as_ref().map_or(true, |l| l.contains(i)))
+            .collect(),
+        amd: falhou.amd.into_iter().filter(|(m, _, _)| p.monitores_amd.map_or(true, |n| *m < n)).collect(),
     };
     let depois = manter.rampas.len() + manter.nvidia.len() + manter.amd.len();
     (manter, antes - depois)
@@ -588,10 +598,14 @@ mod sistema {
             let _ = fs::remove_file(caminho_dos_originais());
             return Ok(());
         }
+        // Uma lista vazia é "não consegui ler" (o driver não respondeu), não "não existe mais".
+        let monitores: Vec<String> =
+            crate::modules::windows::display::monitores().into_iter().map(|m| m.dispositivo).collect();
+        let nvidia = telas_nvidia();
         let presentes = Presentes {
-            monitores: crate::modules::windows::display::monitores().into_iter().map(|m| m.dispositivo).collect(),
-            saidas_nvidia: telas_nvidia(),
-            monitores_amd: crate::modules::windows::amddriver::cores().map(|t| t.len()).unwrap_or(0),
+            monitores: (!monitores.is_empty()).then_some(monitores),
+            saidas_nvidia: (!nvidia.is_empty()).then_some(nvidia),
+            monitores_amd: crate::modules::windows::amddriver::cores().ok().map(|t| t.len()).filter(|n| *n > 0),
         };
         let (manter, descartados) = a_manter(falhou, &presentes);
         if descartados > 0 {
@@ -678,10 +692,18 @@ mod tests {
         f.nvidia.insert(0, 50);
         f.nvidia.insert(2, 50);
         f.amd.push((1, "Brilho".into(), 0));
-        let p = Presentes { monitores: vec![r"\\.\DISPLAY1".into()], saidas_nvidia: vec![0], monitores_amd: 1 };
-        let (m, descartados) = a_manter(f, &p);
+        let p = Presentes {
+            monitores: Some(vec![r"\\.\DISPLAY1".into()]),
+            saidas_nvidia: Some(vec![0]),
+            monitores_amd: Some(1),
+        };
+        let (m, descartados) = a_manter(f.clone(), &p);
         assert_eq!(descartados, 3, "DISPLAY3, saída 2 e o monitor AMD 1 sumiram");
         assert!(m.rampas.contains_key(r"\\.\DISPLAY1") && m.nvidia.contains_key(&0) && m.amd.is_empty());
+        // Driver sem responder: nada se perde.
+        let (tudo, descartados) = a_manter(f, &Presentes::default());
+        assert_eq!(descartados, 0);
+        assert_eq!(tudo.rampas.len() + tudo.nvidia.len() + tudo.amd.len(), 5);
         let (vazio, _) = a_manter(Originais::default(), &Presentes::default());
         assert!(vazio.vazio());
     }
