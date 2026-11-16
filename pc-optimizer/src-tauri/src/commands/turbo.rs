@@ -96,6 +96,8 @@ pub async fn turbo_ligar(
         .await
         .map_err(|e| e.to_string())??;
         let mut log = state.changes.lock().await;
+        // O Frame Boost (Smooth Motion, AFMF) grava no histórico do disco: relido antes de gravar por cima dele.
+        *log = crate::modules::changelog::ChangeLog::load();
         let trava = sessao_do_turbo().map(|exe| (crate::modules::windows::nvdriver::id_do_limite(&exe), exe));
         let ja_travada = trava.as_ref().is_some_and(|(id, _)| log.is_applied(id));
         crate::plataforma::frameboost::travar_base(&mut log);
@@ -154,6 +156,7 @@ async fn provar_o_turbo(
 ) -> Result<crate::modules::provaalternada::Resultado, String> {
     use tauri::{Emitter, Manager};
     let (emissor, na_prova) = (app.clone(), app.clone());
+    crate::plataforma::turbo::anotar_interrupcao(None);
     let r = tokio::task::spawn_blocking(move || {
         crate::plataforma::turbo::provar(&na_prova, &|passo| {
             let _ = emissor.emit("turbo:prova", passo);
@@ -165,6 +168,7 @@ async fn provar_o_turbo(
     if let Ok(prova) = &r {
         let estado = app.state::<AppState>();
         let mut log = estado.changes.lock().await;
+        *log = crate::modules::changelog::ChangeLog::load();
         if prova.desfecho != crate::modules::provaalternada::Desfecho::Piorou {
             crate::plataforma::frameboost::travar_base(&mut log);
         } else {
@@ -180,6 +184,9 @@ async fn provar_o_turbo(
     // A flag sai antes do aviso: a tela que redesenha ao receber o fim já lê o painel sem a prova.
     if sozinha {
         crate::plataforma::turbo::liberar_prova_sozinha();
+    }
+    if let Err(e) = &r {
+        crate::plataforma::turbo::anotar_interrupcao(Some(crate::plataforma::turbo::explicar_interrupcao(e)));
     }
     let _ = app.emit("turbo:prova_fim", r.as_ref().err());
     // Depois do aviso: a prova aparece na hora, e os núcleos rápidos (~1 min) entram nos passos quando terminarem.
@@ -267,6 +274,7 @@ pub async fn turbo_desligar(state: State<'_, AppState>) -> Result<crate::platafo
             .await
             .map_err(|e| e.to_string())??;
         let mut log = state.changes.lock().await;
+        *log = crate::modules::changelog::ChangeLog::load();
         soltar_governador_do_turbo(&mut log);
         soltar_base_do_turbo(&mut log);
         drop(log);

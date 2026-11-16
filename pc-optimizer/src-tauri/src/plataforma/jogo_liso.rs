@@ -30,6 +30,8 @@ pub struct Plano {
     pub teto_no_driver: Option<u32>,
     /// Um teto gravado pelo Otimiza que não chega ao jogo.
     pub aviso_do_teto: Option<String>,
+    /// Quem pôs o teto que o driver usa agora (Frame Boost, Jogo liso ou fora do Otimiza), em palavras.
+    pub dono_do_teto: Option<String>,
     /// Como o quadro chegou à tela na medição, e o que fazer se for o caminho caro.
     pub tela: Option<Tela>,
 }
@@ -177,6 +179,7 @@ pub fn planejar(fps_mediana: f64, fps_tipico: Option<f64>, hz: u32, trancos_por_
         motivo,
         teto_no_driver: None,
         aviso_do_teto: None,
+        dono_do_teto: None,
         tela: None,
     }
 }
@@ -227,6 +230,10 @@ pub fn medir(processo: &str, segundos: u32) -> Result<Plano, String> {
     }
     plano.teto_no_driver = teto_no_driver(processo);
     plano.aviso_do_teto = aviso_do_teto(teto_gravado(processo), plano.teto_no_driver);
+    plano.dono_do_teto = super::teto_do_jogo::quem_pos(
+        super::teto_do_jogo::registro(processo).as_ref(),
+        plano.teto_no_driver,
+    );
     let por_cima = super::por_cima::agora(pid, &nome);
     plano.tela = Some(Tela {
         apresentacao: r.apresentacao,

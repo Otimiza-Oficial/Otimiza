@@ -546,6 +546,7 @@ function painelDemo(): PainelDoTurbo {
     prova_sozinha: false,
     duracao_da_prova_s: 300,
     ritmo: jogo ? { fps: 85, trancos_por_minuto: 14, teto: 80 } : null,
+    prova_interrompida: null,
   };
 }
 

@@ -317,6 +317,10 @@
         </button>
       </div>
 
+      {#if painel.prova_interrompida && !painel.provando && ocupado !== "provando"}
+        <p class="recado" data-tom="atencao"><span class="ponto" data-tom="atencao"></span>{painel.prova_interrompida}</p>
+      {/if}
+
       {#if prova}
         {@const d = DESFECHO[prova.desfecho]}
         <div class="resultado">

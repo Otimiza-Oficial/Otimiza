@@ -585,6 +585,34 @@ pub struct Painel {
     pub duracao_da_prova_s: u64,
     /// O jogo aberto trava muitas vezes por minuto (última medida do Turbo): a oferta do Jogo liso.
     pub ritmo: Option<Ritmo>,
+    /// A última prova parou no meio: o motivo e o que fazer. Antes só ia para o log, e a prova automática sumia da tela.
+    pub prova_interrompida: Option<String>,
+}
+
+#[cfg(target_os = "windows")]
+static INTERROMPIDA: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Guarda (ou limpa, com `None`) o motivo de a última prova ter parado no meio, para a tela.
+#[cfg(target_os = "windows")]
+pub fn anotar_interrupcao(motivo: Option<String>) {
+    if let Ok(mut m) = INTERROMPIDA.lock() {
+        *m = motivo;
+    }
+}
+
+/// **Pura.** O erro da prova com a próxima ação para a pessoa.
+pub fn explicar_interrupcao(erro: &str) -> String {
+    let e = erro.to_lowercase();
+    let proximo = if e.contains("fechou") {
+        "Abra o jogo, entre na partida e toque em Provar de novo: ela leva uns 5 minutos com o jogo aberto."
+    } else if e.contains("powercfg") || e.contains("administrador") {
+        "O Windows recusou mudar a energia do processador. Abra o Otimiza como administrador e toque em Provar de novo."
+    } else if e.contains("rodando") || e.contains("em andamento") {
+        "Espere a outra medição terminar e toque em Provar de novo."
+    } else {
+        "Com o jogo aberto, toque em Provar de novo. Se parar outra vez, mande o registro do Otimiza ao suporte (Ajustes)."
+    };
+    format!("A prova parou no meio: {}. {}", erro.trim().trim_end_matches('.'), proximo)
 }
 
 #[cfg(target_os = "windows")]
@@ -769,6 +797,7 @@ pub fn painel() -> Painel {
             .and_then(|g| g.clone())
             .filter(|(jogo, _)| id.as_deref() == Some(jogo.as_str()))
             .map(|(_, r)| r),
+        prova_interrompida: INTERROMPIDA.lock().ok().and_then(|m| m.clone()),
     }
 }
 
@@ -1142,6 +1171,15 @@ pub fn provar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_prova_interrompida_diz_o_que_fazer() {
+        // O cliente de 15/11: a prova abortava toda vez e a tela não dizia nada.
+        let m = explicar_interrupcao("o Windows recusou `powercfg -setacvalueindex ...`: does not exist");
+        assert!(m.starts_with("A prova parou no meio") && m.contains("administrador"), "{}", m);
+        assert!(explicar_interrupcao("O jogo fechou no meio da prova. O Turbo ficou desligado.").contains("Abra o jogo"));
+        assert!(explicar_interrupcao("algo novo").contains("registro do Otimiza"));
+    }
 
     #[test]
     fn o_perfil_do_gta_so_e_oferecido_no_fivem_e_no_gta() {

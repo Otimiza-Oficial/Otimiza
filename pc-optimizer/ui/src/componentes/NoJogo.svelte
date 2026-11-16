@@ -112,6 +112,8 @@
       <p class="apoio">{liso.motivo}</p>
       {#if liso.aviso_do_teto}
         <p class="aviso">{liso.aviso_do_teto}</p>
+      {:else if liso.dono_do_teto}
+        <p class="apoio">{liso.dono_do_teto}</p>
       {:else if liso.teto_no_driver}
         <p class="apoio">Travado no driver em <b>{liso.teto_no_driver} fps</b> neste jogo.</p>
       {/if}

@@ -107,6 +107,28 @@ fn guardar(executavel: &str, registro: Option<Registro>) {
     }
 }
 
+/// **Pura.** Quem pôs o teto que o driver usa, em palavras para a tela. `registro`: o do Otimiza para este jogo;
+/// `no_driver`: o teto lido no perfil que o driver usa (0 = sem teto).
+pub fn quem_pos(registro: Option<&Registro>, no_driver: Option<u32>) -> Option<String> {
+    let fps = no_driver.filter(|f| *f > 0)?;
+    Some(match registro {
+        Some(r) if r.fps == fps && r.origem == Origem::FrameBoost => format!(
+            "Teto valendo: {} FPS, posto pelo Frame Boost (a base que ele multiplica). Sai quando o Frame Boost sair do jogo.",
+            fps
+        ),
+        Some(r) if r.fps == fps => format!("Teto valendo: {} FPS, posto pelo Jogo liso. Desfaz pelo Histórico.", fps),
+        _ => format!(
+            "Teto valendo: {} FPS, posto fora do Jogo liso e do Frame Boost (por você, pelo app da NVIDIA ou por uma              versão antiga do Otimiza). Desfaz pelo Histórico ou no app da NVIDIA.",
+            fps
+        ),
+    })
+}
+
+/// O registro do Otimiza para este jogo, sem conferir no histórico (só para a tela).
+pub fn registro(executavel: &str) -> Option<Registro> {
+    todos().remove(&executavel.to_lowercase())
+}
+
 /// A pessoa gravou o teto na mão: ele não é do Frame Boost nem do Jogo liso, e o fechar do jogo não o tira.
 pub fn da_pessoa(executavel: &str) {
     guardar(executavel, None);
@@ -261,6 +283,17 @@ mod tests {
         // O jogo voltava preso em 72 sem quadro gerado: sem teto de antes, o fim do Frame Boost solta o driver.
         let fb = r(Origem::FrameBoost, 72, None);
         assert_eq!(decidir(Some(&fb), Pedido::FimDoFrameBoost, false), Decisao::Soltar);
+    }
+
+    #[test]
+    fn a_tela_diz_quem_pos_o_teto() {
+        let fb = r(Origem::FrameBoost, 72, None);
+        assert!(quem_pos(Some(&fb), Some(72)).unwrap().contains("Frame Boost"));
+        assert!(quem_pos(Some(&r(Origem::JogoLiso, 111, None)), Some(111)).unwrap().contains("Jogo liso"));
+        assert!(quem_pos(Some(&fb), Some(60)).unwrap().contains("fora"), "o driver tem outro número: não é nosso");
+        assert!(quem_pos(None, Some(72)).unwrap().contains("fora"));
+        assert_eq!(quem_pos(Some(&fb), Some(0)), None, "sem teto no driver");
+        assert_eq!(quem_pos(None, None), None, "sem leitura, sem frase inventada");
     }
 
     #[test]

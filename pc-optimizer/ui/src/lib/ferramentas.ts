@@ -156,6 +156,8 @@ export interface PlanoJogoLiso {
   fps_tipico: number | null;
   /** Quanto o teto tira do FPS de referência, em %. */
   perda_pct: number;
+  /** Quem pôs o teto que o driver usa agora, em palavras. */
+  dono_do_teto: string | null;
   hz: number;
   teto: number | null;
   multiplicador_do_boost: number;
@@ -313,7 +315,7 @@ export const ferramentas = {
               r({
                 fps_agora: 96, fps_tipico: 104, perda_pct: 13, hz: 180, teto: 90, multiplicador_do_boost: 2, trancos_por_minuto: 14,
                 motivo: "O jogo entrega 104 fps mas trava 14 vezes por minuto: travar em 90 deixa o ritmo constante (o que o olho sente como liso), tirando no máximo 13% do FPS nos melhores momentos.",
-                teto_no_driver: 0, aviso_do_teto: null,
+                teto_no_driver: 0, aviso_do_teto: null, dono_do_teto: null,
                 tela: { apresentacao: "Direta", modo: "Hardware: Independent Flip", por_cima: [], aviso: null },
               }),
             900,
