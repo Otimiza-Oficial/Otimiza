@@ -388,7 +388,7 @@
   }
   .sem-jogo h2 {
     font-family: var(--fonte-titulo);
-    font-size: 20px;
+    font-size: var(--t-titulo);
   }
   .cabeca {
     display: flex;
@@ -404,7 +404,7 @@
   }
   .estado h2 {
     font-family: var(--fonte-titulo);
-    font-size: 18px;
+    font-size: var(--t-titulo);
   }
   .linha-estado {
     display: inline-flex;
@@ -447,9 +447,10 @@
     display: grid;
     gap: 10px;
     justify-items: start;
-    padding: 14px;
-    border-radius: 14px;
-    background: var(--superficie-2);
+    padding: 16px 18px;
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-3);
+    background: var(--bloco, var(--superficie-2));
   }
   .veredito {
     display: flex;
@@ -465,7 +466,7 @@
     display: grid;
   }
   .valor {
-    font-size: 22px;
+    font-size: var(--t-numero);
     font-weight: 600;
   }
   .erro {

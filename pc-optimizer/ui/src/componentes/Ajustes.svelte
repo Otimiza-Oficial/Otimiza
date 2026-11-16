@@ -483,7 +483,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
+    font-size: var(--t-linha);
     color: var(--tinta-2);
     cursor: pointer;
   }
@@ -505,6 +505,6 @@
   .cantos button {
     width: 34px;
     padding: 0;
-    font-size: 15px;
+    font-size: var(--t-corpo);
   }
 </style>

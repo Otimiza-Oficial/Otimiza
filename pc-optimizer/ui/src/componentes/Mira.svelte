@@ -285,7 +285,7 @@
   </p>
 
   <section class="dupla">
-    <div class="cartao">
+    <div class="secao">
       <h2>Sensibilidade</h2>
       <div class="volta">
         <span class="numero grande">{cm ? n(cm, 1) : "—"}</span>
@@ -311,7 +311,7 @@
         qualquer um dos dois: mesma volta em centímetros, mesma memória muscular.
       </p>
     </div>
-    <div class="cartao">
+    <div class="secao">
       <h2>
         Treino de mira
         {#if modo === "tracking" && recorde}<span class="apoio pequeno">recorde {recorde}%</span>{/if}
@@ -337,7 +337,7 @@
   </section>
 
   {#if treinoCs2?.jogo_achado}
-    <section class="cartao">
+    <section class="secao">
       <h2>Treino no CS2</h2>
       <p class="apoio">
         Duas configs de treino na pasta do CS2, como as que a comunidade troca: <b>otimiza_treino</b> mostra a trajetória da
@@ -357,7 +357,7 @@
     </section>
   {/if}
 
-  <section class="cartao">
+  <section class="secao">
     <h2>FiveM</h2>
     {#if contador}
       <div class="linha-opcao">
@@ -412,7 +412,7 @@
     display: grid;
     place-items: center;
     aspect-ratio: 16 / 10;
-    border-radius: 18px;
+    border-radius: var(--raio-3);
     overflow: hidden;
     background: #111;
     box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
@@ -586,7 +586,7 @@
   .medida {
     display: grid;
     gap: 3px;
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .cabeca {
     display: flex;
@@ -606,7 +606,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .linha-opcao p {
     margin: 2px 0 0;
@@ -618,7 +618,7 @@
   }
   .recado {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .recado[data-tom="ok"] {
     color: var(--ok);
@@ -634,17 +634,13 @@
     grid-template-columns: 1fr 1fr;
     gap: 14px;
   }
-  .cartao {
-    display: grid;
-    gap: 10px;
+  /* Os dois cartões lado a lado: sem o espaço extra que a área põe entre cartões empilhados. */
+  .area-mira .dupla > .secao {
     align-content: start;
-    padding: 16px 18px;
-    border-radius: 18px;
-    background: var(--superficie);
-    border: 1px solid var(--linha);
   }
-  .cartao h2 {
-    margin: 0;
+  /* A área separa cartões empilhados com margem; lado a lado, ela desalinharia o segundo. */
+  .area-mira .dupla > .secao + .secao {
+    margin-top: 0;
   }
   .volta {
     display: flex;
@@ -652,7 +648,7 @@
     gap: 8px;
   }
   .numero.grande {
-    font-size: 40px;
+    font-size: var(--t-destaque);
     font-weight: 650;
     letter-spacing: -0.02em;
     line-height: 1;
@@ -665,20 +661,20 @@
   .entradas label {
     display: grid;
     gap: 4px;
-    font-size: 12px;
+    font-size: var(--t-apoio);
     color: var(--tinta-2);
   }
   .entradas .campo {
     width: 100%;
     box-sizing: border-box;
   }
-  .cartao p {
+  .secao p {
     margin: 0;
   }
   .treino {
     position: relative;
     height: 160px;
-    border-radius: 14px;
+    border-radius: var(--raio-2);
     background: #11161f;
     overflow: hidden;
   }
