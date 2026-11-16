@@ -18,22 +18,48 @@ custo.
 
 ---
 
-# 1.0.5: Correções de bugs no Frame Boost, no Turbo e no teto de FPS
+# 1.0.5: Correções de bugs no Frame Boost, no Turbo, no desfazer e no "Otimizar agora"
 
 Atualização da 1.0 (número interno 4.0.5).
 
 ## Correções
 
-- **Frame Boost:** depois de desligar (por você ou sozinho), o jogo podia continuar travado no FPS base dele, por exemplo 72 FPS, sem nenhum quadro gerado, partida após partida. Era o "o Frame Boost para de funcionar e o jogo não fica liso". Agora o teto do Frame Boost sai junto com ele.
+### FPS
+- **Turbo e Frame Boost:** com o jogo já perto dos Hz do monitor (por exemplo, FiveM a 130 FPS num monitor de 144 Hz), o Frame Boost travava o jogo na metade do monitor, em 72 FPS reais, e completava com quadros gerados. O contador mostrava 144, mas o jogo ficava pesado na mão. Agora, perto dos Hz, o FPS real fica como está; o Turbo só liga a geração quando o jogo está bem abaixo do monitor.
+- **Frame Boost:** depois de desligar (por você ou sozinho), o jogo podia continuar travado no FPS base dele, por exemplo 72 FPS, sem nenhum quadro gerado, partida após partida. Agora o teto do Frame Boost sai junto com ele.
 - **Frame Boost e Jogo liso** não brigam mais pelo mesmo teto de FPS. Com o Frame Boost ligado, vale o teto dele, e o Jogo liso explica por quê. Quando o Frame Boost sai, o teto do Jogo liso que você tinha volta. O teto que você trava na mão nunca é trocado.
 - **Jogo liso** mostra quem pôs o teto que está valendo: o Frame Boost, o Jogo liso ou você.
 - **Frame Boost:** quando ele desliga sozinho porque a placa não aguenta, a tela diz quanto FPS real o jogo mantinha, e ele não volta sozinho naquele jogo no "Jogar".
-- **Prova do Turbo:** quando ela para no meio, a tela diz por que e o que fazer. Antes a prova automática sumia sem explicação.
+- **Plano de energia OTIMIZA nos Ryzen 7900X3D, 7950X3D, 9900X3D e 9950X3D:** o plano mantinha todos os núcleos acordados, e o jogo se espalhava para o bloco sem o cache 3D. Agora o plano deixa esse ajuste como a AMD recomenda. Se você tem um desses processadores e já aplicou o plano, desfaça "Plano de energia OTIMIZA" no Histórico: nesses processadores a AMD recomenda o plano Equilibrado do próprio Windows.
+
+### Desfazer e segurança
+- **Desfazer tudo** voltava as mudanças na ordem errada e podia deixar a configuração do GTA/FiveM com uma mudança do Otimiza. Agora desfaz do mais novo para o mais antigo.
+- Quando um ajuste falhava no meio e a volta automática também falhava, o que tinha mudado ficava sem registro. Agora vai para o Histórico, com Desfazer.
+- **Plano de energia:** se o Otimiza não conseguia ler qual plano estava ativo, ele ativava o OTIMIZA mesmo assim, sem ter para onde voltar. Agora não muda nada nesse caso.
+- **Limites de boot:** cada limite removido fica anotado na hora, para voltar mesmo se o seguinte falhar.
+- **Driver da NVIDIA:** se o Otimiza não conseguia ler o valor que você tinha escolhido, o desfazer devolvia o padrão de fábrica por cima dele. Agora ele não grava sem saber o que desfazer.
+- **Placa de rede:** "Impedir que a placa de rede durma" desligava junto o Wake-on-LAN (ligar o PC pela rede). Agora só impede a placa de dormir. Se você usa Wake-on-LAN e já tinha aplicado, desfaça esse item no Histórico e aplique de novo.
+- **Sistema → Limpeza:** "Limpar" agora pergunta antes de apagar.
+- A remoção de apps da Microsoft Store só aceita os apps da lista do Otimiza.
+- **Prova do Turbo:** quando ela para no meio, a tela diz por que e o que fazer.
 - **Histórico:** ligar e desligar o Frame Boost podia apagar ou trazer de volta itens do Histórico. Corrigido.
-- **Energia, cores e modo jogo:** três casos em que o Otimiza tentava desfazer algo que não existia mais (um plano de energia apagado, um monitor trocado, uma anotação corrompida) e falhava em toda abertura. Agora ele percebe e segue em frente. As cores do monitor não são mais regravadas com valores antigos.
+- **Energia, cores e modo jogo:** três casos em que o Otimiza tentava desfazer algo que não existia mais (um plano de energia apagado, um monitor trocado, uma anotação corrompida) e falhava em toda abertura. Agora ele percebe e segue em frente.
+
+### "Otimizar agora" (Completo)
+- Saíram do lote três ajustes de registro que não mudam nada no Windows 10 e 11 atuais (prioridade do sistema para jogos, prioridade do primeiro plano e perfil de multimídia). Continuam na lista, um a um, para quem quiser.
+- Saiu do lote o ajuste dos navegadores, que fazia o Edge e o Chrome mostrarem "gerenciado pela sua organização". Se o seu navegador mostra esse aviso, desfaça "Impedir os navegadores de ficar abertos por trás" no Histórico.
+- Um ajuste que deve ser aplicado sozinho (otimizações para jogos em janela) não entra mais no lote.
+
+### Textos e telas
+- Várias mensagens tinham um buraco de espaços no meio da frase, como a de ativar a chave. Corrigido.
+- No tema claro, os textos em verde e em laranja ficaram mais legíveis.
+- Telas que ficavam "procurando" para sempre quando a leitura falhava agora dizem o que aconteceu e deixam tentar de novo.
 
 ## Novo
 
+- **Catálogo de jogos:** FiveM, Valorant, CS2, Fortnite e Apex, cada um com a configuração leve, a limpeza do cache de shader e o que o anticheat deixa fazer. Na aba Jogos, escolha o jogo e abra **Otimizar**.
+- **Página do jogo** em abas: Resumo, Otimizar, Ferramentas (crashes do FiveM e integração do CS2) e Histórico.
+- Toda ação que apaga ou muda o PC pede confirmação dentro do Otimiza.
 - **Ajustes → Registro do Otimiza → Salvar em Downloads:** salva o registro do que o Otimiza fez num arquivo só, sem o seu nome de usuário, para mandar ao suporte quando algo der errado.
 
 ---
