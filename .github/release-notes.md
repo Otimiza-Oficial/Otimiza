@@ -8,13 +8,33 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.4_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.4_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.5_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.5_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.5: Correções de bugs no Frame Boost, no Turbo e no teto de FPS
+
+Atualização da 1.0 (número interno 4.0.5).
+
+## Correções
+
+- **Frame Boost:** depois de desligar (por você ou sozinho), o jogo podia continuar travado no FPS base dele, por exemplo 72 FPS, sem nenhum quadro gerado, partida após partida. Era o "o Frame Boost para de funcionar e o jogo não fica liso". Agora o teto do Frame Boost sai junto com ele.
+- **Frame Boost e Jogo liso** não brigam mais pelo mesmo teto de FPS. Com o Frame Boost ligado, vale o teto dele, e o Jogo liso explica por quê. Quando o Frame Boost sai, o teto do Jogo liso que você tinha volta. O teto que você trava na mão nunca é trocado.
+- **Jogo liso** mostra quem pôs o teto que está valendo: o Frame Boost, o Jogo liso ou você.
+- **Frame Boost:** quando ele desliga sozinho porque a placa não aguenta, a tela diz quanto FPS real o jogo mantinha, e ele não volta sozinho naquele jogo no "Jogar".
+- **Prova do Turbo:** quando ela para no meio, a tela diz por que e o que fazer. Antes a prova automática sumia sem explicação.
+- **Histórico:** ligar e desligar o Frame Boost podia apagar ou trazer de volta itens do Histórico. Corrigido.
+- **Energia, cores e modo jogo:** três casos em que o Otimiza tentava desfazer algo que não existia mais (um plano de energia apagado, um monitor trocado, uma anotação corrompida) e falhava em toda abertura. Agora ele percebe e segue em frente. As cores do monitor não são mais regravadas com valores antigos.
+
+## Novo
+
+- **Ajustes → Registro do Otimiza → Salvar em Downloads:** salva o registro do que o Otimiza fez num arquivo só, sem o seu nome de usuário, para mandar ao suporte quando algo der errado.
 
 ---
 
