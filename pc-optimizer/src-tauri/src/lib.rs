@@ -524,6 +524,7 @@ pub fn run() {
                                 let estado = handle.state::<AppState>();
                                 let mut log = estado.changes.lock().await;
                                 plataforma::teto_do_jogo::ao_fechar_o_jogo(&executavel, pelo_jogar, &mut log);
+                                plataforma::teto_do_jogo::revisar_teto_antigo(&executavel, &mut log);
                             }
                             let _ = handle.emit(
                                 "partida:terminou",

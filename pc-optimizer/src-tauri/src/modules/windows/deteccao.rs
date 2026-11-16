@@ -250,7 +250,7 @@ pub fn procurar() -> Option<JogoDetectado> {
         executavel,
         caminho,
         cobertura: Some(cobertura),
-        uso_3d: uso_3d_com_folga(pid),
+        uso_3d: uso_3d_com_folga(pid, inicio_do_processo(segundos)),
         segundos_aberto: segundos,
     };
 
@@ -264,39 +264,54 @@ pub fn procurar() -> Option<JogoDetectado> {
 
 /// Sem isto, vídeo em tela cheia abriria um `powershell.exe` a cada seis segundos, para sempre.
 const SEGUNDOS_DE_FOLGA: u64 = 60;
-/// O jogo CONFIRMADO também não é medido a cada volta (Plano de refino, E9). A consulta ao WMI da placa custa mais de um
-/// segundo de processador no `WmiPrvSE`, e três laços chamam a detecção: com o jogo aberto, ela rodava a cada 4 s a
-/// partida inteira, o tipo de pico que dá tranco. O fechamento não depende disto: a sessão vê o processo sumir.
-const SEGUNDOS_DE_FOLGA_DO_JOGO: u64 = 300;
-
-/// **Pura.** O uso de 3D medido antes ainda vale para este processo? "Não é jogo" vale 60 s; jogo confirmado, 5 min.
+/// O jogo CONFIRMADO não é medido de novo enquanto o mesmo processo viver (Plano de refino, E9; 1.0.6). A consulta ao
+/// WMI da placa custa mais de um segundo de processador no `WmiPrvSE`: a cada 5 min (a regra até a 1.0.5) ela era uma
+/// engasgada periódica na partida, e quando caía num menu ou carregamento o jogo "deixava de ser jogo" e a consulta
+/// voltava a cada 60 s. Um processo que já provou usar a placa como jogo continua sendo o jogo; o fechamento não depende
+/// disto (a sessão vê o processo sumir).
+/// **Pura.** O uso de 3D medido antes ainda vale para este processo? "Não é jogo" vale 60 s; jogo confirmado, até fechar.
 pub fn reaproveita(mesmo_processo: bool, segundos_desde: u64, valor: Option<f64>) -> bool {
     if !mesmo_processo {
         return false;
     }
     let passou = valor.is_some_and(|v| v >= USO_3D_MINIMO);
-    let folga = if passou { SEGUNDOS_DE_FOLGA_DO_JOGO } else { SEGUNDOS_DE_FOLGA };
-    segundos_desde < folga
+    passou || segundos_desde < SEGUNDOS_DE_FOLGA
 }
 
-fn uso_3d_com_folga(pid: u32) -> Option<f64> {
+/// Quando o processo nasceu (segundos desde 1970), pelo tempo que ele está aberto.
+fn inicio_do_processo(segundos_aberto: u64) -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+        .saturating_sub(segundos_aberto)
+}
+
+/// **Pura.** O mesmo processo de antes: mesmo número E mesmo nascimento. O Windows reaproveita números de processo, e
+/// o jogo confirmado agora vale até fechar: sem o nascimento, outro programa com o número do jogo fechado herdaria o
+/// "é jogo".
+pub fn mesmo_processo(pid: u32, inicio: u64, anterior: (u32, u64)) -> bool {
+    pid == anterior.0 && inicio.abs_diff(anterior.1) <= 2
+}
+
+fn uso_3d_com_folga(pid: u32, inicio: u64) -> Option<f64> {
     use std::sync::Mutex;
     use std::time::Instant;
 
-    static ULTIMA: Mutex<Option<(u32, Instant, Option<f64>)>> = Mutex::new(None);
+    static ULTIMA: Mutex<Option<(u32, u64, Instant, Option<f64>)>> = Mutex::new(None);
 
     let Ok(mut guarda) = ULTIMA.lock() else {
         return uso_3d_do_processo(pid);
     };
 
-    if let Some((anterior, quando, valor)) = *guarda {
-        if reaproveita(anterior == pid, quando.elapsed().as_secs(), valor) {
+    if let Some((anterior, nasceu, quando, valor)) = *guarda {
+        if reaproveita(mesmo_processo(pid, inicio, (anterior, nasceu)), quando.elapsed().as_secs(), valor) {
             return valor;
         }
     }
 
     let medido = uso_3d_do_processo(pid);
-    *guarda = Some((pid, Instant::now(), medido));
+    *guarda = Some((pid, inicio, Instant::now(), medido));
     medido
 }
 
@@ -332,10 +347,14 @@ mod tests {
     fn jogo_confirmado_nao_e_medido_a_cada_volta() {
         let jogo = Some(USO_3D_MINIMO + 20.0);
         let parado = Some(0.0);
-        // Jogo confirmado: vale 5 minutos para o mesmo processo.
+        // Jogo confirmado: vale enquanto o mesmo processo viver (sem a engasgada do WMI no meio da partida).
         assert!(reaproveita(true, 4, jogo));
-        assert!(reaproveita(true, 299, jogo));
-        assert!(!reaproveita(true, 300, jogo));
+        assert!(reaproveita(true, 300, jogo));
+        assert!(reaproveita(true, 4 * 3600, jogo));
+        assert!(!reaproveita(false, 4, jogo), "outro processo: mede de novo");
+        assert!(mesmo_processo(4321, 1_000, (4321, 1_001)), "o mesmo, com o relógio arredondando");
+        assert!(!mesmo_processo(4321, 5_000, (4321, 1_000)), "número reaproveitado por outro programa");
+        assert!(!mesmo_processo(4322, 1_000, (4321, 1_000)));
         // "Não é jogo" (ou sem contador): 60 s.
         assert!(reaproveita(true, 59, parado));
         assert!(!reaproveita(true, 60, parado));

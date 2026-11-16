@@ -1290,6 +1290,13 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     };
     unsafe {
         timeBeginPeriod(1);
+        // A thread que mostra os quadros acima do normal: com o processador no limite (o caso em que o Turbo liga o
+        // gerador), em prioridade normal ela perdia a vez para o jogo e a hora da tela, e o quadro gerado saía atrasado
+        // (micro-tranco). Ela passa a maior parte do tempo esperando o monitor: não tira processador do jogo.
+        use windows_sys::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL};
+        if SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL) == 0 {
+            crate::utils::Logger::warn("gerador: não consegui subir a prioridade da thread de apresentação");
+        }
         let _ = RegisterHotKey(
             None,
             ATALHO,

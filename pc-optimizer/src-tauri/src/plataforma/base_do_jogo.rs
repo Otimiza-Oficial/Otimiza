@@ -102,6 +102,36 @@ pub fn gravar(executavel: &str, base: BaseMedida) {
     }
 }
 
+fn arquivo_dos_desfeitos() -> PathBuf {
+    arquivo().with_file_name("tetos-desfeitos.json")
+}
+
+/// Por jogo: (gravado em, desfeito em) do último teto antigo que o Otimiza desfez por pesar demais.
+fn desfeitos() -> BTreeMap<String, (u64, u64)> {
+    fs::read_to_string(arquivo_dos_desfeitos())
+        .ok()
+        .and_then(|b| serde_json::from_str(&b).ok())
+        .unwrap_or_default()
+}
+
+/// Anota que o teto deste jogo, gravado em `gravado_em`, foi desfeito agora.
+pub fn anotar_teto_desfeito(executavel: &str, gravado_em: u64, desfeito_em: u64) {
+    let mut t = desfeitos();
+    t.insert(executavel.to_lowercase(), (gravado_em, desfeito_em));
+    let p = arquivo_dos_desfeitos();
+    if let Some(d) = p.parent() {
+        let _ = fs::create_dir_all(d);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&t) {
+        let _ = fs::write(p, json);
+    }
+}
+
+/// Pura: a medição foi feita enquanto o teto antigo valia? Ela mediu o teto (72), não o jogo (130): não serve de base.
+pub fn medida_sob_teto(quando: u64, desfeito: Option<(u64, u64)>) -> bool {
+    desfeito.is_some_and(|(gravado, desfeito)| gravado <= quando && quando <= desfeito)
+}
+
 fn arquivo_das_soltas() -> PathBuf {
     arquivo().with_file_name("base-solta.json")
 }
@@ -176,7 +206,7 @@ fn jogo_abriu_em(pid: u32) -> Option<u64> {
 
 /// O teto que o Otimiza gravou para este jogo e quando (do histórico).
 #[cfg(target_os = "windows")]
-fn gravado(log: &crate::modules::changelog::ChangeLog, executavel: &str) -> Option<(u32, u64)> {
+pub(crate) fn gravado(log: &crate::modules::changelog::ChangeLog, executavel: &str) -> Option<(u32, u64)> {
     use crate::modules::changelog::ChangeRecord;
     let id = crate::modules::windows::nvdriver::id_do_limite(executavel);
     log.applied()
@@ -240,7 +270,10 @@ pub fn travar(
             return Ok(format!("FPS base travado em {} (já estava).", fps));
         }
     }
-    let Some(base) = ler(executavel).filter(|b| recente(b, agora()) && livre_do_teto(b, desfeito_em)) else {
+    let marca = desfeitos().remove(&executavel.to_lowercase());
+    let Some(base) = ler(executavel)
+        .filter(|b| recente(b, agora()) && livre_do_teto(b, desfeito_em) && !medida_sob_teto(b.quando, marca))
+    else {
         return Ok(format!(
             "{}Para travar o FPS base, meça o jogo no Jogo liso (20 s) com o jogo reaberto: o Otimiza escolhe o teto pela medição.",
             nota_de_antes
@@ -292,6 +325,15 @@ pub fn travar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn medida_feita_sob_o_teto_antigo_nao_vira_base() {
+        let marca = Some((1_000, 2_000));
+        assert!(medida_sob_teto(1_500, marca), "medida com o teto de 72 valendo: mediu o teto");
+        assert!(!medida_sob_teto(900, marca), "antes do teto: mediu o jogo");
+        assert!(!medida_sob_teto(2_100, marca), "depois de desfeito: mediu o jogo");
+        assert!(!medida_sob_teto(1_500, None));
+    }
 
     #[test]
     fn teto_da_base_divide_o_monitor() {

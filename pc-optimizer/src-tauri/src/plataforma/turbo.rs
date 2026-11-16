@@ -127,6 +127,17 @@ pub fn conforme_os_ajustes(r: Receita) -> Receita {
     }
 }
 
+/// **Pura.** Receita guardada por versão antiga com o processador no limite e geração ligada, num jogo que já roda perto
+/// dos Hz: sem a geração (o FiveM de 130 fps em 144 Hz iria para 72 reais a cada "Jogar"). O resto da receita fica.
+pub fn sem_geracao_perto_do_monitor(r: Receita, fps_antes: Option<f64>, hz: Option<u32>) -> Receita {
+    let perto = matches!((fps_antes, hz), (Some(f), Some(h)) if h > 0 && f >= h as f64 * 0.9);
+    if r.gargalo == Gargalo::Processador && r.multiplicador.is_some() && perto {
+        Receita { multiplicador: None, ..r }
+    } else {
+        r
+    }
+}
+
 /// Pura: as duas receitas ligam a mesma coisa (escala, multiplicador e energia), mesmo com textos e FPS diferentes.
 /// É o que impede o "Medir de novo" de religar uma receita que a prova reprovou.
 pub fn mesma_acao(a: &Receita, b: &Receita) -> bool {
@@ -686,13 +697,27 @@ pub struct Ritmo {
 /// Pura: o Turbo OFERECE o teto do Jogo liso (não aplica: o teto troca um pouco da média por ritmo, e essa troca é da
 /// pessoa) quando a medida mostra trancos e a receita não mexe no FPS depois da medida. Com escala, o FPS sobe depois
 /// e o teto da medida cortaria o ganho; com geração, a base já é travada pelo Frame Boost (`travar_base`).
-pub fn ritmo_a_oferecer(r: &Receita, mediana: f64, trancos_por_minuto: f64, hz: u32) -> Option<Ritmo> {
+pub fn ritmo_a_oferecer(
+    r: &Receita,
+    mediana: f64,
+    fps_tipico: Option<f64>,
+    trancos_por_minuto: f64,
+    hz: u32,
+) -> Option<Ritmo> {
     if r.escala.is_some() || r.multiplicador.is_some() || trancos_por_minuto < super::jogo_liso::JA_LISO_TRANCOS {
         return None;
     }
-    super::jogo_liso::planejar(mediana, None, hz, trancos_por_minuto)
+    super::jogo_liso::planejar(mediana, fps_tipico, hz, trancos_por_minuto)
         .teto
         .map(|teto| Ritmo { fps: mediana, trancos_por_minuto, teto })
+}
+
+/// **Pura.** O FPS de referência da receita: o maior entre a medida de agora e o de costume.
+pub fn referencia(medido: Option<f64>, tipico: Option<f64>) -> Option<f64> {
+    match (medido, tipico) {
+        (Some(m), Some(t)) => Some(m.max(t)),
+        (m, t) => m.or(t),
+    }
 }
 
 /// Pura: com o gargalo no processador ou na memória, o que disputa com o jogo é o segundo plano: o governador do modo
@@ -832,14 +857,17 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
         "turbo: {} · {:?} (CPU {:.0}%, núcleo {:.0}%, placa {:.0}%) · {:?} fps · {:?} Hz",
         id, relatorio.limite, relatorio.cpu_total, relatorio.cpu_max_core, relatorio.gpu_percent, fps, hz
     ));
+    // 10 s num trecho ruim (cidade cheia, cenário carregando) não viram a receita da noite: a referência é o maior entre
+    // a medida e o FPS de costume do jogo (as últimas partidas), como no Jogo liso.
+    let tipico = super::jogo_liso::fps_tipico(&jogo.executavel);
     let receita = conforme_os_ajustes(montar(
         gargalo_da_medida(relatorio.limite, relatorio.gpu_percent > 0.0),
-        fps,
+        referencia(fps, tipico),
         hz,
         menor_atraso(&id),
     ));
     let ritmo = medida.as_ref().and_then(|r| {
-        ritmo_a_oferecer(&receita, r.fps_do_jogo_mediana, r.engasgos_por_minuto, hz.unwrap_or(0))
+        ritmo_a_oferecer(&receita, r.fps_do_jogo_mediana, tipico, r.engasgos_por_minuto, hz.unwrap_or(0))
     });
     if let Ok(mut g) = RITMO.lock() {
         *g = ritmo.map(|r| (id.clone(), r));
@@ -856,8 +884,22 @@ static RITMO: std::sync::Mutex<Option<(String, Ritmo)>> = std::sync::Mutex::new(
 #[cfg(target_os = "windows")]
 pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> Vec<String> {
     use std::sync::atomic::Ordering;
-    // A receita lembrada de antes da escala ser desligada também perde a escala.
-    let ajustada = conforme_os_ajustes(r.clone());
+    // A receita lembrada de antes da escala ser desligada também perde a escala; a de antes da 1.0.6, com o processador
+    // no limite perto dos Hz, perde a geração (a mesma régua do `montar` de hoje).
+    // A régua do `montar`: o maior entre a medida da receita e o FPS de costume (uma receita medida com o teto de 72
+    // ligado diria 72), nos Hz do monitor do jogo.
+    let jogo = super::sessao::atual();
+    let hz = jogo
+        .as_ref()
+        .and_then(|j| super::frameboost::hz_do_jogo(j.pid))
+        .or_else(|| {
+            crate::modules::windows::display::monitores_sem_nomes()
+                .iter()
+                .find(|m| m.principal)
+                .map(|m| m.hz_atual)
+        });
+    let tipico = jogo.as_ref().and_then(|j| super::jogo_liso::fps_tipico(&j.executavel));
+    let ajustada = sem_geracao_perto_do_monitor(conforme_os_ajustes(r.clone()), referencia(fps_antes, tipico), hz);
     let r = &ajustada;
     if let Ok(mut a) = APLICADA.lock() {
         *a = Some((fps_antes, r.clone()));
@@ -1224,13 +1266,40 @@ mod tests {
     #[test]
     fn o_jogo_liso_so_e_oferecido_com_tranco_e_sem_escala_nem_geracao() {
         let cpu_menor_atraso = montar(Gargalo::Processador, Some(70.0), Some(144), true);
-        let r = ritmo_a_oferecer(&cpu_menor_atraso, 70.0, 30.0, 144).expect("30 trancos/min sem escala nem geração");
+        let r = ritmo_a_oferecer(&cpu_menor_atraso, 70.0, None, 30.0, 144).expect("30 trancos/min sem escala nem geração");
         assert!(r.teto < 70, "o teto fica abaixo da mediana, com folga para o processador: {}", r.teto);
-        assert!(ritmo_a_oferecer(&cpu_menor_atraso, 70.0, 1.0, 144).is_none(), "já liso");
+        assert!(ritmo_a_oferecer(&cpu_menor_atraso, 70.0, None, 1.0, 144).is_none(), "já liso");
         let com_geracao = montar(Gargalo::Processador, Some(70.0), Some(144), false);
-        assert!(ritmo_a_oferecer(&com_geracao, 70.0, 30.0, 144).is_none(), "a geração já trava a base");
+        assert!(ritmo_a_oferecer(&com_geracao, 70.0, None, 30.0, 144).is_none(), "a geração já trava a base");
         let com_escala = montar(Gargalo::Placa, Some(70.0), Some(144), true);
-        assert!(ritmo_a_oferecer(&com_escala, 70.0, 30.0, 144).is_none(), "a escala sobe o FPS depois da medida");
+        assert!(ritmo_a_oferecer(&com_escala, 70.0, None, 30.0, 144).is_none(), "a escala sobe o FPS depois da medida");
+    }
+
+    #[test]
+    fn um_trecho_ruim_nao_vira_a_receita() {
+        assert_eq!(referencia(Some(95.0), Some(130.0)), Some(130.0), "10 s ruins: vale o costume");
+        assert_eq!(referencia(Some(130.0), Some(95.0)), Some(130.0));
+        assert_eq!(referencia(None, Some(130.0)), Some(130.0));
+        assert_eq!(referencia(Some(95.0), None), Some(95.0));
+        // O FiveM do sócio medido num trecho ruim (95 fps) com costume de 130: não liga a geração.
+        let r = montar(Gargalo::Processador, referencia(Some(95.0), Some(130.0)), Some(144), false);
+        assert_eq!(r.multiplicador, None);
+    }
+
+    #[test]
+    fn receita_antiga_perde_a_geracao_perto_do_monitor() {
+        let antiga = Receita { multiplicador: Some(0), ..montar(Gargalo::Processador, Some(70.0), Some(144), false) };
+        assert_eq!(sem_geracao_perto_do_monitor(antiga.clone(), Some(130.0), Some(144)).multiplicador, None);
+        // Receita medida com o teto de 72 ligado, costume de 130: pela referência do `montar`, perde a geração.
+        assert_eq!(
+            sem_geracao_perto_do_monitor(antiga.clone(), referencia(Some(72.0), Some(130.0)), Some(144)).multiplicador,
+            None
+        );
+        assert_eq!(sem_geracao_perto_do_monitor(antiga.clone(), Some(70.0), Some(144)).multiplicador, Some(0), "longe: fica");
+        assert_eq!(sem_geracao_perto_do_monitor(antiga.clone(), None, Some(144)).multiplicador, Some(0), "sem medida: não mexe");
+        let placa = Receita { multiplicador: Some(0), ..montar(Gargalo::Placa, Some(130.0), Some(144), false) };
+        assert_eq!(sem_geracao_perto_do_monitor(placa, Some(130.0), Some(144)).multiplicador, Some(0), "só o do processador");
+        assert!(sem_geracao_perto_do_monitor(antiga, Some(130.0), Some(144)).energia, "a energia continua");
     }
 
     #[test]

@@ -8,13 +8,32 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.5_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.5_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.6_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.6_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.6: Correções de bugs no Turbo, no Frame Boost e para quem tem Valorant instalado
+
+Atualização da 1.0 (número interno 4.0.6).
+
+## Correções
+
+- **"Nenhum gerador funciona aqui" com o Valorant instalado:** o anticheat do Valorant (Vanguard) roda desde que o Windows liga, e o Otimiza achava que ele estava em partida. Com isso o Frame Boost e a mira sumiam em qualquer jogo, até no FiveM. Agora só o Valorant aberto bloqueia. Quando nenhum gerador serve, a tela diz o motivo.
+- **Jogo preso em 72 FPS de versões antigas:** quem usou o Jogo liso, o Turbo ou o Frame Boost antes da 1.0.5 podia ter ficado com o jogo travado na metade do monitor (por exemplo, 72 FPS num monitor de 144 Hz, com o jogo rodando a 130). Agora, ao fechar o jogo, o Otimiza desfaz esse teto sozinho. O teto que você travou na mão fica.
+- **Receita do Turbo guardada antes da 1.0.6:** com o processador no limite e o jogo perto dos Hz do monitor, ela ligava o Frame Boost a cada "Jogar". Agora o Turbo deixa a geração de fora nesse caso, e a energia de jogo continua.
+- **Turbo** usa o FPS de costume do jogo, das suas últimas partidas, e não só os 10 segundos da medição: um trecho ruim não vira a receita da noite.
+- **Travadinhas a cada 5 minutos:** o Otimiza conferia de novo, a cada 5 minutos, se o jogo aberto era mesmo um jogo, e essa consulta pesava mais de 1 segundo de processador. Agora o jogo confirmado não é conferido de novo até fechar. A pausa de conferência do Frame Boost também fica mais espaçada (a cada 15 minutos) quando ele já provou que não tira FPS na partida.
+- **Frame Boost:** a parte que mostra os quadros gerados passa na frente quando o processador está no limite. Antes ela perdia a vez para o jogo e o quadro gerado saía atrasado (micro-tranco).
+- **Jogo liso com G-Sync ou FreeSync:** quando o jogo passa dos Hz do monitor, o teto fica 3 abaixo (141 num monitor de 144 Hz), para a taxa variável continuar valendo.
+- **Energia:** com o motor de energia cuidando de um jogo (aba Energia), a energia de jogo não entra junto. Os dois trocavam o plano ao mesmo tempo no começo da partida.
+- **Overlay da Steam** não é mais rebaixado pelo modo jogo.
+- **Prova do Turbo:** quando a diferença não dá para provar, a tela mostra de quanto a quanto as rodadas variaram, em vez de dizer "sem diferença" ao lado de um FPS maior.
 
 ---
 

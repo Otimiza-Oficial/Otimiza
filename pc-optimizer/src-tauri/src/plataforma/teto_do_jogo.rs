@@ -142,6 +142,79 @@ pub fn quem_pos(registro: Option<&Registro>, no_driver: Option<u32>) -> Option<S
     })
 }
 
+/// **Pura.** Um teto gravado por versão antiga (o Jogo liso da 1.0.3, o Frame Boost e o Turbo até a 1.0.5) que tira mais
+/// que `PERDA_MAXIMA` de um jogo que roda perto dos Hz: o FiveM de 130 fps em 144 Hz preso em 72. O da pessoa nunca.
+/// `fps_antes`: o FPS de costume do jogo ANTES de o teto ser gravado (depois dele, a medição só mede o teto).
+///
+/// Sem dono (gravado antes da 1.0.5, quando o "Limitar FPS" manual também não deixava dono), só sai o teto que é uma
+/// fração dos Hz (metade, um terço, um quarto): é a marca da conta do Otimiza. Um 60 posto à mão num monitor de 144 fica.
+pub fn teto_antigo_pesado(teto: u32, fps_antes: Option<f64>, hz: u32, origem: Option<Origem>) -> bool {
+    let Some(antes) = fps_antes else { return false };
+    let do_otimiza = match origem {
+        Some(Origem::Pessoa) => false,
+        Some(_) => true,
+        None => hz > 0 && (2..=4).any(|d| (hz as f64 / d as f64).round() as u32 == teto),
+    };
+    do_otimiza
+        && hz > 0
+        && antes >= hz as f64 * super::base_do_jogo::PERTO_DO_MONITOR
+        && (teto as f64) < antes * (1.0 - super::jogo_liso::PERDA_MAXIMA)
+}
+
+/// Ao fechar o jogo: desfaz o teto antigo pesado (`teto_antigo_pesado`), para a próxima partida abrir solta. Antes a
+/// pessoa precisava achar o "limitado a 72 FPS" no Histórico. Anota o intervalo em que ele valeu: a medição feita
+/// nele não vira a base do Frame Boost (senão a conta travaria ainda mais baixo).
+#[cfg(target_os = "windows")]
+pub fn revisar_teto_antigo(executavel: &str, log: &mut crate::modules::changelog::ChangeLog) {
+    let Some((teto, gravado_em)) = super::base_do_jogo::gravado(log, executavel) else {
+        return;
+    };
+    let registro = atual(executavel, log);
+    // O Frame Boost guardou o teto do Jogo liso que existia antes dele: desfazer aqui apagaria esse teto da pessoa. Fica
+    // para o caminho normal (`FimDoFrameBoost`), que devolve o de antes.
+    if registro.as_ref().is_some_and(|r| r.antes.is_some()) {
+        return;
+    }
+    let origem = registro.map(|r| r.origem);
+    let hz = crate::modules::windows::display::monitores_sem_nomes()
+        .iter()
+        .find(|m| m.principal)
+        .map(|m| m.hz_atual)
+        .unwrap_or(0);
+    let (id_do_jogo, _) = super::historico::id_do_jogo(executavel);
+    // Só as medições comparáveis e do medidor atual: o canal antigo contava em dobro no FiveM, e partida com gerador
+    // de outro programa conta quadro gerado; um "antes" inflado desfaria o teto legítimo da base do Frame Boost.
+    let antes: Vec<f64> = crate::modules::medicoes::ler_para_comparar()
+        .unwrap_or_default()
+        .iter()
+        .filter(|m| m.confiavel && m.quando < gravado_em && super::historico::id_do_jogo(&m.jogo).0 == id_do_jogo)
+        .map(|m| m.fps)
+        .collect();
+    let fps_antes = super::jogo_liso::fps_de_costume(&antes);
+    if !teto_antigo_pesado(teto, fps_antes, hz, origem) {
+        return;
+    }
+    let id = crate::modules::windows::nvdriver::id_do_limite(executavel);
+    match crate::modules::windows::WindowsOptimizer::new().revert(&id, log) {
+        Ok(_) => {
+            guardar(executavel, None);
+            let agora = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            super::base_do_jogo::anotar_teto_desfeito(executavel, gravado_em, agora);
+            crate::utils::Logger::info(&format!(
+                "teto do jogo: teto antigo de {} fps em {} desfeito (o jogo rodava a {:.0} fps num monitor de {} Hz)",
+                teto,
+                executavel,
+                fps_antes.unwrap_or_default(),
+                hz
+            ));
+        }
+        Err(e) => crate::utils::Logger::warn(&format!("teto do jogo: não desfiz o teto antigo de {}: {}", executavel, e)),
+    }
+}
+
 /// O registro do Otimiza para este jogo, sem conferir no histórico (só para a tela).
 pub fn registro(executavel: &str) -> Option<Registro> {
     todos().remove(&executavel.to_lowercase())
@@ -278,6 +351,19 @@ mod tests {
 
     fn r(origem: Origem, fps: u32, antes: Option<u32>) -> Registro {
         Registro { origem, fps, antes }
+    }
+
+    #[test]
+    fn teto_antigo_pesado_sai_e_o_da_pessoa_fica() {
+        // O FiveM do sócio: 130 fps de costume, monitor de 144 Hz, preso em 72 por versão antiga.
+        assert!(teto_antigo_pesado(72, Some(130.0), 144, None), "teto antigo sem registro (1.0.3/1.0.4)");
+        assert!(!teto_antigo_pesado(60, Some(130.0), 144, None), "sem dono e fora das frações: posto à mão, fica");
+        assert!(teto_antigo_pesado(48, Some(130.0), 144, None), "144/3, a conta do Otimiza");
+        assert!(teto_antigo_pesado(72, Some(130.0), 144, Some(Origem::FrameBoost)));
+        assert!(!teto_antigo_pesado(72, Some(130.0), 144, Some(Origem::Pessoa)), "o da pessoa nunca");
+        assert!(!teto_antigo_pesado(120, Some(130.0), 144, None), "tira menos de 15%: fica");
+        assert!(!teto_antigo_pesado(48, Some(70.0), 144, None), "jogo longe dos Hz: é a base do Frame Boost, fica");
+        assert!(!teto_antigo_pesado(72, None, 144, None), "sem medição de antes, não chuta");
     }
 
     #[test]

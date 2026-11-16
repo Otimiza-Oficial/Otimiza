@@ -114,6 +114,25 @@ pub fn fps_de_costume(fps: &[f64]) -> Option<f64> {
     Some(if v.len() % 2 == 0 { (v[m - 1] + v[m]) / 2.0 } else { v[m] })
 }
 
+/// Quanto abaixo dos Hz o teto fica num monitor de taxa variável (o limite que a NVIDIA e a AMD recomendam).
+pub const ABAIXO_DOS_HZ_COM_VRR: u32 = 3;
+
+/// **Pura.** Num monitor com G-Sync/FreeSync, o teto nos próprios Hz faz o jogo bater no topo e sair da taxa variável
+/// (vira sincronia vertical com atraso, ou rasgo): o teto fica 3 abaixo (141 num de 144). Abaixo dos Hz nada muda.
+pub fn com_vrr(mut plano: Plano, vrr: bool) -> Plano {
+    if !vrr || plano.hz < 60 || plano.teto != Some(plano.hz) {
+        return plano;
+    }
+    let novo = plano.hz - ABAIXO_DOS_HZ_COM_VRR;
+    plano.teto = Some(novo);
+    plano.motivo = format!(
+        "O jogo passa dos {} Hz do monitor: travar em {} (3 abaixo dos Hz, para o G-Sync/FreeSync continuar valendo) não \
+         tira nada que você veja, e tira o calor e o atraso dos quadros que o monitor joga fora.",
+        plano.hz, novo
+    );
+    plano
+}
+
 /// Abaixo disto por minuto o jogo já está liso (a régua do `fluidez`: quadro acima de 2,5× a média).
 pub const JA_LISO_TRANCOS: f64 = 2.0;
 
@@ -221,7 +240,11 @@ pub fn medir(processo: &str, segundos: u32) -> Result<Plano, String> {
             quando: crate::modules::changelog::now_timestamp(),
         },
     );
-    let mut plano = planejar(r.fps_do_jogo_mediana, fps_tipico(processo), hz, r.engasgos_por_minuto);
+    let vrr = crate::modules::windows::vrr::monitores().iter().any(|m| {
+        m.max_hz.is_some_and(|max| max.abs_diff(hz) <= 2)
+            && matches!(m.vrr, crate::modules::windows::vrr::Vrr::Anunciado | crate::modules::windows::vrr::Vrr::Provavel)
+    });
+    let mut plano = com_vrr(planejar(r.fps_do_jogo_mediana, fps_tipico(processo), hz, r.engasgos_por_minuto), vrr);
     // Com o Frame Boost cuidando do jogo, o teto é dele (`teto_do_jogo`): a tela mostra a medição e diz por que não trava.
     if plano.teto.is_some() && super::teto_do_jogo::frame_boost_no_jogo(processo) {
         plano.teto = None;
@@ -248,10 +271,12 @@ pub fn medir(processo: &str, segundos: u32) -> Result<Plano, String> {
 #[cfg(target_os = "windows")]
 pub fn fps_tipico(executavel: &str) -> Option<f64> {
     let (id, _) = super::historico::id_do_jogo(executavel);
-    let medicoes = crate::modules::medicoes::ler().ok()?;
+    // Só as comparáveis e do medidor atual: o canal antigo contava em dobro no FiveM, e partida com gerador de outro
+    // programa conta quadro gerado como FPS do jogo.
+    let medicoes = crate::modules::medicoes::ler_para_comparar().ok()?;
     let fps: Vec<f64> = medicoes
         .iter()
-        .filter(|m| super::historico::id_do_jogo(&m.jogo).0 == id)
+        .filter(|m| m.confiavel && super::historico::id_do_jogo(&m.jogo).0 == id)
         .map(|m| m.fps)
         .collect();
     fps_de_costume(&fps)
@@ -492,6 +517,18 @@ mod tests {
         assert_eq!(p.fps_tipico, Some(130.0));
         // Costume abaixo do de agora: vale o de agora.
         assert_eq!(planejar(130.0, Some(90.0), 144, 12.0).teto, Some(111));
+    }
+
+    #[test]
+    fn com_vrr_o_teto_fica_abaixo_dos_hz() {
+        let acima = planejar(170.0, None, 144, 12.0);
+        assert_eq!(acima.teto, Some(144));
+        let p = com_vrr(acima.clone(), true);
+        assert_eq!(p.teto, Some(141), "3 abaixo: o G-Sync/FreeSync continua valendo");
+        assert!(p.motivo.contains("141"));
+        assert_eq!(com_vrr(acima, false).teto, Some(144), "sem taxa variável, nos Hz");
+        let abaixo = planejar(130.0, None, 144, 20.0);
+        assert_eq!(com_vrr(abaixo.clone(), true).teto, abaixo.teto, "abaixo dos Hz nada muda");
     }
 
     #[test]

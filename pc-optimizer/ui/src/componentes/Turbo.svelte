@@ -167,10 +167,17 @@
     return v == null ? "—" : v.toFixed(casas).replace(".", ",");
   }
 
+  /** A menor e a maior rodada de um lado: num jogo que varia muito (o FiveM, com servidor e cena mudando), é o que
+   *  explica por que 112 → 136 não deu para provar. */
+  function faixa(p: ProvaDoTurbo, lado: "SemOtimiza" | "ComOtimiza"): [number, number] | null {
+    const v = (p.rodadas ?? []).filter((r) => r.lado === lado).map((r) => r.fps_do_jogo ?? 0).filter((x) => x > 0);
+    return v.length ? [Math.min(...v), Math.max(...v)] : null;
+  }
+
   function diferenca(d: ProvaDoTurbo["diferenca_fps"]): string {
     if (!d) return "—";
     if (d.Real) return `${(d.Real.pct ?? 0) >= 0 ? "+" : ""}${num(d.Real.pct, 1)}%`;
-    if (d.Indistinguivel) return "sem diferença";
+    if (d.Indistinguivel) return "dentro da variação";
     return "faltou medir";
   }
 </script>
@@ -340,6 +347,16 @@
               <span class="apoio">1% pior sem → com · {diferenca(prova.diferenca_low)}</span>
             </div>
           </div>
+          {#if prova.desfecho === "Indistinguivel"}
+            {@const sem = faixa(prova, "SemOtimiza")}
+            {@const com = faixa(prova, "ComOtimiza")}
+            {#if sem && com}
+              <p class="apoio">
+                As rodadas sem o Turbo foram de {num(sem[0])} a {num(sem[1])} FPS, e com ele de {num(com[0])} a {num(com[1])}: o
+                jogo variou mais que a diferença, então ela não fica provada. Num servidor ou cena mais estável, a prova separa melhor.
+              </p>
+            {/if}
+          {/if}
           {#if prova.falha_ao_desfazer}
             <p class="erro">Não consegui desfazer depois de piorar: {prova.falha_ao_desfazer}</p>
           {/if}
