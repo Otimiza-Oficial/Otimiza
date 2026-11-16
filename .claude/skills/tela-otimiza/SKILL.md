@@ -47,6 +47,6 @@ Em `pc-optimizer`:
    0 avisos.
 2. `npm run testes:ui` e `npm run fumaca:nova` (clica em todas as áreas).
 3. `npm run nova:build` e `node scripts/prints-nova.mjs` → leia os prints
-   `claro-*` e `escuro-*` da área (Read no PNG). Ou chame o agente
-   `designer-otimiza`.
+   `claro-*` e `escuro-*` da área (Read no PNG). O catálogo de cada jogo:
+   `node scripts/prints-catalogo.mjs`. Ou chame o agente `designer-otimiza`.
 4. Para ver ao vivo: `npm run nova:web` (porta 1420, modo demonstração).

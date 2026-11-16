@@ -8,6 +8,7 @@
   import Cs2Integracao from "./Cs2Integracao.svelte";
   import FivemPainel from "./FivemPainel.svelte";
   import CatalogoDoJogo from "./CatalogoDoJogo.svelte";
+  import { doCatalogo } from "../lib/catalogo";
   import PcsParecidos from "./PcsParecidos.svelte";
   import TurboDoJogo from "./TurboDoJogo.svelte";
   import LinhaDoTempo from "./LinhaDoTempo.svelte";
@@ -33,6 +34,8 @@
     )
   );
   const atual = $derived(itens?.find((i) => i.jogo.nome === escolhido) ?? null);
+  /** O jogo escolhido no catálogo (lib/catalogo.ts): configuração, caches, anticheat e painéis próprios. */
+  const doJogo = $derived(atual ? doCatalogo(atual.jogo.nome, atual.jogo.appid) : null);
 
   /** Mesmo jogo, mesma chave: a biblioteca medida e a lista de instalados vêm de fontes com nomes diferentes. */
   const chave = chaveDoJogo;
@@ -169,14 +172,13 @@
           {#key atual.jogo.nome}<TurboDoJogo jogo={atual.jogo.nome} />{/key}
           <PcsParecidos jogo={atual.jogo.nome} />
           <LinhaDoTempo jogo={atual.jogo.nome} />
-          {#if /fivem/i.test(atual.jogo.nome)}
+          {#if doJogo}
+            {#key doJogo.id}<CatalogoDoJogo jogo={doJogo} />{/key}
+          {/if}
+          {#if doJogo?.extras.includes("fivem")}
             <FivemPainel />
           {/if}
-          {#if /valorant/i.test(atual.jogo.nome)}
-            {#key atual.jogo.nome}<CatalogoDoJogo jogo="valorant" />{/key}
-          {/if}
-          {#if atual.jogo.appid === 730 || /counter-strike 2|^cs2$/i.test(atual.jogo.nome)}
-            {#key atual.jogo.nome}<CatalogoDoJogo jogo="cs2" />{/key}
+          {#if doJogo?.extras.includes("cs2_gsi")}
             <Cs2Integracao />
           {/if}
         </div>

@@ -23,7 +23,7 @@
   import { porId, temporadaDe } from "./lib/temporadas";
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
-  import { areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
+  import { ABRIR_AREA, areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
   import { contextoDa } from "./lib/contexto";
   import { avisos as lerAvisos } from "./lib/clima";
   import { capaDepoisDaFalha, capaRemota, iniciais } from "./lib/capas";
@@ -800,7 +800,10 @@
 
     const ajustar = () => void medirPilula();
     window.addEventListener("resize", ajustar);
+    const pediuArea = (e: Event) => abrir((e as CustomEvent<IdDaArea>).detail);
+    window.addEventListener(ABRIR_AREA, pediuArea);
     return () => {
+      window.removeEventListener(ABRIR_AREA, pediuArea);
       vivo = false;
       deixarCalor?.();
       deixarPartida.forEach((f) => f());

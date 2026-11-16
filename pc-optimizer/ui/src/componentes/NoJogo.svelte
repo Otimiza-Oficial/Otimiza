@@ -2,10 +2,11 @@
   // "No jogo" (trazido do Boost da 3.3, `src/v33/app.ts`: `cartaoJogoLiso`, `cartaoMemoria`, `cartaoConfigDosJogos`):
   // - Jogo liso: mede 20 s e propõe travar o FPS num ritmo constante (o que o olho sente, mais que o número).
   // - Memória para o jogo: quanto está livre e o que pesa, com "Fechar" para cada programa.
-  // - Configuração do jogo: o perfil leve no arquivo que o próprio jogo grava (só com o jogo fechado; desfaz byte a byte).
+  // - Configuração do jogo: mora no catálogo de cada jogo (aba Jogos, `lib/catalogo.ts`); aqui fica só o atalho.
   import { onMount } from "svelte";
-  import { ponte } from "../lib/ponte";
-  import { ferramentas, type ConfigDoJogo, type MemoriaParaOJogo, type PlanoJogoLiso } from "../lib/ferramentas";
+  import { abrirArea } from "../lib/areas";
+  import { CATALOGO } from "../lib/catalogo";
+  import { ferramentas, type MemoriaParaOJogo, type PlanoJogoLiso } from "../lib/ferramentas";
 
   const TELA = { Direta: "direto ao monitor", Copiada: "copiado pelo Windows", Composta: "composto pelo Windows", Desconhecida: "não identificado" } as const;
 
@@ -19,23 +20,12 @@
   let fechando = $state<string | null>(null);
   let memRecado = $state<string | null>(null);
 
-  let configs = $state<ConfigDoJogo[] | null>(null);
-  let cfgOcupado = $state<string | null>(null);
-  let cfgRecado = $state<string | null>(null);
 
   const n = (v: number, c = 0) => v.toLocaleString("pt-BR", { maximumFractionDigits: c, minimumFractionDigits: c });
 
   onMount(() => {
     ferramentas.memoriaParaOJogo().then((m) => (memoria = m)).catch(() => (memRecado = "Não consegui ler a memória."));
-    void lerConfigs();
   });
-
-  async function lerConfigs() {
-    configs = await ferramentas.configDosJogos().catch(() => {
-      cfgRecado = "Não consegui ler a configuração dos jogos.";
-      return null;
-    });
-  }
 
   async function medirLiso() {
     medindo = true;
@@ -79,21 +69,7 @@
     }
   }
 
-  async function config(j: ConfigDoJogo) {
-    cfgOcupado = j.id;
-    cfgRecado = null;
-    try {
-      if (j.aplicado) await ponte.desfazer(j.historico);
-      else await ferramentas.configAplicar(j.id);
-      await lerConfigs();
-    } catch (e) {
-      cfgRecado = String(e);
-    } finally {
-      cfgOcupado = null;
-    }
-  }
 
-  const achados = $derived((configs ?? []).filter((j) => j.arquivo));
 </script>
 
 <div class="no-jogo">
@@ -164,40 +140,11 @@
 
   <section class="secao">
     <h2>Configuração do jogo</h2>
-    <p class="apoio">O que custa caro e quase não se vê, no arquivo que o próprio jogo grava. Só muda o que já existe nele, nunca com o jogo aberto, e tudo se desfaz byte a byte.</p>
-    {#if configs}
-      {#if achados.length === 0}
-        <p class="apoio">Nenhum dos jogos cobertos (Fortnite, CS2, Apex) foi achado neste PC.</p>
-      {/if}
-      {#each achados as j (j.id)}
-        <div class="jogo-cfg">
-          <div>
-            <span class="titulo">{j.nome}</span>
-            {#if j.aplicado}
-              <p class="apoio pequeno">Perfil leve aplicado pelo Otimiza. O desfazer devolve o arquivo exatamente como estava.</p>
-            {:else if j.ilegivel}
-              <p class="aviso">{j.ilegivel}</p>
-            {:else if j.previsao.length === 0}
-              <p class="apoio pequeno">Já está leve: nada a mudar.</p>
-            {:else}
-              {#if j.aberto}<p class="aviso">Feche o jogo para aplicar: ele reescreve a configuração ao sair.</p>{/if}
-              <ul class="previsao">
-                {#each j.previsao as m (m.chave)}
-                  <li>{m.por_que} <span class="apoio">({m.antes} → {m.depois})</span></li>
-                {/each}
-              </ul>
-            {/if}
-          </div>
-          {#if j.aplicado || j.previsao.length}
-            <button class="btn" disabled={cfgOcupado !== null || (!j.aplicado && j.aberto)} onclick={() => config(j)}>
-              {cfgOcupado === j.id ? "…" : j.aplicado ? "Desfazer" : "Aplicar"}
-            </button>
-          {/if}
-        </div>
-      {/each}
-      <p class="apoio pequeno">Valorant e Warzone: em estudo. A configuração deles ainda não é escrita.</p>
-    {/if}
-    {#if cfgRecado}<p class="aviso">{cfgRecado}</p>{/if}
+    <p class="apoio">
+      O perfil leve de cada jogo ({CATALOGO.map((j) => j.nome).join(", ")}) agora mora no catálogo: na aba Jogos, escolha o
+      jogo e veja a configuração, o cache de shader e o que o anticheat deixa fazer.
+    </p>
+    <div class="acoes"><button class="btn" onclick={() => abrirArea("jogos")}>Abrir o catálogo</button></div>
   </section>
 </div>
 
@@ -232,27 +179,11 @@
     display: grid;
     gap: 8px;
   }
-  .lista-pesados li,
-  .jogo-cfg {
+  .lista-pesados li {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 16px;
     font-size: 13px;
-  }
-  .jogo-cfg {
-    padding-top: 8px;
-    border-top: 1px solid var(--linha);
-    align-items: flex-start;
-  }
-  .titulo {
-    font-weight: 500;
-  }
-  .previsao {
-    margin: 4px 0 0;
-    padding-left: 18px;
-    display: grid;
-    gap: 4px;
-    font-size: 12px;
   }
 </style>

@@ -1,6 +1,13 @@
 // As áreas do dock (plano, 4.2). Cada uma responde uma pergunta do jogador. Enquanto a tela de uma área não migra,
 // a janela dela diz o que vai morar ali e em que onda chega — nunca um botão que finge funcionar.
 
+/** Um componente pede para o App abrir outra área (o `detail` é o `IdDaArea`). */
+export const ABRIR_AREA = "otimiza:abrir-area";
+
+export function abrirArea(id: IdDaArea) {
+  window.dispatchEvent(new CustomEvent(ABRIR_AREA, { detail: id }));
+}
+
 export type IdDaArea =
   | "inicio"
   | "turbo"

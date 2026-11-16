@@ -150,7 +150,8 @@ const r = await cdp("Runtime.evaluate", {
 
     // A tela inicial: os blocos com nome.
     const blocos = document.querySelectorAll('.grade .bloco').length;
-    if (blocos < 7) falhas.push('a tela inicial montou só ' + blocos + ' blocos');
+    // Os 6 blocos da tela inicial premium: herói, jogos, partida, agora, fundo e tela.
+    if (blocos < 6) falhas.push('a tela inicial montou só ' + blocos + ' blocos');
     visitadas.push('Início');
 
     // As 4 abas do trilho e, em cada uma, as áreas da barra de baixo.
@@ -186,7 +187,7 @@ const r = await cdp("Runtime.evaluate", {
     await pausa(300);
     [...document.querySelectorAll('nav.abas .aba')].find((b) => b.textContent.trim() === 'Visão geral')?.click();
     await pausa(400);
-    if (document.querySelectorAll('.grade .bloco').length < 7) falhas.push('voltar à Visão geral não remontou a grade');
+    if (document.querySelectorAll('.grade .bloco').length < 6) falhas.push('voltar à Visão geral não remontou a grade');
 
     // Com tudo recusado, nenhuma folha (feedback) pode ter aberto por cima.
     if (document.querySelector('.veu')) falhas.push('uma folha abriu por cima da tela sem motivo');
