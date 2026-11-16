@@ -327,7 +327,7 @@
           <div class="veredito">
             <span class="ponto" data-tom={d.tom}></span>
             <strong>{d.texto}</strong>
-            <span class="selo-medido">Medido</span>
+            <span class="selo medido">medido</span>
           </div>
           <p class="texto">{prova.leitura}</p>
           <div class="numeros">

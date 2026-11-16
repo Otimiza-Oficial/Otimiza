@@ -161,7 +161,7 @@
         <span class="apoio">
           {prova.jogo} · {new Date(prova.quando * 1000).toLocaleDateString("pt-BR")} · FPS {num(prova.fps_sem?.media)} → {num(prova.fps_com?.media)}
         </span>
-        <span class="selo-medido">Medido</span>
+        <span class="selo medido">medido</span>
       </div>
     {:else}
       <p class="apoio texto">Ainda não há prova alternada guardada. Ela é feita pelo Turbo (“Provar”), alternando com e sem a mudança no mesmo jogo.</p>

@@ -172,7 +172,7 @@
     <section class="secao">
       <div class="topo">
         <h2>Resultado</h2>
-        <span class="selo-medido">Medido</span>
+        <span class="selo medido">medido</span>
         <span class="apoio">
           {relatorio.duracao_s != null ? `${Math.round(relatorio.duracao_s)} s · ` : ""}{relatorio.eventos.toLocaleString("pt-BR")}
           eventos · {pct(relatorio.pct_total_de_um_nucleo)} de um núcleo
