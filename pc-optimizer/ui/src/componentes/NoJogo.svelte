@@ -58,8 +58,9 @@
   }
 
   async function travar() {
+    if (liso?.teto == null) return;
     try {
-      await ferramentas.jogoLisoAplicar();
+      await ferramentas.jogoLisoAplicar(liso.teto, liso.hz);
       travado = true;
     } catch (e) {
       lisoRecado = String(e);
@@ -102,6 +103,9 @@
       <p class="apoio">Trava o FPS do jogo num ritmo constante: é o que o olho sente como liso, mais que o número. Abra o jogo e meça.</p>
     {:else}
       <p>O jogo entrega <b>{n(liso.fps_agora)} fps</b> e trava <b>{n(liso.trancos_por_minuto)}×/min</b> · monitor de {liso.hz} Hz. <span class="selo medido">medido</span></p>
+      {#if liso.fps_tipico != null && Math.abs(liso.fps_tipico - liso.fps_agora) >= 10}
+        <p class="apoio">Nas suas partidas, este jogo costuma rodar a <b>{n(liso.fps_tipico)} fps</b>: o teto conta com isso, para um momento ruim não virar o teto da noite.</p>
+      {/if}
       {#if lisoAntes}
         <p class="apoio">Medição anterior: {n(lisoAntes.trancos)}×/min a {n(lisoAntes.fps)} fps → agora {n(liso.trancos_por_minuto)}×/min a {n(liso.fps_agora)} fps.</p>
       {/if}
@@ -122,7 +126,11 @@
         <button class="btn primario" disabled={travado} onclick={travar}>{travado ? `Travado em ${liso.teto} fps — reabra o jogo` : `Travar em ${liso.teto} fps`}</button>
       {/if}
     </div>
-    {#if liso?.teto != null}<p class="apoio pequeno">Vale na próxima vez que você abrir o jogo. Desfaz pelo Histórico.</p>{/if}
+    {#if liso?.teto != null}
+      <p class="apoio pequeno">
+        {liso.perda_pct > 0 ? `Tira no máximo ${liso.perda_pct}% do FPS nos melhores momentos, em troca de um ritmo constante. ` : ""}Vale na próxima vez que você abrir o jogo. Desfaz pelo Histórico.
+      </p>
+    {/if}
     {#if lisoRecado}<p class="aviso">{lisoRecado}</p>{/if}
   </section>
 

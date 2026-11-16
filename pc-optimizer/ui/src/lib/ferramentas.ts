@@ -152,6 +152,10 @@ export interface ConfigDoJogo {
 
 export interface PlanoJogoLiso {
   fps_agora: number;
+  /** O FPS de costume do jogo nesta máquina (últimas medições automáticas). */
+  fps_tipico: number | null;
+  /** Quanto o teto tira do FPS de referência, em %. */
+  perda_pct: number;
   hz: number;
   teto: number | null;
   multiplicador_do_boost: number;
@@ -307,15 +311,17 @@ export const ferramentas = {
           setTimeout(
             () =>
               r({
-                fps_agora: 96, hz: 180, teto: 90, multiplicador_do_boost: 2, trancos_por_minuto: 14,
-                motivo: "O FPS oscila entre 80 e 120: travar em 90 (metade do monitor) dá um ritmo constante, e o Frame Boost 2× completa os 180.",
+                fps_agora: 96, fps_tipico: 104, perda_pct: 13, hz: 180, teto: 90, multiplicador_do_boost: 2, trancos_por_minuto: 14,
+                motivo: "O jogo entrega 104 fps mas trava 14 vezes por minuto: travar em 90 deixa o ritmo constante (o que o olho sente como liso), tirando no máximo 13% do FPS nos melhores momentos.",
                 teto_no_driver: 0, aviso_do_teto: null,
                 tela: { apresentacao: "Direta", modo: "Hardware: Independent Flip", por_cima: [], aviso: null },
               }),
             900,
           ),
         ),
-  jogoLisoAplicar: (): Promise<PlanoJogoLiso> => (noTauri ? como<PlanoJogoLiso>(commands.jogoLisoAplicar()) : Promise.reject("Demonstração: nada é gravado.")),
+  /** Grava o teto que a medição mostrou (não mede de novo). */
+  jogoLisoAplicar: (teto: number, hz: number): Promise<number> =>
+    noTauri ? como<number>(commands.jogoLisoAplicar(teto, hz)) : Promise.reject("Demonstração: nada é gravado."),
   memoriaParaOJogo: (): Promise<MemoriaParaOJogo> =>
     noTauri
       ? como<MemoriaParaOJogo>(commands.memoriaParaOJogo())

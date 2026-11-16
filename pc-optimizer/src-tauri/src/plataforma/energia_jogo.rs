@@ -269,6 +269,18 @@ pub fn devolver() -> Result<bool, String> {
     let Some(a) = e.aplicado.clone() else {
         return Ok(false);
     };
+    // O plano em que escrevemos sumiu (a pessoa trocou ou apagou o plano): não há o que devolver, e o valor de antes
+    // foi junto com ele. Num cliente, o registro preso falhava em toda abertura ("The power scheme ... does not
+    // exist"), a energia de jogo nunca mais ligava e a prova do Turbo abortava na rodada 3.
+    if crate::modules::windows::power::plano_existe(&a.plano) == Some(false) {
+        crate::utils::Logger::warn(&format!(
+            "energia de jogo: o plano {} não existe mais; registro de devolução descartado",
+            a.plano
+        ));
+        e.aplicado = None;
+        gravar(&e)?;
+        return Ok(true);
+    }
     for v in &a.valores {
         let ac = v.novo_ac.and(v.antes_ac);
         let dc = v.novo_dc.and(v.antes_dc);
