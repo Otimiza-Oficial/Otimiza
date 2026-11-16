@@ -1,5 +1,6 @@
-// Prints do catálogo de cada jogo na aba Jogos (FiveM, CS2 e Fortnite da demonstração), nos temas escuro e claro, com o
-// painel do catálogo rolado para o topo. Feito a partir do `prints-nova.mjs`.
+// Prints da página de cada jogo na aba Jogos (FiveM, CS2 e Fortnite da demonstração), nos temas escuro e claro: o topo
+// e cada sub-aba (Resumo, Otimizar, Ferramentas, Histórico), e a confirmação dentro do app aberta pelo "Limpar".
+// Feito a partir do `prints-nova.mjs`.
 //
 // Uso: `npm run nova:build` e depois `node scripts/prints-catalogo.mjs [pasta]` (padrão: `prints-nova/`).
 
@@ -121,12 +122,34 @@ for (const [modo, tema] of [["escuro", "escuro"], ["claro", "claro"]]) {
   await espera(1500);
   for (const jogo of ["FiveM", "Counter-Strike 2", "Fortnite"]) {
     const achou = await avaliar(`(() => { const b = [...document.querySelectorAll('button.cartao')].find((x) => x.textContent.includes(${JSON.stringify(jogo)})); b?.click(); return !!b; })()`);
-    await espera(1500);
-    await avaliar(`document.querySelector('.catalogo')?.scrollIntoView({ block: "start" })`);
-    await espera(500);
-    await fotografar(`catalogo-${modo}-${jogo.replace(/[^A-Za-z0-9]+/g, "-")}`);
-    console.log(modo, jogo, achou ? "ok" : "não achei o cartão");
+    await espera(1200);
+    const nome = jogo.replace(/[^A-Za-z0-9]+/g, "-");
+    await avaliar(`document.querySelector('.destaque')?.scrollIntoView({ block: "start" })`);
+    await espera(400);
+    await fotografar(`jogo-${modo}-${nome}-topo`);
+    // Cada sub-aba da página do jogo (Resumo, Otimizar, Ferramentas, Histórico), com a barra de abas no topo.
+    const abas = await avaliar(`[...document.querySelectorAll('.pagina-do-jogo [role=tab]')].map((b) => b.textContent.trim())`);
+    for (const aba of abas ?? []) {
+      await avaliar(`[...document.querySelectorAll('.pagina-do-jogo [role=tab]')].find((b) => b.textContent.trim() === ${JSON.stringify(aba)})?.click()`);
+      await espera(900);
+      await avaliar(`document.querySelector('.pagina-do-jogo')?.scrollIntoView({ block: "start" })`);
+      await espera(400);
+      await fotografar(`jogo-${modo}-${nome}-${aba.normalize("NFD").replace(/[^A-Za-z]/g, "").toLowerCase()}`);
+    }
+    console.log(modo, jogo, achou ? `ok (${(abas ?? []).join(", ")})` : "não achei o cartão");
   }
+  // A confirmação dentro do app: o primeiro "Limpar" da aba Otimizar do último jogo.
+  await avaliar(`[...document.querySelectorAll('.pagina-do-jogo [role=tab]')].find((b) => b.textContent.trim() === "Otimizar")?.click()`);
+  await espera(900);
+  await avaliar(`[...document.querySelectorAll('.pagina-do-jogo button')].find((b) => b.textContent.trim() === "Limpar")?.click()`);
+  await espera(700);
+  await fotografar(`confirmar-${modo}`);
+  const aberto = await avaliar(`!!document.querySelector('[role=alertdialog]')`);
+  await avaliar(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+  await avaliar(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))`);
+  await espera(300);
+  const fechou = await avaliar(`!document.querySelector('[role=alertdialog]')`);
+  console.log(modo, "confirmação", aberto ? "abriu" : "NÃO abriu", fechou ? "e o Esc fechou" : "e o Esc NÃO fechou");
 }
 console.log(erros.length ? "erros: " + erros.join(" | ") : "sem erros no console");
 navegador.kill();

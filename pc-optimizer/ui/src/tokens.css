@@ -39,6 +39,8 @@
   /* Estado: só em ponto, ícone pequeno ou texto curto. */
   --ok: #1d936e;
   --atencao: #b8741a;
+  --atencao-texto: #8a5410; /* o âmbar em texto miúdo: 4,5:1 sobre o cartão */
+  --veu: rgb(6 6 10 / 0.5);
   --perigo: #cc4a43;
   /* O âmbar dos olhos do mascote: só para o selo "Medido". */
   --ambar: #9a5a14;
@@ -65,8 +67,10 @@
   /* Três tamanhos de texto e um para número grande. */
   --t-apoio: 12px;
   --t-corpo: 14px;
+  --t-linha: 13px; /* linha de lista, aviso e recado curto */
   --t-titulo: 20px;
   --t-numero: 28px;
+  --t-destaque: 32px; /* o nome e os números do jogo no destaque */
 
   /* Movimento (Plano de refino 2.3.1): três durações e duas curvas para o app inteiro. Rápido para resposta a toque
      (hover, interruptor), médio para troca de estado, entrar para o que aparece. Tudo para com o jogo aberto e com
@@ -95,6 +99,8 @@
   --marca-suave: rgb(255 59 59 / 0.14);
   --ok: #4cc59a;
   --atencao: #e2a34f;
+  --atencao-texto: #e2a34f;
+  --veu: rgb(0 0 0 / 0.55);
   --perigo: #ec7a73;
   --ambar: #f1c48a;
   --ambar-fundo: rgb(241 196 138 / 0.14);
@@ -291,6 +297,10 @@ h2 {
   background: var(--perigo);
   color: #fff;
 }
+/* No escuro o vermelho é claro: o texto escuro dá o contraste que o branco não dá. */
+:root[data-tema="noite"] .btn.perigo {
+  color: #1d1d1f;
+}
 .btn.quieto {
   min-height: 28px;
   padding: 0;
@@ -403,7 +413,7 @@ h2 {
   color: var(--ok);
 }
 .selo[data-tom="atencao"] {
-  color: var(--atencao);
+  color: var(--atencao-texto);
 }
 
 .selo-medido {
@@ -415,6 +425,45 @@ h2 {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+/* Texto miúdo de apoio dentro de uma linha. */
+.pequeno {
+  font-size: var(--t-apoio);
+}
+/* Atenção dentro de um bloco: o que impede a ação ou o que ela custa. */
+.aviso {
+  color: var(--atencao-texto);
+  font-size: var(--t-linha);
+}
+/* O rótulo de um grupo dentro de um cartão ("Cache", "Crashes"). */
+.rotulo-grupo {
+  font-size: var(--t-apoio);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--tinta-2);
+}
+
+/* Linhas com uma ação à direita (cache para limpar, programa para fechar): o texto e o apoio à esquerda, o botão à
+   direita, alinhado ao centro. */
+.linhas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.linhas > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--t-linha);
+}
+.linhas > li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 /* Seção de uma janela: separada por linha fina, nunca por outro cartão. */

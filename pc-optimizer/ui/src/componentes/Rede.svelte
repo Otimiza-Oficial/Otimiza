@@ -958,9 +958,6 @@
   .periodo.vazio strong {
     color: var(--tinta-3);
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .chamado {
     display: flex;
     gap: 16px;

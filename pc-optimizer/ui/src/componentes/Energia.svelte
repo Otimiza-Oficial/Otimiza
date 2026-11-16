@@ -518,9 +518,6 @@
   .notas .numero {
     text-align: right;
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .achados-calibracao {
     list-style: none;
     margin: 0;

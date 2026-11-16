@@ -672,9 +672,6 @@
     width: 100%;
     box-sizing: border-box;
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .cartao p {
     margin: 0;
   }

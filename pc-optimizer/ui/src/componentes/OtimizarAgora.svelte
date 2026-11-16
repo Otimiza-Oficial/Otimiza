@@ -227,9 +227,6 @@
   .passos li[data-ok="false"] {
     color: var(--perigo);
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .fim {
     font-size: 13px;
     font-weight: 500;

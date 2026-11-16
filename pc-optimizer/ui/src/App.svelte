@@ -15,6 +15,7 @@
   import Prova from "./componentes/Prova.svelte";
   import Sistema from "./componentes/Sistema.svelte";
   import PedidoDeFeedback from "./componentes/PedidoDeFeedback.svelte";
+  import Confirmar from "./componentes/base/Confirmar.svelte";
   import BoasVindas, { ABRIR_BOAS_VINDAS, type ModoDasBoasVindas } from "./componentes/BoasVindas.svelte";
   import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
@@ -1217,6 +1218,7 @@
   </nav>
 
   <PedidoDeFeedback />
+  <Confirmar />
 
   {#if boasVindas}
     <BoasVindas

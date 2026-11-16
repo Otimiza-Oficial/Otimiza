@@ -565,13 +565,6 @@
     padding-top: 12px;
     border-top: 1px solid var(--linha);
   }
-  .pequeno {
-    font-size: 12px;
-  }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
   .erro {
     color: var(--perigo);
     font-size: 13px;

@@ -36,7 +36,7 @@ export const CATALOGO: JogoDoCatalogo[] = [
     appid: null,
     perfil: null,
     configEmOutroLugar:
-      "A configuração gráfica do GTA no FiveM fica no Turbo (Perfil do jogo): competitivo ou equilibrado, com desfazer.",
+      "Os gráficos do GTA no FiveM: escolha um perfil e veja a prévia chave por chave antes de aplicar. Desfaz pelo Histórico.",
     caches: DO_DRIVER,
     anticheat:
       "O FiveM não tem anticheat que proíba sobreposição: o Frame Boost e a mira funcionam. Alguns servidores usam anticheat próprio; o Otimiza não injeta nada nem mexe no processo do jogo.",
@@ -52,7 +52,7 @@ export const CATALOGO: JogoDoCatalogo[] = [
     configEmOutroLugar: null,
     caches: DO_DRIVER,
     anticheat:
-      "O Vanguard vigia tudo que encosta no jogo. Com o Valorant aberto, o Otimiza não mexe no processo dele nem desenha por cima: o Frame Boost e a mira ficam desligados durante a partida. O que vale aqui é a configuração acima, o Turbo deste jogo e o NVIDIA Reflex no menu de vídeo do próprio Valorant.",
+      "O Vanguard vigia tudo que encosta no jogo. Com o Valorant aberto, o Otimiza não mexe no processo dele nem desenha por cima: o Frame Boost e a mira ficam desligados durante a partida. O que vale aqui é a Configuração do jogo (ao lado), o Turbo deste jogo e o NVIDIA Reflex no menu de vídeo do próprio Valorant.",
     extras: [],
     ficha: "docs/jogos/valorant.md",
   },
@@ -65,7 +65,7 @@ export const CATALOGO: JogoDoCatalogo[] = [
     configEmOutroLugar: null,
     caches: ["steam_cs2", ...DO_DRIVER],
     anticheat:
-      "O VAC não trata sobreposição como suspeita: o Frame Boost e a mira funcionam no CS2. A integração oficial da Valve, abaixo, mede o FPS só com a rodada valendo.",
+      "O VAC não trata sobreposição como suspeita: o Frame Boost e a mira funcionam no CS2. A integração oficial da Valve (aba Ferramentas) mede o FPS só com a rodada valendo.",
     extras: ["cs2_gsi"],
     ficha: "docs/jogos/cs2.md",
   },
@@ -78,7 +78,7 @@ export const CATALOGO: JogoDoCatalogo[] = [
     configEmOutroLugar: null,
     caches: DO_DRIVER,
     anticheat:
-      "O Fortnite usa Easy Anti-Cheat e BattlEye. O Otimiza não injeta nada nem mexe no processo do jogo: o Frame Boost e a mira são janelas por cima, como as do Discord. O ganho mais seguro vem da configuração acima e do modo Desempenho do próprio Fortnite.",
+      "O Fortnite usa Easy Anti-Cheat e BattlEye. O Otimiza não injeta nada nem mexe no processo do jogo: o Frame Boost e a mira são janelas por cima, como as do Discord. O ganho mais seguro vem da Configuração do jogo (ao lado) e do modo Desempenho do próprio Fortnite.",
     extras: [],
     ficha: "docs/jogos/fortnite.md",
   },

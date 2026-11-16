@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Cartao from "./base/Cartao.svelte";
+  import Esqueleto from "./Esqueleto.svelte";
   // A integração oficial do CS2 (Game State Integration) no destaque do jogo: ligar escreve um arquivo na pasta `cfg`
   // do CS2, e o jogo passa a contar ao Otimiza o momento da partida. Com ela, a medição automática só mede rodada
   // valendo com você vivo. Desligar apaga o arquivo.
@@ -16,10 +18,12 @@
   let mudando = $state(false);
   let erro = $state<string | null>(null);
   let recemLigado = $state(false);
+  let lido = $state(false);
   let relogio: ReturnType<typeof setInterval> | undefined;
 
   async function ler() {
     painel = await ponte.cs2Painel().catch(() => painel);
+    lido = true;
   }
 
   onMount(() => {
@@ -44,10 +48,26 @@
   }
 </script>
 
-{#if painel?.instalado}
-  <div class="cs2">
-    <div class="texto">
-      <span class="titulo" id="cs2-gsi">Integração oficial do CS2</span>
+{#if !lido}
+  <Cartao titulo="Integração oficial do CS2"><Esqueleto linhas={2} rotulo="Procurando o CS2" /></Cartao>
+{:else if !painel}
+  <Cartao titulo="Integração oficial do CS2"><p class="aviso">Não consegui ler a pasta do CS2 agora.</p></Cartao>
+{:else if !painel.instalado}
+  <Cartao titulo="Integração oficial do CS2">
+    <p class="apoio">Não achei o CS2 instalado pela Steam neste PC. Depois de instalar, a integração liga daqui.</p>
+  </Cartao>
+{:else}
+  <Cartao titulo="Integração oficial do CS2">
+    {#snippet selo()}
+      <button
+        class="interruptor"
+        role="switch"
+        aria-checked={painel?.ligado ?? false}
+        aria-label="Integração oficial do CS2"
+        disabled={mudando}
+        onclick={alternar}
+      ></button>
+    {/snippet}
       <span class="apoio">
         O próprio CS2 conta ao Otimiza o momento da partida, pelo recurso da Valve que os overlays de torneio usam. Assim
         a medição só conta rodada valendo, com você vivo. Não mexe no jogo além de um arquivo na pasta de configuração.
@@ -66,46 +86,18 @@
         </span>
       {/if}
       {#if erro}<span class="erro">{erro}</span>{/if}
-    </div>
-    <button
-      class="interruptor"
-      role="switch"
-      aria-checked={painel.ligado}
-      aria-labelledby="cs2-gsi"
-      disabled={mudando}
-      onclick={alternar}
-    ></button>
-  </div>
+  </Cartao>
 {/if}
 
 <style>
-  .cs2 {
-    display: flex;
-    gap: 20px;
-    align-items: flex-start;
-    padding: 14px 16px;
-    border-radius: var(--raio-2);
-    background: var(--superficie-2);
-  }
-  .texto {
-    flex: 1;
-    display: grid;
-    gap: 4px;
-  }
-  .titulo {
-    font-weight: 600;
-  }
-  .apoio {
-    max-width: 62ch;
-  }
   .estado {
     display: flex;
     gap: 8px;
     align-items: center;
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .erro {
     color: var(--perigo);
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
 </style>

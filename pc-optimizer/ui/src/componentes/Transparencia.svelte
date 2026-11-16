@@ -189,7 +189,4 @@
   p {
     margin: 2px 0 0;
   }
-  .pequeno {
-    font-size: 12px;
-  }
 </style>

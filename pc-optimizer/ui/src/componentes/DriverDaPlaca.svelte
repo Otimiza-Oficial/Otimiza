@@ -287,13 +287,6 @@
     align-items: center;
     font-size: 13px;
   }
-  .pequeno {
-    font-size: 12px;
-  }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
   .recado {
     font-size: 13px;
   }

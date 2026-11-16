@@ -152,9 +152,6 @@
   .linha p {
     margin-top: 2px;
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .recado {
     font-size: 13px;
   }

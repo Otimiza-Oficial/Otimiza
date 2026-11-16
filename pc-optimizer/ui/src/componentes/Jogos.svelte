@@ -8,7 +8,9 @@
   import Cs2Integracao from "./Cs2Integracao.svelte";
   import FivemPainel from "./FivemPainel.svelte";
   import CatalogoDoJogo from "./CatalogoDoJogo.svelte";
-  import { doCatalogo } from "../lib/catalogo";
+  import GraficosGta from "./GraficosGta.svelte";
+  import Cartao from "./base/Cartao.svelte";
+  import { CATALOGO, doCatalogo } from "../lib/catalogo";
   import PcsParecidos from "./PcsParecidos.svelte";
   import TurboDoJogo from "./TurboDoJogo.svelte";
   import LinhaDoTempo from "./LinhaDoTempo.svelte";
@@ -36,6 +38,39 @@
   const atual = $derived(itens?.find((i) => i.jogo.nome === escolhido) ?? null);
   /** O jogo escolhido no catálogo (lib/catalogo.ts): configuração, caches, anticheat e painéis próprios. */
   const doJogo = $derived(atual ? doCatalogo(atual.jogo.nome, atual.jogo.appid) : null);
+
+  // A página do jogo em sub-abas, cada uma com uma pergunta: como está (Resumo), o que fazer (Otimizar), o que só este
+  // jogo tem (Ferramentas, só quando há) e o que mudou (Histórico). A aba escolhida vale ao trocar de jogo; sem ela no
+  // jogo novo, volta para o Resumo.
+  type AbaDoJogo = "resumo" | "otimizar" | "ferramentas" | "historico";
+  let aba = $state<AbaDoJogo>("resumo");
+  const abasDoJogo = $derived(
+    (
+      [
+        ["resumo", "Resumo"],
+        ["otimizar", "Otimizar"],
+        ["ferramentas", "Ferramentas"],
+        ["historico", "Histórico"],
+      ] as [AbaDoJogo, string][]
+    ).filter(([id]) => id !== "ferramentas" || (doJogo?.extras.length ?? 0) > 0),
+  );
+  const abaAtual = $derived(abasDoJogo.some(([id]) => id === aba) ? aba : "resumo");
+
+  /** Setas, Home e End entre as sub-abas (o padrão de abas do WAI-ARIA), com o foco indo junto. */
+  function teclaNaAba(e: KeyboardEvent) {
+    const ids = abasDoJogo.map(([id]) => id);
+    const i = ids.indexOf(abaAtual);
+    const j =
+      e.key === "ArrowRight" ? (i + 1) % ids.length
+      : e.key === "ArrowLeft" ? (i - 1 + ids.length) % ids.length
+      : e.key === "Home" ? 0
+      : e.key === "End" ? ids.length - 1
+      : -1;
+    if (j < 0) return;
+    e.preventDefault();
+    aba = ids[j];
+    document.getElementById(`aba-do-jogo-${ids[j]}`)?.focus();
+  }
 
   /** Mesmo jogo, mesma chave: a biblioteca medida e a lista de instalados vêm de fontes com nomes diferentes. */
   const chave = chaveDoJogo;
@@ -106,6 +141,10 @@
   }
 </script>
 
+<!-- O que o FiveM põe dentro dos cartões do catálogo (aba Otimizar). -->
+{#snippet graficosDoGta()}<GraficosGta />{/snippet}
+{#snippet pastasDoFivem()}<FivemPainel parte="cache" />{/snippet}
+
 <div class="jogos">
   {#if erro}
     <div class="recado" role="alert">
@@ -138,8 +177,6 @@
           </p>
           {#if atual.medido?.ultima}
             {@const u = atual.medido.ultima}
-            {@const gf = ganho(atual.medido.ganho_fps)}
-            {@const gl = ganho(atual.medido.ganho_low)}
             <div class="numeros">
               <div><span class="numero valor">{inteiro(u.fps_nativo)}</span><span class="apoio">FPS na última</span></div>
               <div><span class="numero valor">{inteiro(u.low_1pct)}</span><span class="apoio">no 1% pior</span></div>
@@ -153,34 +190,66 @@
                 </div>
               {/if}
             </div>
-            <ul class="lista ganhos">
-              <li>
-                <span class="ponto" data-tom={gf.tom}></span><span class="rot">Ganho no FPS</span>
-                <span class="numero">{gf.texto}</span>{#if gf.medido}<span class="selo-medido">Medido</span>{/if}
-              </li>
-              <li>
-                <span class="ponto" data-tom={gl.tom}></span><span class="rot">Ganho no 1% pior</span>
-                <span class="numero">{gl.texto}</span>{#if gl.medido}<span class="selo-medido">Medido</span>{/if}
-              </li>
-              <li>
-                <span class="ponto"></span><span class="rot">Partidas medidas</span><span class="numero">{atual.medido.partidas}</span>
-              </li>
-            </ul>
+            <span class="selo medido origem">medido neste PC</span>
           {:else}
             <p class="sem-medida">Ainda não medi este jogo. Jogue uma partida com o Otimiza aberto e os números aparecem aqui.</p>
           {/if}
-          {#key atual.jogo.nome}<TurboDoJogo jogo={atual.jogo.nome} />{/key}
-          <PcsParecidos jogo={atual.jogo.nome} />
-          <LinhaDoTempo jogo={atual.jogo.nome} />
-          {#if doJogo}
-            {#key doJogo.id}<CatalogoDoJogo jogo={doJogo} />{/key}
-          {/if}
-          {#if doJogo?.extras.includes("fivem")}
-            <FivemPainel />
-          {/if}
-          {#if doJogo?.extras.includes("cs2_gsi")}
-            <Cs2Integracao />
-          {/if}
+        </div>
+      </section>
+
+      <section class="secao pagina-do-jogo">
+        <div class="segmento" role="tablist" tabindex="-1" aria-label={`Página do ${atual.jogo.nome}`} onkeydown={teclaNaAba}>
+          {#each abasDoJogo as [id, nome] (id)}
+            <button role="tab" id={`aba-do-jogo-${id}`} tabindex={abaAtual === id ? 0 : -1} aria-selected={abaAtual === id} aria-controls="painel-do-jogo" onclick={() => (aba = id)}>{nome}</button>
+          {/each}
+        </div>
+        <div id="painel-do-jogo" class="grade-cartoes" class:coluna={abaAtual === "historico"} class:otimizar={abaAtual === "otimizar"} role="tabpanel" aria-labelledby={`aba-do-jogo-${abaAtual}`}>
+          {#key `${atual.jogo.nome}|${abaAtual}`}
+            {#if abaAtual === "resumo"}
+              <div class="largura-toda"><TurboDoJogo jogo={atual.jogo.nome} /></div>
+              {#if atual.medido?.ultima}
+              <Cartao titulo="Ganho desde o Otimiza">
+                {#if atual.medido?.ultima}
+                  {@const gf = ganho(atual.medido.ganho_fps)}
+                  {@const gl = ganho(atual.medido.ganho_low)}
+                  <ul class="lista ganhos">
+                    <li>
+                      <span class="ponto" data-tom={gf.tom}></span><span class="rot">No FPS</span>
+                      <span class="numero">{gf.texto}</span>{#if gf.medido}<span class="selo medido">medido</span>{/if}
+                    </li>
+                    <li>
+                      <span class="ponto" data-tom={gl.tom}></span><span class="rot">No 1% pior</span>
+                      <span class="numero">{gl.texto}</span>{#if gl.medido}<span class="selo medido">medido</span>{/if}
+                    </li>
+                    <li>
+                      <span class="ponto"></span><span class="rot">Partidas medidas</span><span class="numero">{atual.medido.partidas}</span>
+                    </li>
+                  </ul>
+                  <p class="apoio pequeno">O ganho só vira número quando as partidas de antes e de depois não se confundem na margem de erro.</p>
+                {/if}
+              </Cartao>
+              {/if}
+              <PcsParecidos jogo={atual.jogo.nome} />
+            {:else if abaAtual === "otimizar"}
+              {#if doJogo}
+                {@const fivem = doJogo.extras.includes("fivem")}
+                <CatalogoDoJogo jogo={doJogo} configExtra={fivem ? graficosDoGta : undefined} cacheExtra={fivem ? pastasDoFivem : undefined} />
+              {:else}
+                <Cartao titulo="Fora do catálogo por enquanto">
+                  <p class="apoio">
+                    O catálogo tem a configuração, o cache e as regras do anticheat de {CATALOGO.map((j) => j.nome).join(", ")}. Para
+                    este jogo, o Turbo, o Frame Boost e a medição de partidas funcionam do mesmo jeito.
+                  </p>
+                  {#snippet acoes()}<button class="btn" onclick={() => (aba = "resumo")}>Ver o Resumo</button>{/snippet}
+                </Cartao>
+              {/if}
+            {:else if abaAtual === "ferramentas"}
+              {#if doJogo?.extras.includes("fivem")}<FivemPainel parte="crashes" />{/if}
+              {#if doJogo?.extras.includes("cs2_gsi")}<Cs2Integracao />{/if}
+            {:else}
+              <LinhaDoTempo jogo={atual.jogo.nome} />
+            {/if}
+          {/key}
         </div>
       </section>
     {/if}
@@ -207,7 +276,7 @@
           <button class="cartao" class:ativo={escolhido === i.jogo.nome} onclick={() => (escolhido = i.jogo.nome)}>
             <span class="capa">
               {#if i.capa}<img src={i.capa} alt="" loading="lazy" onerror={() => fotoFalhou(i.jogo.nome)} />{:else}<span class="reserva">{iniciais(i.jogo.nome)}</span>{/if}
-              {#if i.medido}<span class="selo-medido marca-medido" title="FPS medido pelo Otimiza neste PC">Medido</span>{/if}
+              {#if i.medido}<span class="selo medido marca-medido" title="FPS medido pelo Otimiza neste PC">medido</span>{/if}
             </span>
             <span class="nome">{i.jogo.nome}</span>
             <span class="apoio">{i.jogo.loja}</span>
@@ -263,9 +332,9 @@
     align-self: flex-start;
     width: 176px;
     aspect-ratio: 2 / 3;
-    border-radius: 14px;
+    border-radius: var(--raio-2);
     overflow: hidden;
-    box-shadow: 0 12px 28px rgb(0 0 0 / 0.18);
+    box-shadow: var(--sombra-2);
   }
   .capa-grande img,
   .capa img {
@@ -281,11 +350,11 @@
     background: var(--superficie-2);
     color: var(--tinta-2);
     font-family: var(--fonte-titulo);
-    font-size: 18px;
+    font-size: var(--t-titulo);
     font-weight: 600;
   }
   .reserva.grande {
-    font-size: 28px;
+    font-size: var(--t-numero);
   }
   .info {
     flex: 1;
@@ -297,7 +366,7 @@
   .info h3 {
     margin: 0;
     font-family: var(--fonte-titulo);
-    font-size: 30px;
+    font-size: var(--t-destaque);
     font-weight: 700;
     letter-spacing: -0.025em;
   }
@@ -311,7 +380,7 @@
   .numeros > div {
     min-width: 104px;
     padding: 12px 16px 10px;
-    border-radius: 14px;
+    border-radius: var(--raio-2);
     background: var(--bloco, var(--superficie-2));
     border: 1px solid var(--linha);
   }
@@ -319,16 +388,41 @@
     display: grid;
   }
   .valor {
-    font-size: 34px;
+    font-size: var(--t-destaque);
     font-weight: 700;
     line-height: 1.05;
     letter-spacing: -0.03em;
+  }
+  .origem {
+    justify-self: start;
   }
   .ganhos > li {
     padding: 9px 0;
   }
   .ganhos .rot {
     flex: 1;
+  }
+
+  .pagina-do-jogo {
+    gap: 16px;
+  }
+  /* Os cartões da sub-aba lado a lado; numa janela estreita, um embaixo do outro. O Histórico é uma linha do tempo:
+     uma coluna só, na largura de leitura. */
+  .grade-cartoes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    align-items: start;
+    gap: 14px;
+  }
+  .grade-cartoes.coluna {
+    grid-template-columns: minmax(0, 78ch);
+  }
+  .largura-toda,
+  .grade-cartoes.otimizar > :global(:last-child) {
+    grid-column: 1 / -1;
+  }
+  .largura-toda {
+    display: grid;
   }
   .sem-medida {
     max-width: 52ch;
@@ -349,7 +443,7 @@
     gap: 8px;
     height: 36px;
     padding: 0 12px;
-    border-radius: 18px;
+    border-radius: var(--raio-3);
     background: var(--superficie-2);
     color: var(--tinta-2);
   }
@@ -373,14 +467,14 @@
     gap: 4px;
     padding: 6px;
     border: 0;
-    border-radius: 14px;
+    border-radius: var(--raio-2);
     background: transparent;
     color: var(--tinta);
     text-align: left;
     cursor: pointer;
     transition:
       background var(--mov-rapido) ease,
-      transform 200ms cubic-bezier(0.3, 1.4, 0.5, 1);
+      transform var(--mov-medio) var(--curva-mola);
   }
   .cartao:hover {
     background: var(--superficie-2);
@@ -392,7 +486,7 @@
   .capa {
     position: relative;
     aspect-ratio: 2 / 3;
-    border-radius: 10px;
+    border-radius: var(--raio-1);
     overflow: hidden;
     box-shadow: 0 6px 16px rgb(0 0 0 / 0.14);
   }
@@ -402,13 +496,10 @@
     top: 6px;
   }
   .nome {
-    font-size: 13px;
+    font-size: var(--t-linha);
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .cartao .apoio {
-    font-size: 12px;
   }
 </style>

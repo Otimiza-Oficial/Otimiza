@@ -342,9 +342,6 @@
   p {
     margin: 0;
   }
-  .pequeno {
-    font-size: 12px;
-  }
   @media (max-width: 900px) {
     .leituras {
       grid-template-columns: 1fr 1fr;

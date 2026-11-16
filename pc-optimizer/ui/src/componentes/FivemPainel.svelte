@@ -1,12 +1,17 @@
 <script lang="ts">
   import { como } from "../lib/contrato";
+  import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
   // O FiveM no destaque do jogo (trazido da interface antiga, `src/main.ts`): as pastas de cache com o que cada uma
   // custa apagar (nunca o perfil, nunca com o FiveM aberto), os crashes com as pistas — mesmo defeito, pool cheio do
-  // servidor, memória no limite, já acontecia antes do Otimiza — e a nota do CitizenFX.ini.
+  // servidor, memória no limite, já acontecia antes do Otimiza — e a nota do CitizenFX.ini. Em duas partes: `cache`
+  // entra no cartão de cache do catálogo (aba Otimizar), `crashes` vira o cartão da aba Ferramentas.
   import { onMount } from "svelte";
-    import { noTauri } from "../lib/ponte";
-  import GraficosGta from "./GraficosGta.svelte";
+  import { noTauri } from "../lib/ponte";
+  import Cartao from "./base/Cartao.svelte";
+  import Esqueleto from "./Esqueleto.svelte";
+
+  let { parte }: { parte: "cache" | "crashes" } = $props();
 
   type Pasta = { id: string; name: string; path: string; bytes: number; formatted: string; cleanable: boolean; explanation: string; tradeoff: string | null };
   type Relatorio = { installed: boolean; running: boolean; game_running: boolean; folders: Pasta[]; cleanable_bytes: number; protected_bytes: number; note: string };
@@ -17,6 +22,8 @@
   let rel = $state<Relatorio | null>(null);
   let crashes = $state<Crashes | null>(null);
   let cfx = $state<CitizenFx | null>(null);
+  let lendo = $state(true);
+  let falhou = $state(false);
   let limpando = $state<string | null>(null);
   let recado = $state<string | null>(null);
 
@@ -41,22 +48,27 @@
   async function carregar() {
     if (!noTauri) {
       ({ rel, crashes, cfx } = structuredClone(demo));
+      lendo = false;
       return;
     }
-    const [r, c, x] = await Promise.allSettled([
-      como<Relatorio>(commands.analyzeFivem()),
-      como<Crashes>(commands.crashesDoJogo()),
-      como<CitizenFx>(commands.analyzeCitizenfx()),
-    ]);
-    rel = r.status === "fulfilled" ? r.value : null;
-    crashes = c.status === "fulfilled" ? c.value : null;
-    cfx = x.status === "fulfilled" ? x.value : null;
+    // Cada parte lê só o que mostra.
+    if (parte === "cache") {
+      const r = await como<Relatorio>(commands.analyzeFivem()).catch(() => null);
+      rel = r;
+      falhou = r === null;
+    } else {
+      const [c, x] = await Promise.allSettled([como<Crashes>(commands.crashesDoJogo()), como<CitizenFx>(commands.analyzeCitizenfx())]);
+      crashes = c.status === "fulfilled" ? c.value : null;
+      cfx = x.status === "fulfilled" ? x.value : null;
+      falhou = crashes === null;
+    }
+    lendo = false;
   }
 
   onMount(carregar);
 
   async function limpar(p: Pasta) {
-    if (!confirm(`Apagar ${p.name} (${p.formatted})? ${p.tradeoff ?? ""}`)) return;
+    if (!(await confirmar({ titulo: `Apagar ${p.name}?`, texto: `Libera ${p.formatted}. ${p.tradeoff ?? ""}`.trim(), sim: "Apagar", perigo: true }))) return;
     limpando = p.id;
     recado = null;
     try {
@@ -73,102 +85,67 @@
   const data = (s: number) => new Date(s * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 </script>
 
-{#if rel?.installed}
-  <div class="fivem">
-    <span class="titulo">FiveM</span>
-
-    <div class="bloco">
-      <span class="sub">Cache</span>
-      <p class="apoio">{rel.note}</p>
-      {#if rel.running || rel.game_running}<p class="aviso">Feche o FiveM para limpar: com ele aberto os arquivos estão em uso.</p>{/if}
-      <ul>
-        {#each rel.folders as p (p.id)}
+{#if parte === "cache" && lendo}
+  <div class="pastas"><Esqueleto linhas={2} rotulo="Medindo as pastas do FiveM" /></div>
+{:else if parte === "cache" && falhou}
+  <div class="pastas"><p class="aviso">Não consegui medir as pastas do FiveM agora.</p></div>
+{:else if parte === "cache" && rel && !rel.installed}
+  <div class="pastas"><p class="apoio">Não achei a pasta do FiveM neste PC. Abra o FiveM uma vez e as pastas de cache aparecem aqui.</p></div>
+{:else if parte === "cache" && rel?.installed}
+  <div class="pastas">
+    <span class="rotulo-grupo">Pastas do FiveM</span>
+    <p class="apoio">{rel.note}</p>
+    {#if rel.running || rel.game_running}<p class="aviso">Feche o FiveM para limpar: com ele aberto os arquivos estão em uso.</p>{/if}
+    <ul class="linhas">
+      {#each rel.folders as p (p.id)}
+        <li>
+          <div>
+            <span>{p.name} · <b>{p.formatted}</b></span>
+            <span class="apoio pequeno">{p.explanation}{p.tradeoff ? ` ${p.tradeoff}` : ""}</span>
+          </div>
+          {#if p.cleanable && p.bytes > 0}
+            <button class="btn" disabled={limpando !== null || rel.running || rel.game_running} onclick={() => limpar(p)}>{limpando === p.id ? "Limpando…" : "Limpar"}</button>
+          {:else if !p.cleanable}
+            <span class="selo">protegido</span>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+    {#if recado}<p class="recado" role="status">{recado}</p>{/if}
+  </div>
+{:else if parte === "crashes" && lendo}
+  <Cartao titulo="Crashes do FiveM"><Esqueleto linhas={3} rotulo="Lendo os crashes do FiveM" /></Cartao>
+{:else if parte === "crashes" && (falhou || !crashes)}
+  <Cartao titulo="Crashes do FiveM"><p class="aviso">Não consegui ler os relatórios de crash do FiveM agora.</p></Cartao>
+{:else if parte === "crashes" && crashes?.sem_fivem}
+  <Cartao titulo="Crashes do FiveM"><p class="apoio">Não achei o FiveM neste PC. Os crashes aparecem aqui depois que ele for instalado e aberto.</p></Cartao>
+{:else if parte === "crashes" && crashes}
+  {@const total = crashes.antes_do_otimiza + crashes.depois_do_otimiza}
+  <Cartao titulo="Crashes do FiveM" apoio={total ? `${total} ${total === 1 ? "crash" : "crashes"}: ${crashes.antes_do_otimiza} antes do Otimiza, ${crashes.depois_do_otimiza} depois.${crashes.crashes.length > 5 ? " Aqui, os 5 mais recentes." : ""}` : null}>
+    {#if crashes.crashes.length === 0}
+      <p class="apoio">Nenhum relatório de crash do FiveM neste PC.</p>
+    {:else}
+      {#each crashes.leituras as l (l.pista)}<p class="aviso">{l.frase}</p>{/each}
+      <ul class="linhas">
+        {#each crashes.crashes.slice(0, 5) as c (c.quando)}
           <li>
             <div>
-              <span>{p.name} · {p.formatted}</span>
-              <p class="apoio pequeno">{p.explanation}{p.tradeoff ? ` ${p.tradeoff}` : ""}</p>
+              <span>{data(c.quando)}{c.minutos_de_jogo != null ? ` · ${c.minutos_de_jogo} min de jogo` : ""}</span>
+              <span class="apoio pequeno">{c.erro ?? "erro não registrado"}{c.hash ? ` · ${c.hash}` : ""}{c.memoria_pct != null ? ` · memória a ${c.memoria_pct}%` : ""}{c.veiculo ? ` · veículo ${c.veiculo}` : ""}</span>
             </div>
-            {#if p.cleanable && p.bytes > 0}
-              <button class="btn" disabled={limpando !== null || rel.running || rel.game_running} onclick={() => limpar(p)}>{limpando === p.id ? "Limpando…" : "Limpar"}</button>
-            {:else if !p.cleanable}
-              <span class="apoio pequeno">protegido</span>
-            {/if}
           </li>
         {/each}
       </ul>
-    </div>
-
-    {#if crashes && !crashes.sem_fivem}
-      <div class="bloco">
-        <span class="sub">Crashes</span>
-        {#if crashes.crashes.length === 0}
-          <p class="apoio">Nenhum relatório de crash do FiveM neste PC.</p>
-        {:else}
-          <p class="apoio">{crashes.crashes.length} {crashes.crashes.length === 1 ? "relatório" : "relatórios"}: {crashes.antes_do_otimiza} antes do Otimiza e {crashes.depois_do_otimiza} depois.</p>
-          {#each crashes.leituras as l (l.pista)}<p class="aviso">{l.frase}</p>{/each}
-          <ul>
-            {#each crashes.crashes.slice(0, 5) as c (c.quando)}
-              <li>
-                <div>
-                  <span>{data(c.quando)}{c.minutos_de_jogo != null ? ` · ${c.minutos_de_jogo} min de jogo` : ""}</span>
-                  <p class="apoio pequeno">{c.erro ?? "erro não registrado"}{c.hash ? ` · ${c.hash}` : ""}{c.memoria_pct != null ? ` · memória a ${c.memoria_pct}%` : ""}{c.veiculo ? ` · veículo ${c.veiculo}` : ""}</p>
-                </div>
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </div>
     {/if}
-
-    <GraficosGta />
     {#if cfx?.existe}<p class="apoio pequeno">{cfx.note}</p>{/if}
-    {#if recado}<p class="recado">{recado}</p>{/if}
-  </div>
+  </Cartao>
 {/if}
 
 <style>
-  .fivem {
-    display: grid;
-    gap: 10px;
-    padding: 16px 0 0;
-    border-top: 1px solid var(--linha);
-  }
-  .titulo {
-    font-weight: 600;
-  }
-  .bloco {
-    display: grid;
-    gap: 6px;
-  }
-  .sub {
-    font-size: var(--t-apoio);
-    color: var(--tinta-2);
-  }
-  p {
-    margin: 0;
-  }
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+  .pastas {
     display: grid;
     gap: 8px;
-  }
-  li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-  }
-  .pequeno {
-    font-size: 12px;
-  }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
-  .recado {
-    font-size: 13px;
+    padding-top: 12px;
+    border-top: 1px solid var(--linha);
   }
 </style>

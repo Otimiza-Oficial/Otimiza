@@ -148,13 +148,6 @@
   .desfecho[data-tom="perigo"] {
     color: var(--perigo);
   }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
-  .pequeno {
-    font-size: 12px;
-  }
   .recado {
     font-size: 13px;
   }

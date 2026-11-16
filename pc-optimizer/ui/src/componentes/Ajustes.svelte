@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ferramentas } from "../lib/ferramentas";
   import { como } from "../lib/contrato";
+  import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // A área Ajustes: o FPS por cima do jogo (sobreposição), o que o Otimiza faz sozinho, a licença, a versão e o
@@ -132,7 +133,11 @@
   }
 
   async function usarNuvem(qual: "guardar" | "restaurar") {
-    if (qual === "restaurar" && !confirm("Trazer da nuvem o histórico e as preferências? O que está aqui hoje fica guardado ao lado.")) return;
+    if (
+      qual === "restaurar" &&
+      !(await confirmar({ titulo: "Trazer da nuvem?", texto: "O histórico e as preferências da nuvem entram no lugar dos daqui. O que está aqui hoje fica guardado ao lado.", sim: "Trazer" }))
+    )
+      return;
     nuvemOcupada = true;
     nuvem = null;
     try {

@@ -218,11 +218,4 @@
     background: var(--superficie-2);
     font-size: 13px;
   }
-  .pequeno {
-    font-size: 12px;
-  }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
 </style>

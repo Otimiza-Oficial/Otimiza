@@ -445,9 +445,6 @@
   p {
     margin: 0;
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .atencao {
     color: var(--atencao);
   }

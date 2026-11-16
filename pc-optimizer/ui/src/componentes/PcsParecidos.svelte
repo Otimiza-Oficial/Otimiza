@@ -2,6 +2,7 @@
   // "Em PCs iguais ao seu": o que mais ganhou neste jogo em PCs com o mesmo processador e placa, pela comunidade do
   // Otimiza (anônima, só com 3 PCs ou mais). Só leitura: aplicar continua sendo pela calibração, medida neste PC.
   import { ponte, type PcsParecidos } from "../lib/ponte";
+  import Cartao from "./base/Cartao.svelte";
 
   let { jogo }: { jogo: string } = $props();
 
@@ -30,8 +31,8 @@
 </script>
 
 {#if dados}
-  <div class="parecidos">
-    <span class="titulo">Em PCs iguais ao seu</span>
+  <Cartao titulo="Em PCs iguais ao seu">
+    {#snippet selo()}<span class="selo medido">medido em outros PCs</span>{/snippet}
     {#if dados.receitas.length === 0}
       <span class="apoio">
         Ainda poucos PCs com {dados.processador} e {dados.placa} mediram este jogo (precisa de {dados.minimo}).
@@ -49,19 +50,10 @@
       </ul>
       <span class="apoio pequeno">Mediana de cada PC. Calibre a energia aqui para medir no seu.</span>
     {/if}
-  </div>
+  </Cartao>
 {/if}
 
 <style>
-  .parecidos {
-    display: grid;
-    gap: 6px;
-    padding: 16px 0 0;
-    border-top: 1px solid var(--linha);
-  }
-  .titulo {
-    font-weight: 600;
-  }
   ul {
     list-style: none;
     margin: 0;
@@ -73,7 +65,7 @@
     display: flex;
     gap: 10px;
     align-items: baseline;
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .rot {
     flex: 1;
@@ -81,8 +73,5 @@
   .numero {
     color: var(--ok);
     font-weight: 600;
-  }
-  .pequeno {
-    font-size: 12px;
   }
 </style>

@@ -165,13 +165,6 @@
     gap: 10px;
     flex-wrap: wrap;
   }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
-  .pequeno {
-    font-size: 12px;
-  }
   .lista-pesados {
     list-style: none;
     margin: 0;
