@@ -74,15 +74,16 @@ impl Nivel {
 /// efeitos visuais e transparência: mudam o que a pessoa vê) e o que pode custar quadro (esses moram no Experimental).
 /// `o_completo_so_acrescenta_o_que_nao_custa_nada` confere a regra contra o catálogo.
 pub const NO_COMPLETO: &[&str] = &[
-    // O jogo na frente: prioridade no processador e no agendador de multimídia, e o timer fino.
-    "system_responsiveness_gaming",
-    "foreground_priority",
-    "mmcss_games",
+    // O timer fino. A prioridade do processador e do agendador de multimídia (`system_responsiveness_gaming`,
+    // `foreground_priority`, `mmcss_games`) saiu do lote na 1.0.5: o Windows prende SystemResponsiveness abaixo de 10
+    // em 20 (o padrão), 0x26 é o mesmo comportamento do padrão 2 no Windows de casa, e quase nenhum jogo se registra
+    // na tarefa "Games" do MMCSS. Escrita sem efeito medido não vai no botão; continuam um a um, para quem quiser.
     "timer_global_win11",
     // O que roda por trás e disputa disco, rede e processador com o jogo. Nenhum serviço parado (ver `RETIRADOS`):
     // a coleta mínima vai pela política, e o serviço continua rodando.
     "telemetry_policy",
-    "edge_background_off",
+    // `edge_background_off` saiu do lote na 1.0.5: escrito como política, faz o navegador mostrar "gerenciado pela sua
+    // organização" (o sinal clássico de sequestro de navegador), sem FPS em troca. Continua um a um.
     "disable_widgets",
     "maps_auto_update_off",
     "servicos_agrupados",

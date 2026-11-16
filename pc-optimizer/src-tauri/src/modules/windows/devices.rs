@@ -98,8 +98,20 @@ pub fn ativar_msi(mudancas: &mut Vec<ChangeRecord>) -> Result<(), String> {
 // MSI por dispositivo: SÓ LEITURA. Ligar MSI num driver que não aguenta trava o boot, e aí o Otimiza nem abre
 // para desfazer. Só a placa de vídeo passa no "como desfazer?".
 
-/// 24 = 0x18: não desligar para economizar (8) + não acordar o computador (16).
-const PNP_SEM_ECONOMIA: u32 = 24;
+/// O bit 8 de `PnPCapabilities`: o Windows não desliga a placa para economizar. Até a 1.0.5 o Otimiza gravava 24, que
+/// soma o 16 ("não acordar o computador") e tirava o Wake-on-LAN, uma função do Windows que o ajuste não precisava
+/// tocar. Agora só o 8 entra, somado ao que já estava lá.
+const PNP_NAO_DESLIGAR: u32 = 8;
+
+/// Pura: o valor a gravar, com os outros bits como estavam (inclusive o 16 de quem já tinha).
+pub fn sem_economia(atual: Option<u32>) -> u32 {
+    atual.unwrap_or(0) | PNP_NAO_DESLIGAR
+}
+
+/// Pura: a placa já não dorme para economizar? O 24 de versões antigas também conta.
+pub fn ja_sem_economia(atual: Option<u32>) -> bool {
+    atual.is_some_and(|v| v & PNP_NAO_DESLIGAR != 0)
+}
 
 /// Só as FÍSICAS, pelo `ComponentId` (`pci\`, `usb\`; os virtuais são `ms_` ou `vms_`). `Err` quando não se
 /// lê: "não é placa física" descartava a placa de verdade do cliente.
@@ -140,12 +152,14 @@ pub fn economia_de_energia_da_rede_desligada() -> Option<bool> {
         return None;
     }
 
-    Some(caminhos.iter().all(|caminho| {
-        matches!(
-            registry::read("HKLM", caminho, "PnPCapabilities"),
-            Ok(PreviousValue::Dword(v)) if v == PNP_SEM_ECONOMIA
-        )
-    }))
+    Some(caminhos.iter().all(|caminho| ja_sem_economia(pnp_atual(caminho))))
+}
+
+fn pnp_atual(caminho: &str) -> Option<u32> {
+    match registry::read("HKLM", caminho, "PnPCapabilities") {
+        Ok(PreviousValue::Dword(v)) => Some(v),
+        _ => None,
+    }
 }
 
 /// Mesma razão do `ativar_msi`, com risco maior: uma máquina tem vários adaptadores.
@@ -159,7 +173,11 @@ pub fn desligar_economia_de_energia_da_rede(
     }
 
     for caminho in caminhos {
-        let anterior = registry::set_dword("HKLM", &caminho, "PnPCapabilities", PNP_SEM_ECONOMIA)?;
+        let atual = pnp_atual(&caminho);
+        if ja_sem_economia(atual) {
+            continue;
+        }
+        let anterior = registry::set_dword("HKLM", &caminho, "PnPCapabilities", sem_economia(atual))?;
         mudancas.push(ChangeRecord::RegistryValue {
             hive: "HKLM".to_string(),
             path: caminho,
@@ -234,7 +252,12 @@ mod tests {
 
     #[test]
     fn valor_de_pnp_desliga_economia_e_despertar() {
-        assert_eq!(PNP_SEM_ECONOMIA, 8 | 16);
+        assert_eq!(sem_economia(None), 8, "o Wake-on-LAN (16) fica como estava");
+        assert_eq!(sem_economia(Some(0x100)), 0x108, "os outros bits ficam");
+        assert_eq!(sem_economia(Some(16)), 24, "quem já tinha o 16 continua com ele");
+        assert!(ja_sem_economia(Some(24)), "o 24 de versões antigas conta como feito: não regrava");
+        assert!(ja_sem_economia(Some(8)));
+        assert!(!ja_sem_economia(Some(16)) && !ja_sem_economia(None));
     }
 }
 

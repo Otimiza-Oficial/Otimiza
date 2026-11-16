@@ -4,7 +4,8 @@
 
 use crate::modules::changelog::{ChangeRecord, PreviousValue};
 
-/// `MouseKeys` fica de fora: não atrapalha quem não usa, e desligar não devolve desempenho.
+/// `MouseKeys` e as Teclas Alternadas ficam de fora: não atrapalham o jogo (as Alternadas só tocam um bipe no Caps Lock),
+/// e desligar não devolve nada. Ficam as duas que atrasam ou prendem tecla na partida.
 pub const CHAVES: &[(&str, &str)] = &[
     (
         r"Control Panel\Accessibility\Keyboard Response",
@@ -13,10 +14,6 @@ pub const CHAVES: &[(&str, &str)] = &[
     (
         r"Control Panel\Accessibility\StickyKeys",
         "Teclas de Aderência",
-    ),
-    (
-        r"Control Panel\Accessibility\ToggleKeys",
-        "Teclas Alternadas",
     ),
 ];
 

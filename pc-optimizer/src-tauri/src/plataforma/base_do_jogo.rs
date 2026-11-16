@@ -43,12 +43,17 @@ pub struct BaseTravada {
 /// pesada, a conta saiu 36 (180/5). Base de 36 é atraso de 28 ms por quadro real, e 4× só enche 144 dos 180 Hz. Com a
 /// base baixa assim, o Frame Boost não fica liso de jeito nenhum: melhor não travar e dizer.
 pub fn teto_da_base(mediana: f64, hz: u32) -> Option<u32> {
-    if hz == 0 || mediana <= 0.0 || mediana >= hz as f64 {
+    // Perto dos Hz (a régua do Turbo, 90%) a fração do monitor é a metade dele: o FiveM de 130 fps em 144 Hz iria para 72
+    // reais. Trocar quase metade do FPS real por quadro gerado deixa o jogo pesado na mão: aí a base não trava.
+    if hz == 0 || mediana <= 0.0 || mediana >= hz as f64 * PERTO_DO_MONITOR {
         return None;
     }
     let teto = super::ritmo_estavel::teto_estavel(hz, mediana * super::jogo_liso::FOLGA_DO_PROCESSADOR)?;
     (teto as f64 >= hz as f64 / MULTIPLICADOR_MAXIMO_DA_BASE as f64 - 0.5).then_some(teto)
 }
+
+/// A partir daqui o jogo já está perto dos Hz: o Frame Boost não tem o que acrescentar que valha o FPS real que tiraria.
+pub const PERTO_DO_MONITOR: f64 = 0.9;
 
 /// Quantos quadros por real o teto da base pode exigir para fechar os Hz (o mesmo teto de `multiplicador_para_o_monitor`).
 pub const MULTIPLICADOR_MAXIMO_DA_BASE: u32 = 4;
@@ -247,6 +252,14 @@ pub fn travar(
                 "O jogo entrega {:.0} fps num monitor de {} Hz: já passa do monitor, não há o que gerar.",
                 base.mediana, hz
             )
+        } else if base.mediana >= hz as f64 * PERTO_DO_MONITOR {
+            format!(
+                "FPS base não travado: o jogo entrega {:.0} fps, já perto dos {} Hz. Para gerar, o Frame Boost travaria o \
+                 jogo em {} fps reais, e ele ficaria pesado na mão. Aqui vale mais desligar o Frame Boost e usar o Jogo liso.",
+                base.mediana,
+                hz,
+                hz / 2
+            )
         } else {
             format!(
                 "FPS base não travado: o jogo entrega {:.0} fps, e para fechar os {} Hz sem tranco ele precisa segurar pelo menos {} (no máximo {}× por quadro real). Com a base abaixo disso, o Frame Boost oscila.",
@@ -289,6 +302,8 @@ mod tests {
         assert_eq!(teto_da_base(48.0, 180), None, "36 exigiria 5× e um atraso de 28 ms por real");
         assert_eq!(teto_da_base(50.0, 144), Some(36), "144/4: ainda dentro de 4×");
         assert_eq!(teto_da_base(200.0, 180), None, "passa do monitor: nada a gerar");
+        assert_eq!(teto_da_base(130.0, 144), None, "o FiveM do sócio: perto dos Hz, não vira 72 reais");
+        assert_eq!(teto_da_base(125.0, 144), Some(72), "abaixo de 90% dos Hz, a fração ainda vale");
         assert_eq!(teto_da_base(60.0, 0), None, "sem Hz, sem conta");
         assert_eq!(teto_da_base(20.0, 180), None, "abaixo do jogável");
     }
