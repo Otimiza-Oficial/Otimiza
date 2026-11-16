@@ -333,7 +333,7 @@ pub async fn config_motor_aplicar(
             return Err(match std::fs::write(&feito.arquivo, &feito.anterior) {
                 Ok(()) => format!("Não consegui guardar o desfazer ({}); o arquivo do jogo voltou como estava.", e),
                 Err(e2) => format!(
-                    "Não consegui guardar o desfazer ({}) nem devolver o arquivo ({}): {} ficou com o perfil leve e                      sem desfazer pelo Otimiza. Para voltar, apague o arquivo com o jogo fechado: o jogo cria outro                      com o padrão dele.",
+                    "Não consegui guardar o desfazer ({}) nem devolver o arquivo ({}): {} ficou com o perfil leve e sem desfazer pelo Otimiza. Para voltar, apague o arquivo com o jogo fechado: o jogo cria outro com o padrão dele.",
                     e,
                     e2,
                     feito.arquivo.display()

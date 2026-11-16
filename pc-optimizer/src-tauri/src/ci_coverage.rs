@@ -174,7 +174,7 @@ mod tests {
 
         assert_eq!(
             conf, esperada,
-            "tauri.conf.json diz {} e o Cargo.toml diz {} — o instalador sairia com um              número e o binário com outro",
+            "tauri.conf.json diz {} e o Cargo.toml diz {} — o instalador sairia com um número e o binário com outro",
             conf, esperada
         );
         assert_eq!(
@@ -191,6 +191,83 @@ mod tests {
             lock_raiz, esperada,
             "package-lock.json, em packages[\"\"], diz {} e o Cargo.toml diz {}",
             lock_raiz, esperada
+        );
+    }
+
+    /// **Pura.** Um texto com um buraco de 8 ou mais espaços no meio, dentro de aspas: é a barra de continuação de linha
+    /// (`\` no fim da linha) que se perdeu. Desde 29/08 a mensagem "ative com a sua chave" saía para o cliente com
+    /// "ainda não          está ativado", e outros quinze textos do mesmo jeito.
+    fn buraco_em_texto(linha: &str) -> bool {
+        let conteudo = linha.trim_start();
+        if conteudo.starts_with("//") {
+            return false;
+        }
+        let deslocamento = linha.len() - conteudo.len();
+        let bytes = linha.as_bytes();
+        let (mut dentro, mut i) = (false, deslocamento);
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' => i += 2,
+                b'"' => {
+                    dentro = !dentro;
+                    i += 1;
+                }
+                b' ' if dentro => {
+                    let fim = (i..bytes.len()).find(|&j| bytes[j] != b' ').unwrap_or(bytes.len());
+                    let antes = bytes[i - 1];
+                    if fim - i >= 8 && antes != b'"' && fim < bytes.len() && bytes[fim] != b'"' {
+                        return true;
+                    }
+                    i = fim;
+                }
+                _ => i += 1,
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn buraco_em_texto_acha_a_continuacao_perdida_e_ignora_indentacao() {
+        assert!(buraco_em_texto(r#"    Err("ainda não          está ativado")"#));
+        assert!(!buraco_em_texto(r#"    Err("ainda não \"#), "a continuação certa");
+        assert!(!buraco_em_texto(r#"             está ativado.")"#), "indentação da linha seguinte");
+        assert!(!buraco_em_texto(r#"    // texto          em comentário"#));
+        assert!(!buraco_em_texto(r#"    let x = 1;          // alinhado"#));
+    }
+
+    /// Textos que alinham colunas de propósito (saídas de comando do Windows nos testes, o relatório do sistema).
+    const ALINHADOS_DE_PROPOSITO: &[&str] = &[
+        "cabecalho.rs", "firmware.rs", "power.rs", "cs2.rs", "readiness.rs", "crashes.rs", "pacote.rs", "ci_coverage.rs",
+    ];
+
+    #[test]
+    fn nenhum_texto_tem_a_continuacao_de_linha_perdida() {
+        fn varrer(dir: &Path, achados: &mut Vec<String>) {
+            let Ok(entradas) = std::fs::read_dir(dir) else { return };
+            for entrada in entradas.flatten() {
+                let caminho = entrada.path();
+                if caminho.is_dir() {
+                    varrer(&caminho, achados);
+                    continue;
+                }
+                let nome = caminho.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
+                if !nome.ends_with(".rs") || ALINHADOS_DE_PROPOSITO.contains(&nome.as_str()) {
+                    continue;
+                }
+                let Ok(conteudo) = std::fs::read_to_string(&caminho) else { continue };
+                for (n, linha) in conteudo.lines().enumerate() {
+                    if buraco_em_texto(linha) {
+                        achados.push(format!("{}:{}", caminho.display(), n + 1));
+                    }
+                }
+            }
+        }
+        let mut achados = Vec::new();
+        varrer(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").as_path(), &mut achados);
+        assert!(
+            achados.is_empty(),
+            "texto com a barra de continuação de linha perdida (um buraco de espaços no meio da frase): {:?}",
+            achados
         );
     }
 }

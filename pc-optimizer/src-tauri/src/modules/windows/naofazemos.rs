@@ -56,7 +56,7 @@ pub static LISTA: &[NaoFazemos] = &[
         id: "parar_servicos_do_windows",
         nome: "Parar ou desativar serviços do Windows (SysMain, telemetria, compatibilidade, diagnóstico, indexação)",
         natureza: Natureza::Prejudicial,
-        porque: "É o que as ISOs modificadas e os otimizadores famosos deixam como marca: uma lista de serviços                  parados. O ganho em jogo não aparece em nenhuma medição repetida, e o custo aparece depois, longe                  da causa: programa antigo que para de abrir (compatibilidade), problema que o Windows não consegue                  mais resolver sozinho (diagnóstico), pesquisa e Store quebradas, atualização que falha. O Otimiza                  mexe em prioridade, energia e no que roda durante o jogo, e devolve tudo quando o jogo fecha; os                  serviços do Windows ficam como a Microsoft deixou.",
+        porque: "É o que as ISOs modificadas e os otimizadores famosos deixam como marca: uma lista de serviços parados. O ganho em jogo não aparece em nenhuma medição repetida, e o custo aparece depois, longe da causa: programa antigo que para de abrir (compatibilidade), problema que o Windows não consegue mais resolver sozinho (diagnóstico), pesquisa e Store quebradas, atualização que falha. O Otimiza mexe em prioridade, energia e no que roda durante o jogo, e devolve tudo quando o jogo fecha; os serviços do Windows ficam como a Microsoft deixou.",
     },
     NaoFazemos {
         id: "telemetria_por_fps",

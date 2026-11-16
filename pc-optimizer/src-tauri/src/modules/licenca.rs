@@ -448,7 +448,7 @@ pub fn exigir() -> Result<(), String> {
         return crate::plataforma::feedback::exigir();
     }
 
-    Err("Esta ação faz parte do Otimiza completo, e este computador ainda não          está ativado. O diagnóstico continua livre: o que você viu sobre esta          máquina é real. Para liberar as correções, ative com a sua chave."
+    Err("Esta ação faz parte do Otimiza completo, e este computador ainda não está ativado. O diagnóstico continua livre: o que você viu sobre esta máquina é real. Para liberar as correções, ative com a sua chave."
         .to_string())
 }
 
@@ -481,7 +481,7 @@ mod tests_1_8 {
         match Guardada::ler(&caminho) {
             Leitura::Ilegivel(_) => {}
             Leitura::Ok(_) => panic!(
-                "arquivo truncado foi lido como licenca valida e vazia: o cliente que                  pagou veria o portao de ativacao"
+                "arquivo truncado foi lido como licenca valida e vazia: o cliente que pagou veria o portao de ativacao"
             ),
         }
     }
@@ -547,7 +547,7 @@ mod tests {
 
         assert!(
             producao.len() < fonte.len(),
-            "não achei onde termina a produção e começa o teste; a guarda              estaria conferindo o arquivo errado"
+            "não achei onde termina a produção e começa o teste; a guarda estaria conferindo o arquivo errado"
         );
 
         for proibido in [

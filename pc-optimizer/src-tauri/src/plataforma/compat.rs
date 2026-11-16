@@ -171,7 +171,7 @@ pub fn avaliar(recurso: Recurso, c: &Contexto) -> Suporte {
             }
             if c.smooth_motion_pelo_otimiza {
                 return Parcial(
-                    "Experimental: o Otimiza liga no perfil do jogo no driver, com um ajuste que a NVIDIA não                      documenta. Vale quando o jogo abrir de novo, e se desfaz em um clique."
+                    "Experimental: o Otimiza liga no perfil do jogo no driver, com um ajuste que a NVIDIA não documenta. Vale quando o jogo abrir de novo, e se desfaz em um clique."
                         .to_string(),
                 );
             }

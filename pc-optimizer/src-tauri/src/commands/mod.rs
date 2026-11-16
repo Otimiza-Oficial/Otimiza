@@ -686,7 +686,7 @@ mod tests {
         ] {
             assert!(
                 permissoes.contains(comando),
-                "a barra da janela usa `{}` e a permissão não está declarada;                  o botão vai falhar sem dizer nada",
+                "a barra da janela usa `{}` e a permissão não está declarada; o botão vai falhar sem dizer nada",
                 comando
             );
         }

@@ -1207,7 +1207,7 @@ pub fn ligar_smooth_motion(executavel: &str) -> Result<LimiteAplicado, String> {
         let (perfil, perfil_criado) = perfil_ou_novo(perfis, sessao, nome_do_app, nome_do_perfil)?;
         let (era_o_padrao, anterior) = ler_valor(api, sessao, perfil, SMOOTH_MOTION);
         escrever_valor_cru(api, sessao, perfil, SMOOTH_MOTION, SMOOTH_MOTION_LIGADO).map_err(|_| {
-            "este driver da NVIDIA não conhece o Smooth Motion (precisa de RTX 40 ou 50 e driver recente). Nada foi \n             alterado: atualize o driver ou ligue pelo app da NVIDIA."
+            "este driver da NVIDIA não conhece o Smooth Motion (precisa de RTX 40 ou 50 e driver recente). Nada foi alterado: atualize o driver ou ligue pelo app da NVIDIA."
                 .to_string()
         })?;
         Ok(LimiteAplicado {
@@ -1705,7 +1705,7 @@ mod tests {
                 }
                 // Número que o driver não conhece é número errado: sem isto o botão nunca funcionaria, calado.
                 None => panic!(
-                    "{}: este driver nao conhece o ajuste {:#010X} -- o numero da tabela \n                     esta errado, ou nao existe mais nesta versao do driver",
+                    "{}: este driver nao conhece o ajuste {:#010X} -- o numero da tabela esta errado, ou nao existe mais nesta versao do driver",
                     opcao.id, id
                 ),
             }
@@ -1778,7 +1778,7 @@ mod tests {
             fonte.contains("situacao == NVAPI_OK,")
                 && fonte.contains("ajuste.e_predefinido_agora,")
                 && fonte.contains("ajuste.valor_atual.numero,"),
-            "`ler_valor` precisa interpretar os valores que a NVAPI escreveu na              estrutura, e nao constantes"
+            "`ler_valor` precisa interpretar os valores que a NVAPI escreveu na estrutura, e nao constantes"
         );
     }
 
