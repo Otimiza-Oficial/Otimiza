@@ -401,6 +401,36 @@ pub enum ReacaoAPerda {
     Desligar,
 }
 
+/// De onde a guarda conta os quadros do jogo numa janela de tempo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FonteDaContagem {
+    /// O PresentMon no processo do jogo (o certo: conta só o que o jogo apresenta).
+    Jogo,
+    /// A janela começou antes de o PresentMon cair: misturaria duas fontes. Fica fora da média (`None` na guarda).
+    Descartar,
+    /// A captura da tela (reserva, sem PresentMon).
+    Captura,
+}
+
+/// **Pura.** A fonte da contagem para a janela que começa em `de`. `troca`: quando a guarda passou a contar pela
+/// captura (o PresentMon parou ou ficou mudo).
+pub fn fonte_da_contagem(presentmon_vivo: bool, troca: Option<f64>, de: f64) -> FonteDaContagem {
+    if presentmon_vivo {
+        FonteDaContagem::Jogo
+    } else if troca.is_some_and(|t| de < t) {
+        FonteDaContagem::Descartar
+    } else {
+        FonteDaContagem::Captura
+    }
+}
+
+/// **Pura.** O PresentMon está vivo mas mudo? Fora da pausa da guarda, 4 s em que ele não viu nenhum quadro do jogo e a
+/// captura viu o jogo andando (30 ou mais): outro processo apresenta, ou eventos se perderam. A guarda passa a contar
+/// pela captura em vez de achar que o jogo parou.
+pub fn presentmon_mudo(pausada: bool, quadros_do_jogo: u64, quadros_capturados: u64) -> bool {
+    !pausada && quadros_do_jogo == 0 && quadros_capturados >= 30
+}
+
 pub fn reacao_a_perda(ja_leve: bool) -> ReacaoAPerda {
     if ja_leve {
         ReacaoAPerda::Desligar
@@ -1643,10 +1673,7 @@ fn sessao(
             ultima_conferencia_do_vivo = agora_do_laco;
             let ate = agora_do_laco - guarda::ATRASO_DA_CONTAGEM;
             let de = ate - 4.0;
-            if !guarda.pausada()
-                && quadros_do_jogo.contar(de, ate) == 0
-                && quadros_capturados.contar(de, ate) >= 30
-            {
+            if presentmon_mudo(guarda.pausada(), quadros_do_jogo.contar(de, ate), quadros_capturados.contar(de, ate)) {
                 crate::utils::Logger::warn("gerador: o PresentMon não vê quadros do jogo; a guarda volta a contar pela captura");
                 vivo = None;
                 troca_de_fonte = Some(agora_do_laco);
@@ -1852,14 +1879,10 @@ fn sessao(
         };
 
         let pelo_jogo = vivo.is_some();
-        let acao = guarda.passo(segundos(inicio), |de, ate| {
-            if pelo_jogo {
-                Some(quadros_do_jogo.contar(de, ate))
-            } else if troca_de_fonte.is_some_and(|t| de < t) {
-                None
-            } else {
-                Some(quadros_capturados.contar(de, ate))
-            }
+        let acao = guarda.passo(segundos(inicio), |de, ate| match fonte_da_contagem(pelo_jogo, troca_de_fonte, de) {
+            FonteDaContagem::Jogo => Some(quadros_do_jogo.contar(de, ate)),
+            FonteDaContagem::Descartar => None,
+            FonteDaContagem::Captura => Some(quadros_capturados.contar(de, ate)),
         });
         match acao {
             guarda::Acao::Desligar => {
@@ -2140,6 +2163,23 @@ fn sessao(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_guarda_nunca_mistura_duas_fontes_na_mesma_comparacao() {
+        use super::{fonte_da_contagem as f, FonteDaContagem::*};
+        assert_eq!(f(true, None, 10.0), Jogo);
+        assert_eq!(f(false, Some(20.0), 18.5), Descartar, "a janela começou antes de o PresentMon cair");
+        assert_eq!(f(false, Some(20.0), 21.0), Captura);
+        assert_eq!(f(false, None, 5.0), Captura, "sem PresentMon desde o começo");
+    }
+
+    #[test]
+    fn presentmon_mudo_so_com_o_jogo_andando_na_captura() {
+        use super::presentmon_mudo as m;
+        assert!(m(false, 0, 120));
+        assert!(!m(true, 0, 120), "na pausa da guarda o gerador para: zero é esperado");
+        assert!(!m(false, 0, 10), "a captura também quase parada: é o jogo em menu ou carregando");
+        assert!(!m(false, 50, 120));
+    }
     use super::*;
 
     /// `cargo test --lib -- --ignored geracao::tests::sobre_o_jogo_de_teste --nocapture`
