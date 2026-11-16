@@ -481,7 +481,10 @@ pub fn entra_no_plano(a: &Ajuste, m: &Maquina, hibrido: bool) -> bool {
     match a.ajuste {
         ASPM | USBSELECTIVESUSPEND => true,
         PERFEPP => !m.notebook,
-        CPMINCORES | PERFBOOSTMODE => !m.notebook && !hibrido,
+        // No Ryzen X3D de dois blocos é o estacionamento que prende o jogo no bloco com o cache 3D: com todos os
+        // núcleos acordados ele se espalha pelos dois e perde quadros (o próprio `x3d.rs` acusa o plano por isso).
+        CPMINCORES => !m.notebook && !hibrido && !super::x3d::e_x3d_de_dois_blocos(&m.cpu),
+        PERFBOOSTMODE => !m.notebook && !hibrido,
         _ => false,
     }
 }
@@ -493,6 +496,7 @@ pub fn por_que_ficou_de_fora(a: &Ajuste, m: &Maquina, hibrido: bool) -> &'static
         STANDBYIDLE => "Fora do conjunto padrão: muda comportamento que a pessoa escolheu.",
         _ if m.notebook => "Notebook: fica com o motor de energia (aba Energia), que mede antes de mudar. Fixo, ele esquentava notebook e tirava desempenho no calor.",
         _ if hibrido => "Processador com núcleos P e E: este ajuste decide qual núcleo trabalha, e a escolha fica com o Windows.",
+        CPMINCORES if super::x3d::e_x3d_de_dois_blocos(&m.cpu) => "Ryzen X3D com dois blocos: é o estacionamento que põe o jogo no bloco com o cache 3D, então ele fica como a AMD deixa.",
         _ => "Fora do conjunto padrão: muda comportamento que a pessoa escolheu.",
     }
 }
@@ -1052,6 +1056,12 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
     }
 
     let guid_anterior = power::active_scheme().ok();
+    // Sem saber qual plano estava ativo, não haveria para onde voltar: nada é criado nem ativado.
+    if !simulacao && guid_anterior.is_none() {
+        return Err(
+            "Não consegui ler o plano de energia ativo, então não teria como voltar a ele. Nada foi mudado.".to_string(),
+        );
+    }
     let planos = listar_planos()?;
     let existente = achar_na_lista(&planos, NOME_DO_PLANO);
     let plano_existia = existente.is_some();
@@ -1645,6 +1655,21 @@ mod tests {
         for a in AJUSTES.iter().filter(|a| a.ajuste == ASPM || a.ajuste == USBSELECTIVESUSPEND) {
             assert_eq!((a.alvo)(&maquina_de_teste(true)).dc, None, "{}: na bateria fica como estava", a.nome);
         }
+    }
+
+    #[test]
+    fn x3d_de_dois_blocos_mantem_o_estacionamento_de_nucleos() {
+        let mut m = maquina_de_teste(false);
+        m.fabricante_da_cpu = FabricanteDaCpu::Amd;
+        m.cpu = "AMD Ryzen 9 7950X3D 16-Core Processor".to_string();
+        let n = no_plano(&m, false);
+        assert!(!n.contains(&CPMINCORES), "o estacionamento prende o jogo no bloco com o cache 3D");
+        assert!(n.contains(&PERFBOOSTMODE) && n.contains(&PERFEPP));
+        let nucleos = AJUSTES.iter().find(|a| a.ajuste == CPMINCORES).unwrap();
+        assert!(por_que_ficou_de_fora(nucleos, &m, false).contains("X3D"));
+
+        m.cpu = "AMD Ryzen 7 7800X3D 8-Core Processor".to_string();
+        assert!(no_plano(&m, false).contains(&CPMINCORES), "um bloco só: nada a prender");
     }
 
     #[test]

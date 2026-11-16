@@ -188,20 +188,28 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz_lido: Option<u32>, competit
                 )
             }
         }
-        Gargalo::Processador => (
-            None,
-            (!competitivo).then_some(0),
-            true,
-            false,
-            if competitivo {
+        // A geração só quando o jogo fica longe do monitor (a mesma régua da placa): perto dos Hz, o FPS base do Frame
+        // Boost cai na metade do monitor (FiveM de 130 fps em 144 Hz → 72 reais) e o jogo fica pesado na mão.
+        Gargalo::Processador => {
+            let gera = !competitivo && fps.is_some_and(|f| f < hz * 0.9);
+            let explicacao = if competitivo {
                 "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). O processador \
                  passa a subir de frequência sem hesitar com o jogo aberto. Menor atraso escolhido: sem geração."
-            } else {
+                    .to_string()
+            } else if gera {
                 "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). A geração de \
                  quadros enche o monitor e o processador passa a subir de frequência sem hesitar."
-            }
-            .to_string(),
-        ),
+                    .to_string()
+            } else {
+                format!(
+                    "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). O processador \
+                     passa a subir de frequência sem hesitar. Sem geração de quadros: o jogo já fica perto dos {:.0} Hz \
+                     do monitor, e gerar travaria o FPS real na metade dele.",
+                    hz
+                )
+            };
+            (None, gera.then_some(0), true, false, explicacao)
+        }
         Gargalo::Memoria => (
             None,
             None,
@@ -1223,6 +1231,19 @@ mod tests {
         assert!(ritmo_a_oferecer(&com_geracao, 70.0, 30.0, 144).is_none(), "a geração já trava a base");
         let com_escala = montar(Gargalo::Placa, Some(70.0), Some(144), true);
         assert!(ritmo_a_oferecer(&com_escala, 70.0, 30.0, 144).is_none(), "a escala sobe o FPS depois da medida");
+    }
+
+    #[test]
+    fn processador_perto_do_monitor_nao_liga_a_geracao() {
+        // O FiveM do sócio: 130 fps num monitor de 144 Hz. Com geração, o FPS base iria para 72 (a metade dos Hz).
+        let perto = montar(Gargalo::Processador, Some(130.0), Some(144), false);
+        assert_eq!(perto.multiplicador, None, "perto dos Hz: o FPS real fica como está");
+        assert!(perto.energia);
+        assert!(perto.explicacao.contains("144 Hz"));
+        let sem_medida = montar(Gargalo::Processador, None, Some(144), false);
+        assert_eq!(sem_medida.multiplicador, None, "sem FPS medido, não arrisca o FPS real");
+        let longe = montar(Gargalo::Processador, Some(70.0), Some(144), false);
+        assert_eq!(longe.multiplicador, Some(0), "longe do monitor: a geração enche a tela");
     }
 
     #[test]

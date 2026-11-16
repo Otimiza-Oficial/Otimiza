@@ -282,6 +282,13 @@ pub fn analyze() -> Result<BloatReport, String> {
     })
 }
 
+/// Pura: o pacote (o nome completo, `Microsoft.BingNews_4.1.2_x64__8wekyb3d8bbwe`) é de um app da lista curta?
+pub fn pacote_permitido(pacote: &str) -> bool {
+    APPS_DA_LOJA
+        .iter()
+        .any(|(id, _)| pacote == *id || pacote.strip_prefix(id).is_some_and(|resto| resto.starts_with('_')))
+}
+
 /// Só apps da Loja passam por aqui. Programa comum nunca é desinstalado por nós.
 pub fn remover_app_da_loja(package: &str) -> Result<String, String> {
     // O nome entra num comando do PowerShell: só passam os caracteres que um pacote pode ter.
@@ -291,6 +298,10 @@ pub fn remover_app_da_loja(package: &str) -> Result<String, String> {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
     {
         return Err("Identificador de pacote inválido.".to_string());
+    }
+    // A lista curta é a única que se remove: nunca Gaming Services, a própria Loja ou o App Installer.
+    if !pacote_permitido(package) {
+        return Err("Este app não está na lista que o Otimiza remove. Nada foi mudado.".to_string());
     }
 
     let script = format!(
@@ -306,6 +317,15 @@ pub fn remover_app_da_loja(package: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn so_remove_o_que_esta_na_lista_curta() {
+        assert!(pacote_permitido("Microsoft.BingNews_4.1.2_x64__8wekyb3d8bbwe"));
+        assert!(pacote_permitido("Microsoft.BingWeather"));
+        assert!(!pacote_permitido("Microsoft.GamingServices_1.0_x64__8wekyb3d8bbwe"));
+        assert!(!pacote_permitido("Microsoft.WindowsStore_22.0_x64__8wekyb3d8bbwe"));
+        assert!(!pacote_permitido("Microsoft.BingNewsFalso_1.0_x64__x"), "prefixo sem o separador não vale");
+    }
 
     #[test]
     fn driver_nunca_e_marcado_como_lixo() {

@@ -592,12 +592,32 @@ impl WindowsOptimizer {
                         changes.len()
                     ));
 
-                    // Se a própria reversão falhar vai para o log: é o único caso de PC em estado intermediário.
+                    // Se a própria reversão falhar, o PC ficou pela metade: o que sobrou entra no Histórico, com Desfazer
+                    // (repetir a volta do que já voltou é inofensivo; sumir com o registro não é). O diário só fecha depois.
                     if let Err(failures) = revert_changes(&changes) {
                         crate::utils::Logger::error(&format!(
-                            "reversão parcial de `{}` falhou: {}",
+                            "reversão parcial de `{}` falhou: {}; o que sobrou vai para o histórico",
                             spec.id,
                             failures.join("; ")
+                        ));
+                        let anotado = log.record(AppliedOptimization {
+                            optimization_id: spec.id.to_string(),
+                            name: format!("{} (pela metade: a volta automática falhou)", spec.name),
+                            timestamp: now_timestamp(),
+                            changes: changes.clone(),
+                        });
+                        if let Err(erro) = anotado {
+                            // Sem histórico, o diário aberto é o único rastro: fica para a recuperação da próxima abertura.
+                            crate::utils::Logger::error(&format!("não consegui anotar `{}` no histórico: {}", spec.id, erro));
+                            diario.take();
+                            return Err(format!("{}: {}", spec.name, error));
+                        }
+                        if let Some(d) = diario.take() {
+                            let _ = d.concluir();
+                        }
+                        return Err(format!(
+                            "{}: {}. Parte da mudança não voltou sozinha: ela está no Histórico, com Desfazer.",
+                            spec.name, error
                         ));
                     }
 
@@ -1581,11 +1601,15 @@ impl WindowsOptimizer {
     where
         F: FnMut(BatchStep),
     {
-        let applied: Vec<(String, String)> = log
-            .applied()
-            .iter()
-            .map(|entry| (entry.optimization_id.clone(), entry.name.clone()))
-            .collect();
+        // Do mais novo para o mais antigo: duas mudanças no mesmo lugar (o perfil do jogo aplicado duas vezes, no mesmo
+        // arquivo) só voltam ao original desfeitas na ordem inversa; na ordem de aplicação, a última devolução punha de
+        // volta o arquivo já mexido pelo Otimiza.
+        let applied: Vec<(String, String)> = ordem_de_desfazer(
+            log.applied()
+                .iter()
+                .map(|entry| (entry.timestamp, entry.optimization_id.clone(), entry.name.clone()))
+                .collect(),
+        );
 
         let total = applied.len();
 
@@ -1879,12 +1903,13 @@ impl WindowsOptimizer {
                     return Ok(None);
                 }
 
-                for (key, _) in &removed {
-                    shell::run_checked("bcdedit", &["/deletevalue", "{current}", key])?;
-                }
-
+                // Uma anotação por chave, logo depois de apagá-la: se a segunda falhar, a primeira já está no histórico e a
+                // volta automática a devolve.
                 let count = removed.len();
-                changes.push(ChangeRecord::BootLimits { removed });
+                for limite in removed {
+                    shell::run_checked("bcdedit", &["/deletevalue", "{current}", &limite.0])?;
+                    changes.push(ChangeRecord::BootLimits { removed: vec![limite] });
+                }
                 Ok(Some(format!("{} limite(s) removido(s).", count)))
             }
 
@@ -2462,6 +2487,14 @@ fn ha_politica_aplicada() -> bool {
     )
     .map(|gpos| !gpos.is_empty())
     .unwrap_or(false)
+}
+
+/// Pura: a ordem do "Desfazer tudo", do aplicado por último para o primeiro, pela hora (um item cuja volta falhou é
+/// regravado no fim da lista, mas não ficou mais novo por isso). Empate: o que está mais no fim vai antes.
+pub fn ordem_de_desfazer(aplicados: Vec<(u64, String, String)>) -> Vec<(String, String)> {
+    let mut v: Vec<_> = aplicados.into_iter().rev().collect();
+    v.sort_by(|a, b| b.0.cmp(&a.0));
+    v.into_iter().map(|(_, id, nome)| (id, nome)).collect()
 }
 
 /// Pura. SÓ REFINA, NUNCA INVENTA: estado conclusivo não muda por causa do ambiente.
@@ -3043,6 +3076,17 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn desfazer_tudo_vai_do_mais_novo_para_o_mais_antigo() {
+        let item = |t: u64, id: &str| (t, id.to_string(), id.to_string());
+        let ordem = ordem_de_desfazer(vec![item(10, "config_jogo_competitivo"), item(20, "plano_otimiza"), item(30, "config_jogo_sem_teto")]);
+        assert_eq!(ordem[0].0, "config_jogo_sem_teto", "o último aplicado guarda o arquivo já mexido: volta primeiro");
+        assert_eq!(ordem[2].0, "config_jogo_competitivo", "o primeiro guarda o original: volta por último");
+        // Regravado no fim por uma volta que falhou, mas aplicado antes: continua na sua hora.
+        let ordem = ordem_de_desfazer(vec![item(20, "b"), item(30, "c"), item(10, "a")]);
+        assert_eq!(ordem.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), ["c", "b", "a"]);
+    }
+
     use super::*;
 
     fn plano(guid: &str) -> ChangeRecord {
