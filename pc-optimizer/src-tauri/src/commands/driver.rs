@@ -290,12 +290,14 @@ pub async fn limitar_fps_nvidia(
     {
         let mut log = state.changes.lock().await;
         let caminho = crate::modules::windows::frames::caminho_do_processo(&executavel);
-        crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(
+        let feito = crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(
             &executavel,
             caminho.as_deref(),
             fps,
             &mut log,
-        )
+        )?;
+        crate::plataforma::teto_do_jogo::da_pessoa(&executavel, fps);
+        Ok(feito)
     }
 
     #[cfg(not(target_os = "windows"))]

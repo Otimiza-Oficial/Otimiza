@@ -1762,7 +1762,7 @@ mod tests {
         // Um piso: se a varredura parar de enxergar, o teste fica vermelho em vez de uma lista vazia passar calada.
         assert!(
             comandos.len() >= 3,
-            "achei só {} comando(s) — o formato do arquivo mudou e esta guarda              parou de enxergar: {:?}",
+            "achei só {} comando(s) — o formato do arquivo mudou e esta guarda parou de enxergar: {:?}",
             comandos.len(),
             comandos
         );
@@ -1770,7 +1770,7 @@ mod tests {
         for comando in comandos {
             assert!(
                 lib.contains(&format!("commands::{},", comando)),
-                "o diagnóstico oferece um botão que chama `{}`, e esse comando                  não está registrado em lib.rs. O clique do cliente falharia.",
+                "o diagnóstico oferece um botão que chama `{}`, e esse comando não está registrado em lib.rs. O clique do cliente falharia.",
                 comando
             );
         }

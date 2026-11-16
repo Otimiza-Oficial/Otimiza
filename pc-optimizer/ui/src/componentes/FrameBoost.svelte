@@ -447,7 +447,7 @@
     padding: 4px 10px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--ok) 14%, transparent);
-    color: var(--ok);
+    color: var(--ok-texto);
     font-size: 12px;
     font-weight: 600;
   }
@@ -564,13 +564,6 @@
     justify-content: space-between;
     padding-top: 12px;
     border-top: 1px solid var(--linha);
-  }
-  .pequeno {
-    font-size: 12px;
-  }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
   }
   .erro {
     color: var(--perigo);

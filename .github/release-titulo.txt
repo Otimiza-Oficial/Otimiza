@@ -1,1 +1,1 @@
-Otimiza 1.0.4 Jogo liso e Turbo corrigidos (4.0.4)
+Otimiza 1.0.5 Correções no Frame Boost, no Turbo e no desfazer, e catálogo de 5 jogos (4.0.5)

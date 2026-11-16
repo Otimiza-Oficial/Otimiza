@@ -328,6 +328,7 @@ mod tests {
         "licenca_estado",
         "licenca_ativar",
         "relatorio_de_suporte",
+        "salvar_log_de_suporte",
         "versao_mais_nova",
         "versao_do_app",
         "checar_essenciais",
@@ -685,7 +686,7 @@ mod tests {
         ] {
             assert!(
                 permissoes.contains(comando),
-                "a barra da janela usa `{}` e a permissão não está declarada;                  o botão vai falhar sem dizer nada",
+                "a barra da janela usa `{}` e a permissão não está declarada; o botão vai falhar sem dizer nada",
                 comando
             );
         }

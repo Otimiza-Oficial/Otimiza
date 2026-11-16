@@ -1,5 +1,6 @@
 <script lang="ts">
   import { como } from "../lib/contrato";
+  import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // Sistema avançado (trazido da interface antiga, `src/main.ts`): os serviços essenciais que "Windows lite" e outros
@@ -173,7 +174,7 @@
             <p class="apoio pequeno">{b.reason}</p>
           </div>
           {#if b.removable_here && b.package}
-            <button class="btn" disabled={ocupado !== null} onclick={() => confirm(`Remover ${b.name}?`) && agir(b.name, () => (noTauri ? commands.removeStoreApp(b.package ?? "") : demoOk(`${b.name} removido.`)))}>Remover</button>
+            <button class="btn" disabled={ocupado !== null} onclick={async () => (await confirmar({ titulo: `Remover ${b.name}?`, texto: "O app sai deste usuário do Windows. Dá para instalar de novo pela Microsoft Store.", sim: "Remover", perigo: true })) && agir(b.name, () => (noTauri ? commands.removeStoreApp(b.package ?? "") : demoOk(`${b.name} removido.`)))}>Remover</button>
           {:else}
             <button class="btn quieto" onclick={() => (noTauri ? como<string>(commands.openAppsSettings()).catch(() => {}) : undefined)}>Abrir o desinstalador</button>
           {/if}
@@ -209,13 +210,10 @@
     gap: 12px;
   }
   .estado[data-tom="ok"] {
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .estado[data-tom="atencao"] {
-    color: var(--atencao);
-  }
-  .pequeno {
-    font-size: 12px;
+    color: var(--atencao-texto);
   }
   .secao > .btn {
     justify-self: start;

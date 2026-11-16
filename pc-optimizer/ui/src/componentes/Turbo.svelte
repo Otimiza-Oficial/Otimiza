@@ -317,13 +317,17 @@
         </button>
       </div>
 
+      {#if painel.prova_interrompida && !painel.provando && ocupado !== "provando"}
+        <p class="recado" data-tom="atencao"><span class="ponto" data-tom="atencao"></span>{painel.prova_interrompida}</p>
+      {/if}
+
       {#if prova}
         {@const d = DESFECHO[prova.desfecho]}
         <div class="resultado">
           <div class="veredito">
             <span class="ponto" data-tom={d.tom}></span>
             <strong>{d.texto}</strong>
-            <span class="selo-medido">Medido</span>
+            <span class="selo medido">medido</span>
           </div>
           <p class="texto">{prova.leitura}</p>
           <div class="numeros">
@@ -384,7 +388,7 @@
   }
   .sem-jogo h2 {
     font-family: var(--fonte-titulo);
-    font-size: 20px;
+    font-size: var(--t-titulo);
   }
   .cabeca {
     display: flex;
@@ -400,7 +404,7 @@
   }
   .estado h2 {
     font-family: var(--fonte-titulo);
-    font-size: 18px;
+    font-size: var(--t-titulo);
   }
   .linha-estado {
     display: inline-flex;
@@ -443,9 +447,10 @@
     display: grid;
     gap: 10px;
     justify-items: start;
-    padding: 14px;
-    border-radius: 14px;
-    background: var(--superficie-2);
+    padding: 16px 18px;
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-3);
+    background: var(--bloco, var(--superficie-2));
   }
   .veredito {
     display: flex;
@@ -461,7 +466,7 @@
     display: grid;
   }
   .valor {
-    font-size: 22px;
+    font-size: var(--t-numero);
     font-weight: 600;
   }
   .erro {

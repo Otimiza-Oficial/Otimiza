@@ -873,11 +873,12 @@ pub static CATALOG: &[OptimizationSpec] = &[
         id: "nic_power_saving_off",
         name: "Impedir que a placa de rede durma",
         description: "Desliga a economia de energia da placa de rede física.",
-        honest_effect: "O Windows desliga a placa quando acha que está ociosa, e o primeiro pacote depois disso atrasa. É uma das causas reais de pico de ping no meio da partida. Em notebook na bateria, gasta um pouco mais.",
+        honest_effect: "O Windows pode desligar a placa quando acha que está ociosa, e ela demora para acordar. Isto impede só esse desligamento: o PC continua podendo ser ligado pela rede (Wake-on-LAN). Ajuda quem vê a conexão sumir ou atrasar depois de um tempo parado; com a partida rolando a placa não fica ociosa, então não espere ping menor no meio do jogo. Vale depois de reiniciar ou de desligar e ligar a placa. Em notebook na bateria, gasta um pouco mais.",
         category: Category::Network,
         expected_gain: ExpectedGain::Situational,
         risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
+        // Fica `false` de propósito: o grupo Rede é testado no A/B sem reiniciar (`grupos.rs`); o texto diz quando vale.
         requires_restart: false,
         reversible: true,
         requirement: None,
@@ -2392,12 +2393,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
                 hive: "HKLM",
                 path: r"SOFTWARE\Policies\Microsoft\Edge",
                 name: "BackgroundModeEnabled",
-                value: RegValue::Dword(0),
-            },
-            Action::Registry {
-                hive: "HKLM",
-                path: r"SOFTWARE\Policies\Google\Chrome",
-                name: "StartupBoostEnabled",
                 value: RegValue::Dword(0),
             },
             Action::Registry {

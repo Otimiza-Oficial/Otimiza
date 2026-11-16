@@ -1,5 +1,6 @@
 <script lang="ts">
   import { como } from "../lib/contrato";
+  import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
   // O resto da placa de vídeo (trazido da interface antiga, `src/main.ts`): em notebook com duas placas, qual delas
   // cada jogo usa (o maior ganho que o produto dá ali, sem administrador nem reinício); o cache de shader do driver
@@ -81,7 +82,7 @@
         <div class="linha">
           <div><span>{c.name} · {c.formatted}</span><p class="apoio pequeno">{c.files} arquivos{c.stale ? " · velho" : ""}</p></div>
           {#if c.stale && c.bytes > 0}
-            <button class="btn" disabled={ocupado !== null} onclick={() => confirm(`Apagar ${c.name}? O primeiro minuto dos jogos pode dar trancos enquanto o driver refaz.`) && agir(c.id, () => (noTauri ? commands.cleanShaderCache(c.id) : Promise.resolve({ message: "Demonstração: apagado." })))}>Limpar</button>
+            <button class="btn" disabled={ocupado !== null} onclick={async () => (await confirmar({ titulo: `Apagar ${c.name}?`, texto: "O primeiro minuto dos jogos pode dar trancos enquanto o driver refaz o cache.", sim: "Apagar", perigo: true })) && agir(c.id, () => (noTauri ? commands.cleanShaderCache(c.id) : Promise.resolve({ message: "Demonstração: apagado." })))}>Limpar</button>
           {/if}
         </div>
       {/each}
@@ -118,13 +119,6 @@
     justify-content: space-between;
     align-items: center;
     gap: 16px;
-    font-size: 13px;
-  }
-  .pequeno {
-    font-size: 12px;
-  }
-  .aviso {
-    color: var(--atencao);
     font-size: 13px;
   }
   .recado {

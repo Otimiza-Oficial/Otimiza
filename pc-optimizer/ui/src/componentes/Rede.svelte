@@ -747,11 +747,11 @@
     font-family: var(--fonte-titulo);
     font-size: 30px;
     font-weight: 800;
-    color: var(--ok);
+    color: var(--ok-texto);
     background: color-mix(in srgb, var(--ok) 16%, transparent);
   }
   .nota-fila[data-tom="atencao"] .nota {
-    color: var(--atencao);
+    color: var(--atencao-texto);
     background: color-mix(in srgb, var(--atencao) 16%, transparent);
   }
   .nota-fila[data-tom="perigo"] .nota {
@@ -957,9 +957,6 @@
   }
   .periodo.vazio strong {
     color: var(--tinta-3);
-  }
-  .pequeno {
-    font-size: 12px;
   }
   .chamado {
     display: flex;

@@ -257,6 +257,11 @@ export const commands = {
 	 *  janela.
 	 */
 	relatorioDeSuporte: () => __TAURI_INVOKE<string>("relatorio_de_suporte"),
+	/**
+	 *  Salva o registro do Otimiza em Downloads, num arquivo só e sem o nome do usuário, e mostra no Explorer. Antes o
+	 *  cliente achava `%APPDATA%\pc-optimizer\otimiza.log` pelo Win+R. Devolve o caminho salvo. `LIVRES`.
+	 */
+	salvarLogDeSuporte: () => __TAURI_INVOKE<string>("salvar_log_de_suporte"),
 	/**  O FPS por cima do jogo: modo, canto e se está na tela agora. `LIVRES`: só lê. */
 	overlayEstado: () => __TAURI_INVOKE<EstadoDaSobreposicao_Serialize>("overlay_estado"),
 	/**
@@ -434,7 +439,10 @@ export const commands = {
 	frameBoostLigar: (multiplicador: number, semLimite: boolean | null, escala: NivelDeEscala | null, alvo: number | null) => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_ligar", { multiplicador, semLimite, escala, alvo }),
 	/**  Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença. */
 	frameBoostDestravarBase: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_destravar_base"),
-	/**  `LIVRES`: desligar nunca depende de licença. */
+	/**
+	 *  `LIVRES`: desligar nunca depende de licença. O desligar desfaz o Smooth Motion e o AFMF no histórico do disco: a
+	 *  trava do histórico fica presa enquanto isso, e a memória é relida no fim.
+	 */
 	frameBoostDesligar: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_desligar"),
 	/**  Devolve o FOV de antes. `LIVRES`: desfazer nunca depende de licença. */
 	fovFivemDevolver: () => __TAURI_INVOKE<PainelFovFivem_Serialize>("fov_fivem_devolver"),
@@ -4070,6 +4078,8 @@ export type PainelDoTurbo_Deserialize = {
 	duracao_da_prova_s: number,
 	/**  O jogo aberto trava muitas vezes por minuto (última medida do Turbo): a oferta do Jogo liso. */
 	ritmo?: RitmoDoJogo | null,
+	/**  A última prova parou no meio: o motivo e o que fazer. Antes só ia para o log, e a prova automática sumia da tela. */
+	prova_interrompida?: string | null,
 };
 
 /**  Para a tela. */
@@ -4094,6 +4104,8 @@ export type PainelDoTurbo_Serialize = {
 	duracao_da_prova_s: number,
 	/**  O jogo aberto trava muitas vezes por minuto (última medida do Turbo): a oferta do Jogo liso. */
 	ritmo: RitmoDoJogo | null,
+	/**  A última prova parou no meio: o motivo e o que fazer. Antes só ia para o log, e a prova automática sumia da tela. */
+	prova_interrompida: string | null,
 };
 
 export type PainelFovFivem = PainelFovFivem_Serialize | PainelFovFivem_Deserialize;
@@ -4693,6 +4705,8 @@ export type PlanoJogoLiso_Deserialize = {
 	teto_no_driver?: number | null,
 	/**  Um teto gravado pelo Otimiza que não chega ao jogo. */
 	aviso_do_teto?: string | null,
+	/**  Quem pôs o teto que o driver usa agora (Frame Boost, Jogo liso ou fora do Otimiza), em palavras. */
+	dono_do_teto?: string | null,
 	/**  Como o quadro chegou à tela na medição, e o que fazer se for o caminho caro. */
 	tela?: TelaJogoLiso_Deserialize | null,
 };
@@ -4715,6 +4729,8 @@ export type PlanoJogoLiso_Serialize = {
 	teto_no_driver: number | null,
 	/**  Um teto gravado pelo Otimiza que não chega ao jogo. */
 	aviso_do_teto: string | null,
+	/**  Quem pôs o teto que o driver usa agora (Frame Boost, Jogo liso ou fora do Otimiza), em palavras. */
+	dono_do_teto: string | null,
 	/**  Como o quadro chegou à tela na medição, e o que fazer se for o caminho caro. */
 	tela: TelaJogoLiso_Serialize | null,
 };

@@ -492,7 +492,7 @@ mod tests {
                 match m.hz_disponiveis.iter().rev().find(|hz| **hz != m.hz_atual) {
                     Some(outra) => {
                         println!(
-                            "     já está no máximo; ensaiando {} Hz só para conferir                              a chamada",
+                            "     já está no máximo; ensaiando {} Hz só para conferir a chamada",
                             outra
                         );
                         *outra

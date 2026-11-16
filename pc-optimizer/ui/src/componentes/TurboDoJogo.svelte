@@ -3,15 +3,22 @@
   // confirmou, e a escolha "Menor atraso" × "Mais FPS" deste jogo (jogo competitivo já vem em menor atraso). Ligar e
   // medir continuam no Turbo, com o jogo aberto.
   import { ponte, type TurboDoJogoNaPagina } from "../lib/ponte";
+  import Cartao from "./base/Cartao.svelte";
+  import Esqueleto from "./Esqueleto.svelte";
 
   let { jogo }: { jogo: string } = $props();
 
   let t = $state<TurboDoJogoNaPagina | null>(null);
   let ocupado = $state(false);
+  let lido = $state(false);
   let recado = $state<string | null>(null);
 
   $effect(() => {
-    void ponte.turboDoJogo(jogo, null).then((x) => (t = x)).catch(() => (t = null));
+    void ponte
+      .turboDoJogo(jogo, null)
+      .then((x) => (t = x))
+      .catch(() => (t = null))
+      .finally(() => (lido = true));
   });
 
   async function escolher(menor: boolean) {
@@ -21,8 +28,8 @@
     try {
       t = await ponte.turboDoJogo(jogo, menor);
       recado = tinha && !t.receita ? "A receita era da outra escolha: o próximo Turbo mede este jogo de novo." : null;
-    } catch (e) {
-      recado = String(e);
+    } catch {
+      recado = "Não consegui salvar a escolha. Tente de novo.";
     } finally {
       ocupado = false;
     }
@@ -54,16 +61,17 @@
   const data = (s: number) => new Date(s * 1000).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 </script>
 
-{#if t && t.id}
+{#if !lido}
+  <Cartao titulo="Turbo neste jogo" marca><Esqueleto linhas={3} rotulo="Lendo o Turbo deste jogo" /></Cartao>
+{:else if t && t.id}
   {@const r = t.receita}
   {@const prova = r?.perfil.prova ? PROVA[r.perfil.prova] : null}
-  <div class="turbo-do-jogo">
-    <div class="cabeca">
-      <strong>Turbo neste jogo</strong>
+  <Cartao titulo="Turbo neste jogo" marca>
+    {#snippet selo()}
       {#if r}
         {#if prova}<span class="selo" data-tom={prova.tom}>{prova.texto}</span>{:else}<span class="selo estimado">ainda sem prova</span>{/if}
       {/if}
-    </div>
+    {/snippet}
 
     <div class="escolha">
       <div class="segmento" role="radiogroup" aria-label="Atraso neste jogo">
@@ -91,33 +99,11 @@
     {:else}
       <p class="apoio pequeno">Ainda sem receita: com o jogo aberto, o Turbo mede 10 s, descobre quem segura o FPS e guarda aqui.</p>
     {/if}
-    {#if recado}<p class="apoio pequeno recado-turbo">{recado}</p>{/if}
-  </div>
+    {#if recado}<p class="aviso">{recado}</p>{/if}
+  </Cartao>
 {/if}
 
 <style>
-  .turbo-do-jogo {
-    display: grid;
-    gap: 10px;
-    margin-top: 6px;
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: linear-gradient(180deg, var(--marca-suave), transparent 80%), var(--bloco, var(--superficie-2));
-    border: 1px solid var(--linha);
-  }
-  .cabeca {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-  .cabeca strong {
-    font-family: var(--fonte-titulo);
-    font-size: 15px;
-  }
-  p {
-    margin: 0;
-  }
   .escolha {
     display: flex;
     align-items: center;
@@ -125,7 +111,7 @@
     flex-wrap: wrap;
   }
   .segura {
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .pecas {
     list-style: none;
@@ -139,16 +125,10 @@
     padding: 4px 10px;
     border-radius: 999px;
     border: 1px solid var(--linha-forte);
-    font-size: 12px;
+    font-size: var(--t-apoio);
     font-weight: 500;
-  }
-  .pequeno {
-    font-size: 12px;
   }
   .selo[data-tom="perigo"] {
     color: var(--perigo);
-  }
-  .recado-turbo {
-    color: var(--atencao);
   }
 </style>

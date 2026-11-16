@@ -36,7 +36,9 @@
   // O que mudou neste jogo (trazido da interface 3.6, `desenharLinhaDoJogo`): as partidas medidas, o que trocou em volta
   // da máquina (driver, Windows, placa, BIOS, versão do Otimiza) e o que o Otimiza mudou no meio. Estar no mesmo período
   // não prova que foi a causa: a queda só é dita quando as partidas de antes e de depois passam da margem de erro.
-    import { noTauri } from "../lib/ponte";
+  import { noTauri } from "../lib/ponte";
+  import Cartao from "./base/Cartao.svelte";
+  import Esqueleto from "./Esqueleto.svelte";
 
   let { jogo }: { jogo: string } = $props();
 
@@ -51,6 +53,8 @@
 
   let linha = $state<LinhaDoJogo | null | undefined>(undefined);
   let erro = $state<string | null>(null);
+  /** Fora do bloco que já sabe que a linha existe: o selo do cartão é um snippet, que não herda esse estreitamento. */
+  const estado = $derived(linha?.julgamento.estado ?? null);
 
   $effect(() => {
     const nome = jogo;
@@ -104,15 +108,22 @@
 </script>
 
 {#if erro}
-  <p class="apoio pequeno">Não consegui montar a linha do tempo: {erro}</p>
-{:else if linha}
-  <details class="linha-do-tempo">
-    <summary>
-      O que mudou neste jogo
-      <span class="apoio">
-        {linha.julgamento.estado === "Caiu" ? "· caiu" : linha.julgamento.estado === "NaoCaiu" ? "· não caiu" : "· poucas partidas"}
-      </span>
-    </summary>
+  <Cartao titulo="O que mudou neste jogo">
+    <p class="aviso">Não consegui montar a linha do tempo: {erro}</p>
+  </Cartao>
+{:else if linha === undefined}
+  <Cartao titulo="O que mudou neste jogo"><Esqueleto linhas={3} rotulo="Montando a linha do tempo" /></Cartao>
+{:else if linha === null}
+  <Cartao titulo="O que mudou neste jogo">
+    <p class="apoio">Ainda não há partidas medidas deste jogo. Jogue uma com o Otimiza aberto: cada partida, cada troca de driver ou de Windows e cada mudança do Otimiza entra aqui, na ordem.</p>
+  </Cartao>
+{:else}
+  <Cartao titulo="O que mudou neste jogo">
+    {#snippet selo()}
+      {#if estado === "Caiu"}<span class="selo" data-tom="atencao">caiu</span>
+      {:else if estado === "NaoCaiu"}<span class="selo" data-tom="ok">não caiu</span>
+      {:else}<span class="selo estimado">poucas partidas</span>{/if}
+    {/snippet}
     <div class="corpo">
       <p class:atencao={linha.julgamento.estado === "Caiu"}>{veredito(linha)}</p>
       <ol class="marcos">
@@ -141,25 +152,17 @@
       {/if}
       <p class="apoio pequeno">Das mudanças do Otimiza, só aparecem as que continuam aplicadas.</p>
     </div>
-  </details>
+  </Cartao>
 {/if}
 
 <style>
-  .linha-do-tempo {
-    padding-top: 12px;
-    border-top: 1px solid var(--linha);
-    font-size: 13px;
-  }
-  summary {
-    font-weight: 600;
-  }
   .corpo {
     display: grid;
     gap: 8px;
-    padding-top: 10px;
+    font-size: var(--t-linha);
   }
   .atencao {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .marcos {
     list-style: none;
@@ -181,8 +184,5 @@
   }
   p {
     margin: 0;
-  }
-  .pequeno {
-    font-size: 12px;
   }
 </style>

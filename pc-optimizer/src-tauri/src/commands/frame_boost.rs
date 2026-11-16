@@ -165,7 +165,10 @@ pub async fn frame_boost_ligar(
     let app = crate::aplicativo()?;
     #[cfg(target_os = "windows")]
     {
-        tokio::task::spawn_blocking(move || {
+        // A trava do histórico fica presa enquanto liga: o Smooth Motion e o AFMF gravam no histórico do disco, e a
+        // memória é relida no fim (o mesmo padrão de `rede_provar_placa`).
+        let mut log = state.changes.lock().await;
+        let ligado = tokio::task::spawn_blocking(move || {
             crate::plataforma::frameboost::ligar(
                 &app,
                 multiplicador,
@@ -175,8 +178,10 @@ pub async fn frame_boost_ligar(
             )
         })
         .await
-        .map_err(|e| e.to_string())??;
-        let mut log = state.changes.lock().await;
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+        log.recarregar();
+        ligado?;
         crate::plataforma::frameboost::travar_base(&mut log);
         drop(log);
         return Ok(crate::plataforma::frameboost::painel());
@@ -262,11 +267,8 @@ pub async fn frame_boost_destravar_base(
     #[cfg(target_os = "windows")]
     {
         let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
-        let id = crate::modules::windows::nvdriver::id_do_limite(&jogo.executavel);
         let mut log = state.changes.lock().await;
-        if log.is_applied(&id) {
-            crate::modules::windows::WindowsOptimizer::new().revert(&id, &mut log)?;
-        }
+        crate::plataforma::teto_do_jogo::soltar_base(&jogo.executavel, true, &mut log)?;
         drop(log);
         // A escolha fica: ligar o Frame Boost de novo não trava outra vez sozinho.
         crate::plataforma::base_do_jogo::soltar(&jogo.executavel, true);
@@ -305,14 +307,28 @@ pub async fn frame_boost_travar_base(
     }
 }
 
-/// `LIVRES`: desligar nunca depende de licença.
-#[tauri::command(async)]
+/// `LIVRES`: desligar nunca depende de licença. O desligar desfaz o Smooth Motion e o AFMF no histórico do disco: a
+/// trava do histórico fica presa enquanto isso, e a memória é relida no fim.
+#[tauri::command]
 #[cfg_attr(test, specta::specta)]
-pub fn frame_boost_desligar() -> Result<crate::plataforma::frameboost::Painel, String> {
+pub async fn frame_boost_desligar(
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::frameboost::Painel, String> {
     #[cfg(target_os = "windows")]
-    return crate::plataforma::frameboost::desligar();
+    {
+        let mut log = state.changes.lock().await;
+        let r = tokio::task::spawn_blocking(crate::plataforma::frameboost::desligar)
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
+        log.recarregar();
+        return r;
+    }
     #[cfg(not(target_os = "windows"))]
-    Err("O Frame Boost só existe no Windows.".to_string())
+    {
+        let _ = state;
+        Err("O Frame Boost só existe no Windows.".to_string())
+    }
 }
 
 /// Seis segundos de PresentMon no jogo: o FPS na tela com AFMF ou Smooth Motion, medido. `LIVRES`: só mede.

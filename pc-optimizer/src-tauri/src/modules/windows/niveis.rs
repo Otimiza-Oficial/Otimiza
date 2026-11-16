@@ -74,15 +74,16 @@ impl Nivel {
 /// efeitos visuais e transparência: mudam o que a pessoa vê) e o que pode custar quadro (esses moram no Experimental).
 /// `o_completo_so_acrescenta_o_que_nao_custa_nada` confere a regra contra o catálogo.
 pub const NO_COMPLETO: &[&str] = &[
-    // O jogo na frente: prioridade no processador e no agendador de multimídia, e o timer fino.
-    "system_responsiveness_gaming",
-    "foreground_priority",
-    "mmcss_games",
+    // O timer fino. A prioridade do processador e do agendador de multimídia (`system_responsiveness_gaming`,
+    // `foreground_priority`, `mmcss_games`) saiu do lote na 1.0.5: o Windows prende SystemResponsiveness abaixo de 10
+    // em 20 (o padrão), 0x26 é o mesmo comportamento do padrão 2 no Windows de casa, e quase nenhum jogo se registra
+    // na tarefa "Games" do MMCSS. Escrita sem efeito medido não vai no botão; continuam um a um, para quem quiser.
     "timer_global_win11",
     // O que roda por trás e disputa disco, rede e processador com o jogo. Nenhum serviço parado (ver `RETIRADOS`):
     // a coleta mínima vai pela política, e o serviço continua rodando.
     "telemetry_policy",
-    "edge_background_off",
+    // `edge_background_off` saiu do lote na 1.0.5: escrito como política, faz o navegador mostrar "gerenciado pela sua
+    // organização" (o sinal clássico de sequestro de navegador), sem FPS em troca. Continua um a um.
     "disable_widgets",
     "maps_auto_update_off",
     "servicos_agrupados",
@@ -121,7 +122,8 @@ pub fn pertence(spec: &OptimizationSpec, nivel: Nivel) -> bool {
 pub fn acrescenta_ao_lote(spec: &OptimizationSpec, nivel: Nivel) -> bool {
     use super::catalog::{classe, Classe, Condicao};
     let medido = matches!(classe(spec.id), Classe::Condicional(c) if c != Condicao::SoSePedir);
-    aplica_de_uma_vez(nivel) && pertence(spec, nivel) && !medido
+    // `FORA_DO_LOTE` aparece no nível (a pessoa vê e aplica um a um), mas nunca vai junto no botão que ninguém revisa.
+    aplica_de_uma_vez(nivel) && pertence(spec, nivel) && !medido && !super::catalog::FORA_DO_LOTE.contains(&spec.id)
 }
 
 pub fn itens_do_nivel(nivel: Nivel) -> Vec<&'static str> {
@@ -289,6 +291,17 @@ mod tests {
             "o Experimental precisa exigir medição: {e}"
         );
         assert!(e.contains("um por vez") || e.contains("grupo"));
+    }
+
+    #[test]
+    fn fora_do_lote_aparece_no_completo_mas_nao_vai_no_lote() {
+        for id in super::super::catalog::FORA_DO_LOTE {
+            let spec = CATALOG.iter().find(|s| s.id == *id).unwrap();
+            assert!(itens_do_nivel(Nivel::Competitivo).contains(id), "{id} sumiu da lista do Completo");
+            for nivel in [Nivel::Seguro, Nivel::Competitivo, Nivel::Experimental] {
+                assert!(!acrescenta_ao_lote(spec, nivel), "{id} iria no lote do {nivel:?}");
+            }
+        }
     }
 
     #[test]

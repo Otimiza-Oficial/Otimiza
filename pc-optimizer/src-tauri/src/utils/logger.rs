@@ -67,6 +67,39 @@ impl Logger {
     }
 }
 
+/// **Pura.** Tira o nome da pasta do usuário dos caminhos (`C:\Users\<nome>`): o log vai para o suporte pelo Discord,
+/// e o nome do usuário do Windows costuma ser o nome da pessoa.
+pub fn anonimizar(texto: &str, usuario: &str) -> String {
+    let usuario = usuario.trim();
+    if usuario.is_empty() {
+        return texto.to_string();
+    }
+    let mut saida = texto.to_string();
+    for separador in ["\\", "/"] {
+        for pasta in ["Users", "users", "USERS"] {
+            let para = format!("{pasta}{separador}<usuario>");
+            // O Windows não diferencia maiúsculas: "snyx" e "SnyX" são a mesma pasta.
+            for nome in [usuario.to_string(), usuario.to_lowercase(), usuario.to_uppercase()] {
+                saida = saida.replace(&format!("{pasta}{separador}{nome}"), &para);
+            }
+        }
+    }
+    saida
+}
+
+/// Junta o registro anterior (`otimiza.log.1`, se houver) e o atual num arquivo só, anonimizado, para o suporte.
+pub fn juntar_para_suporte(log: &Path, destino: &Path, usuario: &str) -> std::io::Result<()> {
+    let _vez = ESCRITA
+        .lock()
+        .unwrap_or_else(|envenenado| envenenado.into_inner());
+    let mut texto = String::new();
+    if let Ok(anterior) = std::fs::read(log.with_extension("log.1")) {
+        texto.push_str(&String::from_utf8_lossy(&anterior));
+    }
+    texto.push_str(&String::from_utf8_lossy(&std::fs::read(log)?));
+    std::fs::write(destino, anonimizar(&texto, usuario))
+}
+
 /// Abre e fecha a cada linha de propósito: a última linha antes de um travamento precisa já estar no disco.
 fn anotar_em(caminho: &Path, linha: &str, limite: u64) -> std::io::Result<()> {
     let _vez = ESCRITA
@@ -95,6 +128,29 @@ fn anotar_em(caminho: &Path, linha: &str, limite: u64) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn o_log_para_o_suporte_sai_sem_o_nome_do_usuario() {
+        let t = r"lendo C:\Users\SnyX\AppData\Local\x e c:\users\snyx\Downloads, e C:/Users/SnyX/y";
+        let a = anonimizar(t, "SnyX");
+        assert!(!a.to_lowercase().contains("snyx"), "{}", a);
+        assert!(a.contains(r"Users\<usuario>\AppData"), "{}", a);
+        assert_eq!(anonimizar("nada aqui", ""), "nada aqui");
+    }
+
+    #[test]
+    fn junta_o_anterior_e_o_atual_em_ordem() {
+        let pasta = pasta_de_teste("suporte");
+        std::fs::create_dir_all(&pasta).unwrap();
+        let log = pasta.join("otimiza.log");
+        std::fs::write(log.with_extension("log.1"), "antigo C:\\Users\\Ana\\x\n").unwrap();
+        std::fs::write(&log, "novo\n").unwrap();
+        let destino = pasta.join("saida.txt");
+        juntar_para_suporte(&log, &destino, "Ana").unwrap();
+        let s = std::fs::read_to_string(&destino).unwrap();
+        assert!(s.starts_with("antigo") && s.ends_with("novo\n") && !s.contains("Ana"), "{}", s);
+        let _ = std::fs::remove_dir_all(&pasta);
+    }
 
     fn pasta_de_teste(nome: &str) -> PathBuf {
         let unico = std::time::SystemTime::now()

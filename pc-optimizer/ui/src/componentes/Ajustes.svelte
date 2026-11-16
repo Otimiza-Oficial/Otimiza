@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ferramentas } from "../lib/ferramentas";
   import { como } from "../lib/contrato";
+  import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // A área Ajustes: o FPS por cima do jogo (sobreposição), o que o Otimiza faz sozinho, a licença, a versão e o
@@ -132,7 +133,11 @@
   }
 
   async function usarNuvem(qual: "guardar" | "restaurar") {
-    if (qual === "restaurar" && !confirm("Trazer da nuvem o histórico e as preferências? O que está aqui hoje fica guardado ao lado.")) return;
+    if (
+      qual === "restaurar" &&
+      !(await confirmar({ titulo: "Trazer da nuvem?", texto: "O histórico e as preferências da nuvem entram no lugar dos daqui. O que está aqui hoje fica guardado ao lado.", sim: "Trazer" }))
+    )
+      return;
     nuvemOcupada = true;
     nuvem = null;
     try {
@@ -191,6 +196,15 @@
     try {
       await navigator.clipboard.writeText(await ponte.relatorioDeSuporte());
       recado = { tom: "ok", texto: "Relatório copiado. Cole na conversa com o suporte." };
+    } catch (e) {
+      recado = { tom: "perigo", texto: String(e) };
+    }
+  }
+
+  async function salvarLog() {
+    try {
+      const caminho = await ponte.salvarLogDeSuporte();
+      recado = { tom: "ok", texto: `Registro salvo em ${caminho}. Mande esse arquivo para o suporte.` };
     } catch (e) {
       recado = { tom: "perigo", texto: String(e) };
     }
@@ -430,6 +444,10 @@
         <span class="info">Relatório para o suporte<span class="apoio">O que o atendimento precisa, sem dados pessoais</span></span>
         <button class="btn" onclick={copiarRelatorio}>Copiar</button>
       </li>
+      <li>
+        <span class="info">Registro do Otimiza<span class="apoio">O passo a passo do que o Otimiza fez, para o suporte achar a causa. Sai sem o seu nome de usuário</span></span>
+        <button class="btn" onclick={salvarLog}>Salvar em Downloads</button>
+      </li>
     </ul>
   </section>
   <Transparencia />
@@ -453,7 +471,7 @@
     gap: 2px;
   }
   .info.atencao {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .controles {
     display: flex;
@@ -465,7 +483,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
+    font-size: var(--t-linha);
     color: var(--tinta-2);
     cursor: pointer;
   }
@@ -487,6 +505,6 @@
   .cantos button {
     width: 34px;
     padding: 0;
-    font-size: 15px;
+    font-size: var(--t-corpo);
   }
 </style>

@@ -117,7 +117,7 @@ pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
                 && matches!(p.evidencia, Evidencia::ProcessoRodando(_))
         }) {
             Some(p) => Permissao::Recusado(format!(
-                "Não abri a janela por cima do jogo: o {} está aberto e trata sobreposições como                  suspeitas. Feche-o ou use a mira e a geração de quadros do próprio jogo.",
+                "Não abri a janela por cima do jogo: o {} está aberto e trata sobreposições como suspeitas. Feche-o ou use a mira e a geração de quadros do próprio jogo.",
                 p.qual.nome()
             )),
             None => Permissao::Pode,

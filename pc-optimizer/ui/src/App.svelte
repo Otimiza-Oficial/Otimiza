@@ -15,6 +15,7 @@
   import Prova from "./componentes/Prova.svelte";
   import Sistema from "./componentes/Sistema.svelte";
   import PedidoDeFeedback from "./componentes/PedidoDeFeedback.svelte";
+  import Confirmar from "./componentes/base/Confirmar.svelte";
   import BoasVindas, { ABRIR_BOAS_VINDAS, type ModoDasBoasVindas } from "./componentes/BoasVindas.svelte";
   import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
@@ -23,7 +24,7 @@
   import { porId, temporadaDe } from "./lib/temporadas";
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
-  import { areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
+  import { ABRIR_AREA, areas, grupoDe, grupos, type Grupo, type IdDaArea, type IdDoGrupo } from "./lib/areas";
   import { contextoDa } from "./lib/contexto";
   import { avisos as lerAvisos } from "./lib/clima";
   import { capaDepoisDaFalha, capaRemota, iniciais } from "./lib/capas";
@@ -800,7 +801,10 @@
 
     const ajustar = () => void medirPilula();
     window.addEventListener("resize", ajustar);
+    const pediuArea = (e: Event) => abrir((e as CustomEvent<IdDaArea>).detail);
+    window.addEventListener(ABRIR_AREA, pediuArea);
     return () => {
+      window.removeEventListener(ABRIR_AREA, pediuArea);
       vivo = false;
       deixarCalor?.();
       deixarPartida.forEach((f) => f());
@@ -1064,7 +1068,7 @@
                   <div><dt>1% pior</dt><dd class="numero">{inteiro(partidaDoPlayer.ultima.low_1pct)}</dd></div>
                 </dl>
                 {#if partidaDoPlayer.ganho_low.estado === "Medido" && partidaDoPlayer.ganho_low.pct != null}
-                  <p class="sec pequeno"><span class="selo-medido">Medido</span> {partidaDoPlayer.ganho_low.pct >= 0 ? "+" : ""}{inteiro(partidaDoPlayer.ganho_low.pct)}% no 1% pior desde que otimizou</p>
+                  <p class="sec pequeno"><span class="selo medido">medido</span> {partidaDoPlayer.ganho_low.pct >= 0 ? "+" : ""}{inteiro(partidaDoPlayer.ganho_low.pct)}% no 1% pior desde que otimizou</p>
                 {/if}
               {:else}
                 <p class="sec pequeno">Jogue com o Otimiza aberto: ele mede o FPS sozinho, sem nada por cima do jogo.</p>
@@ -1214,6 +1218,7 @@
   </nav>
 
   <PedidoDeFeedback />
+  <Confirmar />
 
   {#if boasVindas}
     <BoasVindas
@@ -1887,6 +1892,8 @@
   .conteudo {
     height: 100%;
     overflow: auto;
+    /* O espaço da barra fica reservado: a página não pula de lado quando uma sub-aba é curta e a outra rola. */
+    scrollbar-gutter: stable;
     padding: 16px;
   }
   .grade {
@@ -1980,13 +1987,13 @@
     height: 22px;
     border-radius: 50%;
     background: color-mix(in srgb, var(--atencao) 22%, transparent);
-    color: var(--atencao);
+    color: var(--atencao-texto);
     font-size: 12px;
     font-weight: 800;
   }
   .item-pronto.ok .marca-pronto {
     background: color-mix(in srgb, var(--ok) 20%, transparent);
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .item-pronto.ok .texto-pronto {
     color: var(--sec);

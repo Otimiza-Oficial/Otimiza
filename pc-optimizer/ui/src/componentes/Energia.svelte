@@ -33,6 +33,9 @@
   let jogo = $state<EnergiaDeJogo | null>(null);
   let tetos = $state<RelatorioDeTetos | null>(null);
   let diagnostico = $state<DiagnosticoDeEnergia | null>(null);
+  /** Leitura que falhou não fica "procurando" para sempre: diz e oferece tentar de novo. */
+  let tetosFalhou = $state(false);
+  let diagnosticoFalhou = $state(false);
   let verDiagnostico = $state(false);
   let ocupado = $state<"" | "simulando" | "aplicando" | "reparando" | "desfazendo" | "jogo">("");
   let erro = $state<string | null>(null);
@@ -102,8 +105,16 @@
     void lerVistoria();
     ponte.administrador().then((a) => (admin = a)).catch(() => (admin = null));
     ponte.energiaDeJogo().then((j) => (jogo = j)).catch((e) => (erro = String(e)));
-    ponte.tetosEscondidos().then((t) => (tetos = t)).catch(() => {});
+    void lerTetos();
   });
+
+  function lerTetos() {
+    tetosFalhou = false;
+    return ponte
+      .tetosEscondidos()
+      .then((t) => (tetos = t))
+      .catch(() => (tetosFalhou = true));
+  }
 
   async function executar(tipo: "simulando" | "aplicando" | "reparando", f: () => Promise<RelatorioDoPlano>) {
     ocupado = tipo;
@@ -156,7 +167,11 @@
 
   async function abrirDiagnostico() {
     verDiagnostico = !verDiagnostico;
-    if (verDiagnostico && !diagnostico) diagnostico = await ponte.diagnosticoDeEnergia().catch(() => null);
+    if (verDiagnostico && !diagnostico) {
+      diagnosticoFalhou = false;
+      diagnostico = await ponte.diagnosticoDeEnergia().catch(() => null);
+      diagnosticoFalhou = diagnostico === null;
+    }
   }
 
   function valor(v: number | null) {
@@ -382,7 +397,10 @@
   <!-- Limites escondidos -->
   <section class="secao">
     <h2>Limites escondidos</h2>
-    {#if tetos === null}
+    {#if tetosFalhou}
+      <p class="aviso">Não consegui procurar os limites agora.</p>
+      <button class="btn" onclick={lerTetos}>Tentar de novo</button>
+    {:else if tetos === null}
       <Esqueleto linhas={2} rotulo="Procurando" />
     {:else if tetos.tetos.length === 0}
       <p class="apoio">Nenhum limite de FPS escondido no driver, no RivaTuner ou na configuração dos jogos que eu sei ler.</p>
@@ -404,8 +422,10 @@
       {verDiagnostico ? "Esconder" : "Por que não funcionou?"}
     </button>
     {#if verDiagnostico}
-      {#if !diagnostico}
-        <p class="apoio">Conferindo o Windows…</p>
+      {#if diagnosticoFalhou}
+        <p class="aviso">Não consegui conferir o Windows agora. Feche e abra este diagnóstico para tentar de novo.</p>
+      {:else if !diagnostico}
+        <Esqueleto linhas={3} rotulo="Conferindo o Windows" />
       {:else}
         <p>{diagnostico.explicacao_do_governo}</p>
         <ul class="lista">
@@ -478,10 +498,10 @@
     font-size: 22px;
   }
   .ganhos-calibracao [data-tom="ok"] {
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .ganhos-calibracao [data-tom="atencao"] {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .notas {
     list-style: none;
@@ -517,9 +537,6 @@
   }
   .notas .numero {
     text-align: right;
-  }
-  .pequeno {
-    font-size: 12px;
   }
   .achados-calibracao {
     list-style: none;
@@ -607,7 +624,7 @@
     font-size: 13px;
   }
   .impedimento {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .secao > .btn.quieto {
     justify-self: start;

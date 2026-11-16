@@ -240,7 +240,7 @@ mod tests_1_8 {
         ] {
             assert!(
                 !chave_inexistente(negado),
-                "{:?} nao pode ser lido como chave inexistente: o desfazer apagaria                  uma chave que o cliente tinha",
+                "{:?} nao pode ser lido como chave inexistente: o desfazer apagaria uma chave que o cliente tinha",
                 negado
             );
         }

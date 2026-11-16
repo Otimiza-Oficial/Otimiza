@@ -1,5 +1,6 @@
 <script lang="ts">
   import { como } from "../lib/contrato";
+  import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./Esqueleto.svelte";
   // A BIOS (trazida da interface antiga, `src/bios.ts`). O Otimiza NÃO grava na BIOS: em placa de consumo um erro ali
@@ -175,7 +176,7 @@
   }
 
   async function reiniciarNaBios() {
-    if (!confirm("O PC vai reiniciar direto na tela da BIOS em 5 segundos. Salve o que estiver aberto. Continuar?")) return;
+    if (!(await confirmar({ titulo: "Reiniciar na BIOS?", texto: "O PC reinicia direto na tela da BIOS em 5 segundos. Salve o que estiver aberto antes.", sim: "Reiniciar agora", perigo: true }))) return;
     guardarFoto();
     reiniciando = true;
     try {
@@ -279,10 +280,6 @@
     gap: 10px;
     flex-wrap: wrap;
   }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
   .erro {
     color: var(--perigo);
   }
@@ -301,8 +298,5 @@
   }
   .titulo {
     font-weight: 500;
-  }
-  .pequeno {
-    font-size: 12px;
   }
 </style>

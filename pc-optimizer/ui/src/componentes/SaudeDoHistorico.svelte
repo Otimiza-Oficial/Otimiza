@@ -140,20 +140,13 @@
     font-size: 13px;
   }
   .desfecho[data-tom="ok"] {
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .desfecho[data-tom="atencao"] {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .desfecho[data-tom="perigo"] {
     color: var(--perigo);
-  }
-  .aviso {
-    color: var(--atencao);
-    font-size: 13px;
-  }
-  .pequeno {
-    font-size: 12px;
   }
   .recado {
     font-size: 13px;

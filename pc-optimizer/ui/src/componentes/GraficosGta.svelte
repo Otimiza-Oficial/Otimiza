@@ -5,7 +5,7 @@
   // (com o ganho medido por terceiros, dito assim), e três perfis com a prévia chave por chave antes de aplicar. Aplicar
   // entra no histórico e se desfaz de lá.
   import { onMount } from "svelte";
-    import { noTauri } from "../lib/ponte";
+  import { noTauri } from "../lib/ponte";
 
   type Relatorio = { arquivo: string | null; jogo: string; caros: { chave: string; valor: string; onde: string; ganho: string }[]; findings: { id: string; title: string; measured: string; advice: string }[] };
   const PERFIS = [
@@ -18,12 +18,14 @@
   let escolhido = $state<string | null>(null);
   let previa = $state<[string, string, string, string][] | null>(null);
   let ocupado = $state(false);
+  let lido = $state(false);
   let recado = $state<string | null>(null);
 
   onMount(async () => {
     rel = noTauri
       ? await como<Relatorio>(commands.analyzeGameConfig()).catch(() => null)
       : { arquivo: "settings.xml", jogo: "GTA V / FiveM", caros: [{ chave: "MSAA", valor: "4", onde: "Gráficos › MSAA", ganho: "até 40% de FPS a menos (medido por Digital Foundry)" }], findings: [] };
+    lido = true;
   });
 
   async function verPrevia(id: string) {
@@ -54,9 +56,10 @@
   }
 </script>
 
-{#if rel?.arquivo}
+{#if lido && !rel?.arquivo}
+  <p class="apoio">Não achei o arquivo de gráficos do GTA. Abra o FiveM uma vez e feche: ele cria o arquivo.</p>
+{:else if rel?.arquivo}
   <div class="gta">
-    <span class="titulo">Gráficos do GTA V / FiveM</span>
     {#each rel.caros as c (c.chave)}
       <p class="apoio pequeno"><b>{c.chave} = {c.valor}</b> ({c.onde}): {c.ganho}</p>
     {/each}
@@ -88,11 +91,6 @@
   .gta {
     display: grid;
     gap: 8px;
-    padding: 16px 0 0;
-    border-top: 1px solid var(--linha);
-  }
-  .titulo {
-    font-weight: 600;
   }
   p {
     margin: 0;
@@ -126,15 +124,9 @@
     padding-left: 18px;
     display: grid;
     gap: 4px;
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .btn {
     justify-self: start;
-  }
-  .pequeno {
-    font-size: 12px;
-  }
-  .recado {
-    font-size: 13px;
   }
 </style>

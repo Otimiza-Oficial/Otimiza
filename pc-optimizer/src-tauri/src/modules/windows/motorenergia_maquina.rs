@@ -330,6 +330,31 @@ pub fn teste_foi_interrompido() -> bool {
     pasta().join("teste_em_andamento").exists()
 }
 
+/// O que fazer com um teste do motor que parou no meio.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recuperacao {
+    /// Volta ao plano de antes (ou refaz o OTIMIZA do botão).
+    Restaurar,
+    /// O plano de antes foi apagado: volta ao padrão do Windows.
+    PadraoWindows,
+    /// Sem backup, não há o que devolver: a marca sai, com aviso.
+    Descartar,
+}
+
+/// **Pura.** Antes, sem backup ou com o plano de antes apagado, a restauração falhava em toda abertura e a marca do
+/// teste nunca saía (o PC ficava no último candidato testado). `plano_existe`: `None` = não consegui ler (tenta restaurar).
+pub fn decidir_recuperacao(otimiza_no_historico: bool, tem_backup: bool, plano_existe: Option<bool>) -> Recuperacao {
+    if otimiza_no_historico {
+        Recuperacao::Restaurar
+    } else if !tem_backup {
+        Recuperacao::Descartar
+    } else if plano_existe == Some(false) {
+        Recuperacao::PadraoWindows
+    } else {
+        Recuperacao::Restaurar
+    }
+}
+
 pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     if !teste_foi_interrompido() {
         return None;
@@ -337,9 +362,21 @@ pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     if !registry::is_elevated() {
         return None;
     }
-    let r = restaurar_anterior(
-        crate::modules::changelog::ChangeLog::load().is_applied("plano_otimiza"),
-    );
+    let otimiza = crate::modules::changelog::ChangeLog::load().is_applied("plano_otimiza");
+    let backup = ler_backup();
+    let existe = backup.as_ref().and_then(|b| power::plano_existe(&b.plano_anterior));
+    let r = match decidir_recuperacao(otimiza, backup.is_some(), existe) {
+        Recuperacao::Restaurar => restaurar_anterior(otimiza),
+        Recuperacao::PadraoWindows => {
+            crate::utils::Logger::warn("motor de energia: o plano de antes do teste não existe mais; volta ao padrão do Windows");
+            restaurar_padrao_windows()
+        }
+        Recuperacao::Descartar => {
+            crate::utils::Logger::warn("motor de energia: teste interrompido sem backup do plano; marca descartada");
+            marcar_teste_em_andamento(false);
+            return None;
+        }
+    };
     if r.is_ok() {
         marcar_teste_em_andamento(false);
     }
@@ -1135,6 +1172,15 @@ pub fn olhar(vigia: &mut Vigia) -> Option<EventoDinamico> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn teste_interrompido_nunca_fica_preso() {
+        assert_eq!(decidir_recuperacao(false, false, None), Recuperacao::Descartar, "sem backup");
+        assert_eq!(decidir_recuperacao(false, true, Some(false)), Recuperacao::PadraoWindows, "plano apagado");
+        assert_eq!(decidir_recuperacao(false, true, None), Recuperacao::Restaurar, "sem leitura: tenta");
+        assert_eq!(decidir_recuperacao(false, true, Some(true)), Recuperacao::Restaurar);
+        assert_eq!(decidir_recuperacao(true, false, None), Recuperacao::Restaurar, "o OTIMIZA do botão é refeito");
+    }
 
     /// Só lê: `cargo test --lib -- --ignored motorenergia_maquina`.
     #[test]

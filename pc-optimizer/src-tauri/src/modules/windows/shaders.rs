@@ -94,6 +94,7 @@ fn locais() -> Vec<(&'static str, &'static str, PathBuf)> {
     ]
     .into_iter()
     .chain(shadercache_da_steam(730).map(|p| ("steam_cs2", "Cache de shader do CS2 (Steam)", p)))
+    .chain(shadercache_da_steam(1172470).map(|p| ("steam_apex", "Cache de shader do Apex (Steam)", p)))
     .collect()
 }
 

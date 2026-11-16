@@ -476,9 +476,6 @@
   p {
     margin: 0;
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .nota {
     padding-top: 10px;
     border-top: 1px solid var(--linha);

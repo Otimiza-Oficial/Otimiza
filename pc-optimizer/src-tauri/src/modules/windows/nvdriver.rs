@@ -313,6 +313,8 @@ const ID_DRS_GET_PROFILE_INFO: u32 = 0x61CD_6FD6;
 
 /// `NVAPI_OK`. Todo erro é negativo.
 const NVAPI_OK: i32 = 0;
+/// O ajuste não está no perfil: ninguém tocou nele, vale o de fábrica (`nvapi.h`).
+const NVAPI_SETTING_NOT_FOUND: i32 = -160;
 
 /// Escrever num ajuste de outro tipo como se fosse número é a segunda forma de estragar o driver.
 const NVDRS_DWORD_TYPE: u32 = 0;
@@ -737,6 +739,22 @@ fn interpretar_leitura(leitura_deu_certo: bool, e_predefinido: u32, valor: u32) 
     (e_predefinido != 0, valor)
 }
 
+/// PURA. Antes de GRAVAR, só "ajuste ausente" vale como "estava no padrão". Qualquer outra falha de leitura cancela: senão o
+/// desfazer devolveria o padrão de fábrica por cima de um valor que a pessoa tinha escolhido à mão.
+fn anterior_para_gravar(situacao: i32, e_predefinido: u32, valor: u32) -> Result<(bool, u32), String> {
+    match situacao {
+        NVAPI_OK => Ok(interpretar_leitura(true, e_predefinido, valor)),
+        NVAPI_SETTING_NOT_FOUND => Ok((true, 0)),
+        _ => Err("não consegui ler o valor atual no driver da NVIDIA, então não teria como desfazer. Nada foi alterado.".to_string()),
+    }
+}
+
+fn ler_anterior_para_gravar(api: &Api, sessao: *mut c_void, perfil: *mut c_void, id: u32) -> Result<(bool, u32), String> {
+    let mut ajuste = NvdrsSetting::zerada();
+    let situacao = unsafe { (api.ler_ajuste)(sessao, perfil, id, &mut ajuste) };
+    anterior_para_gravar(situacao, ajuste.e_predefinido_agora, ajuste.valor_atual.numero)
+}
+
 fn ler_valor(api: &Api, sessao: *mut c_void, perfil: *mut c_void, id: u32) -> (bool, u32) {
     let mut ajuste = NvdrsSetting::zerada();
     let situacao = unsafe { (api.ler_ajuste)(sessao, perfil, id, &mut ajuste) };
@@ -798,7 +816,7 @@ pub fn aplicar(opcao: &str) -> Result<String, String> {
     na_sessao(move |api, sessao, perfil| {
         conferir_o_numero(api, alvo, id)?;
 
-        let (era_o_padrao, anterior) = ler_valor(api, sessao, perfil, id);
+        let (era_o_padrao, anterior) = ler_anterior_para_gravar(api, sessao, perfil, id)?;
         escrever_valor_cru(api, sessao, perfil, id, alvo.valor_otimizado)?;
 
         Ok(codificar_anterior(era_o_padrao, anterior))
@@ -953,7 +971,7 @@ pub fn aplicar_limite(
             }
         };
 
-        let (era_o_padrao, anterior) = ler_valor(api, sessao, perfil, id);
+        let (era_o_padrao, anterior) = ler_anterior_para_gravar(api, sessao, perfil, id)?;
         escrever_valor_cru(api, sessao, perfil, id, fps)?;
 
         Ok(LimiteAplicado {
@@ -1205,9 +1223,9 @@ pub fn ligar_smooth_motion(executavel: &str) -> Result<LimiteAplicado, String> {
                 .to_string()
         })?;
         let (perfil, perfil_criado) = perfil_ou_novo(perfis, sessao, nome_do_app, nome_do_perfil)?;
-        let (era_o_padrao, anterior) = ler_valor(api, sessao, perfil, SMOOTH_MOTION);
+        let (era_o_padrao, anterior) = ler_anterior_para_gravar(api, sessao, perfil, SMOOTH_MOTION)?;
         escrever_valor_cru(api, sessao, perfil, SMOOTH_MOTION, SMOOTH_MOTION_LIGADO).map_err(|_| {
-            "este driver da NVIDIA não conhece o Smooth Motion (precisa de RTX 40 ou 50 e driver recente). Nada foi \n             alterado: atualize o driver ou ligue pelo app da NVIDIA."
+            "este driver da NVIDIA não conhece o Smooth Motion (precisa de RTX 40 ou 50 e driver recente). Nada foi alterado: atualize o driver ou ligue pelo app da NVIDIA."
                 .to_string()
         })?;
         Ok(LimiteAplicado {
@@ -1705,7 +1723,7 @@ mod tests {
                 }
                 // Número que o driver não conhece é número errado: sem isto o botão nunca funcionaria, calado.
                 None => panic!(
-                    "{}: este driver nao conhece o ajuste {:#010X} -- o numero da tabela \n                     esta errado, ou nao existe mais nesta versao do driver",
+                    "{}: este driver nao conhece o ajuste {:#010X} -- o numero da tabela esta errado, ou nao existe mais nesta versao do driver",
                     opcao.id, id
                 ),
             }
@@ -1739,6 +1757,15 @@ mod tests {
              placas -- qualquer constante no lugar faz o produto oferecer ajustes \
              de NVIDIA em maquina com Radeon"
         );
+    }
+
+    #[test]
+    fn so_ajuste_ausente_vale_como_padrao_antes_de_gravar() {
+        assert_eq!(anterior_para_gravar(NVAPI_OK, 0, 3), Ok((false, 3)), "a escolha da pessoa é guardada");
+        assert_eq!(anterior_para_gravar(NVAPI_OK, 1, 3), Ok((true, 3)));
+        assert_eq!(anterior_para_gravar(NVAPI_SETTING_NOT_FOUND, 0, 0), Ok((true, 0)));
+        assert!(anterior_para_gravar(-1, 0, 3).is_err(), "falha genérica: não grava sem saber o que desfazer");
+        assert!(anterior_para_gravar(-5, 0, 0).is_err());
     }
 
     #[test]
@@ -1778,7 +1805,7 @@ mod tests {
             fonte.contains("situacao == NVAPI_OK,")
                 && fonte.contains("ajuste.e_predefinido_agora,")
                 && fonte.contains("ajuste.valor_atual.numero,"),
-            "`ler_valor` precisa interpretar os valores que a NVAPI escreveu na              estrutura, e nao constantes"
+            "`ler_valor` precisa interpretar os valores que a NVAPI escreveu na estrutura, e nao constantes"
         );
     }
 

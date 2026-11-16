@@ -202,7 +202,7 @@
     transition: width var(--mov-medio) ease;
   }
   .exige {
-    color: var(--atencao);
+    color: var(--atencao-texto);
   }
   .acoes {
     display: flex;
@@ -222,13 +222,10 @@
     font-size: 13px;
   }
   .passos li[data-ok="true"] {
-    color: var(--ok);
+    color: var(--ok-texto);
   }
   .passos li[data-ok="false"] {
     color: var(--perigo);
-  }
-  .pequeno {
-    font-size: 12px;
   }
   .fim {
     font-size: 13px;

@@ -188,20 +188,28 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz_lido: Option<u32>, competit
                 )
             }
         }
-        Gargalo::Processador => (
-            None,
-            (!competitivo).then_some(0),
-            true,
-            false,
-            if competitivo {
+        // A geração só quando o jogo fica longe do monitor (a mesma régua da placa): perto dos Hz, o FPS base do Frame
+        // Boost cai na metade do monitor (FiveM de 130 fps em 144 Hz → 72 reais) e o jogo fica pesado na mão.
+        Gargalo::Processador => {
+            let gera = !competitivo && fps.is_some_and(|f| f < hz * 0.9);
+            let explicacao = if competitivo {
                 "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). O processador \
                  passa a subir de frequência sem hesitar com o jogo aberto. Menor atraso escolhido: sem geração."
-            } else {
+                    .to_string()
+            } else if gera {
                 "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). A geração de \
                  quadros enche o monitor e o processador passa a subir de frequência sem hesitar."
-            }
-            .to_string(),
-        ),
+                    .to_string()
+            } else {
+                format!(
+                    "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). O processador \
+                     passa a subir de frequência sem hesitar. Sem geração de quadros: o jogo já fica perto dos {:.0} Hz \
+                     do monitor, e gerar travaria o FPS real na metade dele.",
+                    hz
+                )
+            };
+            (None, gera.then_some(0), true, false, explicacao)
+        }
         Gargalo::Memoria => (
             None,
             None,
@@ -585,6 +593,34 @@ pub struct Painel {
     pub duracao_da_prova_s: u64,
     /// O jogo aberto trava muitas vezes por minuto (última medida do Turbo): a oferta do Jogo liso.
     pub ritmo: Option<Ritmo>,
+    /// A última prova parou no meio: o motivo e o que fazer. Antes só ia para o log, e a prova automática sumia da tela.
+    pub prova_interrompida: Option<String>,
+}
+
+#[cfg(target_os = "windows")]
+static INTERROMPIDA: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Guarda (ou limpa, com `None`) o motivo de a última prova ter parado no meio, para a tela.
+#[cfg(target_os = "windows")]
+pub fn anotar_interrupcao(motivo: Option<String>) {
+    if let Ok(mut m) = INTERROMPIDA.lock() {
+        *m = motivo;
+    }
+}
+
+/// **Pura.** O erro da prova com a próxima ação para a pessoa.
+pub fn explicar_interrupcao(erro: &str) -> String {
+    let e = erro.to_lowercase();
+    let proximo = if e.contains("fechou") {
+        "Abra o jogo, entre na partida e toque em Provar de novo: ela leva uns 5 minutos com o jogo aberto."
+    } else if e.contains("powercfg") || e.contains("administrador") {
+        "O Windows recusou mudar a energia do processador. Abra o Otimiza como administrador e toque em Provar de novo."
+    } else if e.contains("rodando") || e.contains("em andamento") {
+        "Espere a outra medição terminar e toque em Provar de novo."
+    } else {
+        "Com o jogo aberto, toque em Provar de novo. Se parar outra vez, mande o registro do Otimiza ao suporte (Ajustes)."
+    };
+    format!("A prova parou no meio: {}. {}", erro.trim().trim_end_matches('.'), proximo)
 }
 
 #[cfg(target_os = "windows")]
@@ -769,6 +805,7 @@ pub fn painel() -> Painel {
             .and_then(|g| g.clone())
             .filter(|(jogo, _)| id.as_deref() == Some(jogo.as_str()))
             .map(|(_, r)| r),
+        prova_interrompida: INTERROMPIDA.lock().ok().and_then(|m| m.clone()),
     }
 }
 
@@ -1144,6 +1181,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_prova_interrompida_diz_o_que_fazer() {
+        // O cliente de 15/11: a prova abortava toda vez e a tela não dizia nada.
+        let m = explicar_interrupcao("o Windows recusou `powercfg -setacvalueindex ...`: does not exist");
+        assert!(m.starts_with("A prova parou no meio") && m.contains("administrador"), "{}", m);
+        assert!(explicar_interrupcao("O jogo fechou no meio da prova. O Turbo ficou desligado.").contains("Abra o jogo"));
+        assert!(explicar_interrupcao("algo novo").contains("registro do Otimiza"));
+    }
+
+    #[test]
     fn o_perfil_do_gta_so_e_oferecido_no_fivem_e_no_gta() {
         assert!(oferece_perfil_do_jogo("fivem"));
         assert!(!oferece_perfil_do_jogo("gta5"), "a trava de jogo aberto e o arquivo são do FiveM");
@@ -1185,6 +1231,19 @@ mod tests {
         assert!(ritmo_a_oferecer(&com_geracao, 70.0, 30.0, 144).is_none(), "a geração já trava a base");
         let com_escala = montar(Gargalo::Placa, Some(70.0), Some(144), true);
         assert!(ritmo_a_oferecer(&com_escala, 70.0, 30.0, 144).is_none(), "a escala sobe o FPS depois da medida");
+    }
+
+    #[test]
+    fn processador_perto_do_monitor_nao_liga_a_geracao() {
+        // O FiveM do sócio: 130 fps num monitor de 144 Hz. Com geração, o FPS base iria para 72 (a metade dos Hz).
+        let perto = montar(Gargalo::Processador, Some(130.0), Some(144), false);
+        assert_eq!(perto.multiplicador, None, "perto dos Hz: o FPS real fica como está");
+        assert!(perto.energia);
+        assert!(perto.explicacao.contains("144 Hz"));
+        let sem_medida = montar(Gargalo::Processador, None, Some(144), false);
+        assert_eq!(sem_medida.multiplicador, None, "sem FPS medido, não arrisca o FPS real");
+        let longe = montar(Gargalo::Processador, Some(70.0), Some(144), false);
+        assert_eq!(longe.multiplicador, Some(0), "longe do monitor: a geração enche a tela");
     }
 
     #[test]

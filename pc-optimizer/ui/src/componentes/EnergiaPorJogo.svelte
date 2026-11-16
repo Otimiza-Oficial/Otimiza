@@ -110,9 +110,6 @@
     gap: 16px;
     font-size: 13px;
   }
-  .pequeno {
-    font-size: 12px;
-  }
   .recado {
     font-size: 13px;
   }
