@@ -84,6 +84,12 @@
   const a = $derived(p?.ativo ?? null);
   const rec = $derived(p?.recomendado ?? null);
   const doOtimiza = $derived(rec?.recurso === "FrameBoostOtimiza");
+  /** Sem gerador: o motivo do gerador do Otimiza (o anticheat aberto, a tela cheia antiga) diz o que fazer; a frase
+   *  genérica deixava a pessoa achando que a placa não serve. */
+  const porQueNaoOtimiza = $derived.by(() => {
+    const o = p?.opcoes.find((r) => r.recurso === "FrameBoostOtimiza");
+    return o ? motivo(o.suporte) : null;
+  });
   const experimental = $derived(
     rec?.recurso === "FrameBoostSmoothMotion" && (rec ? (motivo(rec.suporte) ?? "") : "").startsWith("Experimental"),
   );
@@ -203,7 +209,7 @@
         <strong>{p.jogo ? "Nenhum gerador funciona aqui" : "Abra um jogo"}</strong>
         <p class="apoio">
           {p.jogo
-            ? "Nem o jogo, nem o driver, nem o gerador do Otimiza servem neste jogo com esta placa."
+            ? (porQueNaoOtimiza ?? "Nem o jogo, nem o driver, nem o gerador do Otimiza servem neste jogo com esta placa.")
             : "Com o jogo aberto, o Otimiza escolhe o melhor gerador de quadros: o do jogo, depois o do driver, depois o dele."}
         </p>
       </div>

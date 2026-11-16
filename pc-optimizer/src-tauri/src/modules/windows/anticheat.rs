@@ -51,6 +51,9 @@ pub struct Presenca {
 const PROCESSOS: &[(&str, AntiCheat)] = &[
     ("vgc.exe", AntiCheat::Vanguard),
     ("vgtray.exe", AntiCheat::Vanguard),
+    // O jogo, não o anticheat: o `vgc` e o `vgtray` rodam desde o boot em todo PC com o Valorant instalado. É o jogo aberto
+    // que diz que a partida (e a caça a sobreposições) começou.
+    ("valorant-win64-shipping.exe", AntiCheat::Vanguard),
     ("easyanticheat.exe", AntiCheat::EasyAntiCheat),
     ("easyanticheat_eos.exe", AntiCheat::EasyAntiCheat),
     ("beservice.exe", AntiCheat::BattlEye),
@@ -101,6 +104,15 @@ impl Permissao {
     }
 }
 
+/// Pura: esta presença é uma partida que caça sobreposições acontecendo agora?
+fn barra_sobreposicao(p: &Presenca) -> bool {
+    match (&p.qual, &p.evidencia) {
+        (AntiCheat::Vanguard, Evidencia::ProcessoRodando(nome)) => nome.eq_ignore_ascii_case("valorant-win64-shipping.exe"),
+        (AntiCheat::FaceIt, Evidencia::ProcessoRodando(_)) => true,
+        _ => false,
+    }
+}
+
 /// Pura: a regra de risco mais importante do produto, testável sem anticheat na máquina de quem desenvolve.
 pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
     let qualquer_ativo = presencas.iter().find(|p| p.ativo_agora);
@@ -110,12 +122,10 @@ pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
         // Rastreamento de eventos e plano de energia não encostam no processo do jogo.
         Acao::PlanoDeEnergia | Acao::MedirQuadros | Acao::CoresDoMonitor => Permissao::Pode,
 
-        // Só com o cliente de um anticheat que caça sobreposições ABERTO (partida de Valorant ou de FACEIT). O serviço
-        // do Vanguard no boot sozinho não bloqueia: quem tem Valorant instalado também joga FiveM.
-        Acao::SobreporJanela => match presencas.iter().find(|p| {
-            matches!(p.qual, AntiCheat::Vanguard | AntiCheat::FaceIt)
-                && matches!(p.evidencia, Evidencia::ProcessoRodando(_))
-        }) {
+        // Só com uma partida que caça sobreposições ABERTA: o Valorant aberto, ou o cliente do FACEIT. O Vanguard que roda
+        // desde o boot (o serviço `vgk`, o `vgc` e o ícone `vgtray`) sozinho não bloqueia: quem tem Valorant instalado
+        // também joga FiveM, e até a 1.0.5 o Frame Boost e a mira sumiam nele.
+        Acao::SobreporJanela => match presencas.iter().find(|p| barra_sobreposicao(p)) {
             Some(p) => Permissao::Recusado(format!(
                 "Não abri a janela por cima do jogo: o {} está aberto e trata sobreposições como suspeitas. Feche-o ou use a mira e a geração de quadros do próprio jogo.",
                 p.qual.nome()
@@ -255,11 +265,29 @@ mod tests {
 
     #[test]
     fn sobreposicao_e_recusada_com_vanguard_ou_faceit_abertos() {
-        for qual in [AntiCheat::Vanguard, AntiCheat::FaceIt] {
-            let p = permite(Acao::SobreporJanela, &[rodando(qual)]);
+        let valorant = Presenca {
+            qual: AntiCheat::Vanguard,
+            evidencia: Evidencia::ProcessoRodando("VALORANT-Win64-Shipping.exe".to_string()),
+            ativo_agora: true,
+        };
+        for (qual, presenca) in [(AntiCheat::Vanguard, valorant), (AntiCheat::FaceIt, rodando(AntiCheat::FaceIt))] {
+            let p = permite(Acao::SobreporJanela, &[presenca]);
             assert!(!p.pode(), "{:?} aberto deveria barrar a sobreposição", qual);
             assert!(p.motivo().unwrap().contains(qual.nome()));
         }
+    }
+
+    #[test]
+    fn o_vanguard_do_boot_nao_barra_a_sobreposicao_so_o_valorant_aberto() {
+        // O PC do sócio: Valorant instalado, FiveM aberto. O vgc e o vgtray rodam desde o boot.
+        let do_boot = detectar(&["vgc.exe".to_string(), "vgtray.exe".to_string(), "FiveM_GTAProcess.exe".to_string()]);
+        assert!(!do_boot.is_empty(), "o Vanguard continua sendo visto (para a afinidade e o IFEO)");
+        assert!(permite(Acao::SobreporJanela, &do_boot).pode(), "Vanguard sem o Valorant aberto não barra o Frame Boost");
+
+        let com_o_jogo = detectar(&["vgc.exe".to_string(), "VALORANT-Win64-Shipping.exe".to_string()]);
+        let p = permite(Acao::SobreporJanela, &com_o_jogo);
+        assert!(!p.pode(), "com o Valorant aberto, barra");
+        assert!(p.motivo().unwrap().contains("Vanguard"));
     }
 
     #[test]
