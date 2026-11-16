@@ -1297,6 +1297,9 @@ export const ponte = {
       : Promise.resolve({ comparacao: "NaoHaNova", versao_publicada: "4.0.0", versao_publicada_exibida: "1.0", pagina: null }),
   relatorioDeSuporte: (): Promise<string> =>
     noTauri ? commands.relatorioDeSuporte() : Promise.resolve("Relatório de suporte (demonstração)."),
+  /** Salva o registro do Otimiza em Downloads (sem o nome do usuário) e devolve o caminho. */
+  salvarLogDeSuporte: (): Promise<string> =>
+    noTauri ? commands.salvarLogDeSuporte() : Promise.resolve("C:\\Users\\<usuario>\\Downloads\\Otimiza-log (demonstração).txt"),
   sobreposicao: (): Promise<Sobreposicao> => (noTauri ? commands.overlayEstado() : Promise.resolve(structuredClone(sobreposicaoDemo))),
   gravarSobreposicao: async (modo: ModoDaSobreposicao, canto: CantoDaSobreposicao, comFrameBoost: boolean): Promise<Sobreposicao> => {
     if (noTauri) return commands.overlayGravar(modo, canto, comFrameBoost);

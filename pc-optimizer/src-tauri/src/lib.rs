@@ -383,6 +383,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::aplicar_ajuste_intel,
             commands::relatorio_de_suporte,
+            commands::salvar_log_de_suporte,
             commands::versao_mais_nova,
             commands::versao_do_app,
         ])

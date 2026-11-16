@@ -195,6 +195,15 @@
       recado = { tom: "perigo", texto: String(e) };
     }
   }
+
+  async function salvarLog() {
+    try {
+      const caminho = await ponte.salvarLogDeSuporte();
+      recado = { tom: "ok", texto: `Registro salvo em ${caminho}. Mande esse arquivo para o suporte.` };
+    } catch (e) {
+      recado = { tom: "perigo", texto: String(e) };
+    }
+  }
 </script>
 
 <div class="ajustes">
@@ -429,6 +438,10 @@
       <li>
         <span class="info">Relatório para o suporte<span class="apoio">O que o atendimento precisa, sem dados pessoais</span></span>
         <button class="btn" onclick={copiarRelatorio}>Copiar</button>
+      </li>
+      <li>
+        <span class="info">Registro do Otimiza<span class="apoio">O passo a passo do que o Otimiza fez, para o suporte achar a causa. Sai sem o seu nome de usuário</span></span>
+        <button class="btn" onclick={salvarLog}>Salvar em Downloads</button>
       </li>
     </ul>
   </section>

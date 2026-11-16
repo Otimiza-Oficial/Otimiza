@@ -89,6 +89,36 @@ pub fn relatorio_de_suporte() -> Result<String, String> {
     }
 }
 
+/// Salva o registro do Otimiza em Downloads, num arquivo só e sem o nome do usuário, e mostra no Explorer. Antes o
+/// cliente achava `%APPDATA%\pc-optimizer\otimiza.log` pelo Win+R. Devolve o caminho salvo. `LIVRES`.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn salvar_log_de_suporte() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let log = crate::utils::Logger::caminho().ok_or("Não achei a pasta do registro do Otimiza.")?;
+        if !log.exists() {
+            return Err("O Otimiza ainda não tem registro para salvar.".to_string());
+        }
+        let perfil = std::env::var("USERPROFILE").map_err(|_| "Não achei a pasta do usuário.".to_string())?;
+        let pasta = std::path::PathBuf::from(perfil).join("Downloads");
+        let pasta = if pasta.is_dir() { pasta } else { std::env::temp_dir() };
+        let quando = chrono::Local::now().format("%Y-%m-%d_%H-%M");
+        let destino = pasta.join(format!("Otimiza-log-{quando}.txt"));
+        let usuario = std::env::var("USERNAME").unwrap_or_default();
+        crate::utils::logger::juntar_para_suporte(&log, &destino, &usuario)
+            .map_err(|e| format!("Não consegui salvar o registro: {e}"))?;
+        // O Explorer devolve código 1 mesmo quando abre: o resultado não diz nada.
+        let _ = crate::modules::windows::shell::run("explorer", &[&format!("/select,{}", destino.display())]);
+        Ok(destino.display().to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// A tela decide só por `comparacao`, nunca por `versao_publicada` (texto para exibir).
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(specta::Type))]

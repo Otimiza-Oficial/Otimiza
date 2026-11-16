@@ -257,6 +257,11 @@ export const commands = {
 	 *  janela.
 	 */
 	relatorioDeSuporte: () => __TAURI_INVOKE<string>("relatorio_de_suporte"),
+	/**
+	 *  Salva o registro do Otimiza em Downloads, num arquivo só e sem o nome do usuário, e mostra no Explorer. Antes o
+	 *  cliente achava `%APPDATA%\pc-optimizer\otimiza.log` pelo Win+R. Devolve o caminho salvo. `LIVRES`.
+	 */
+	salvarLogDeSuporte: () => __TAURI_INVOKE<string>("salvar_log_de_suporte"),
 	/**  O FPS por cima do jogo: modo, canto e se está na tela agora. `LIVRES`: só lê. */
 	overlayEstado: () => __TAURI_INVOKE<EstadoDaSobreposicao_Serialize>("overlay_estado"),
 	/**

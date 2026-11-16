@@ -328,6 +328,7 @@ mod tests {
         "licenca_estado",
         "licenca_ativar",
         "relatorio_de_suporte",
+        "salvar_log_de_suporte",
         "versao_mais_nova",
         "versao_do_app",
         "checar_essenciais",

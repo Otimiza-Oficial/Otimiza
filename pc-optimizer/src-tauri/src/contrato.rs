@@ -128,6 +128,7 @@ mod tests {
                 crate::commands::licenca_ativar,
                 crate::commands::versao_mais_nova,
                 crate::commands::relatorio_de_suporte,
+                crate::commands::salvar_log_de_suporte,
                 crate::commands::overlay_estado,
                 crate::commands::overlay_gravar,
                 crate::commands::overlay_ligar,
