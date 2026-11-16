@@ -12,6 +12,21 @@ pub const INTERVALO_INICIAL: f64 = 5.0;
 /// instante). Com 30 s, e a conferência que falhava repetindo a cada 13 s para sempre, o log de uma sessão do FiveM
 /// mostrou a sobreposição escondida 15% do tempo. Depois das três primeiras, uma a cada 5 minutos.
 pub const INTERVALO_DE_ROTINA: f64 = 300.0;
+/// Com as três últimas comparações sem perda real (o jogo manteve 98% do FPS ou mais), o gerador já provou que não tira
+/// FPS nesta partida: a pausa de conferência (o tranco de 1,5 s) passa a cada 15 min. Vale nos dois modos: no leve, a
+/// régua de desligar (75%) não é folga; perder 20% e espaçar a conferência seria vigiar menos justo quando tira mais.
+pub const INTERVALO_DE_ROTINA_FOLGADO: f64 = 900.0;
+pub const SEM_PERDA_REAL: f64 = 0.98;
+
+/// **Pura.** O intervalo entre conferências depois das três primeiras.
+pub fn intervalo_de_rotina(razoes: &[f64], _minima: f64) -> f64 {
+    let ultimas = &razoes[razoes.len().saturating_sub(MINIMO_DE_AMOSTRAS)..];
+    if ultimas.len() == MINIMO_DE_AMOSTRAS && ultimas.iter().all(|r| *r >= SEM_PERDA_REAL) {
+        INTERVALO_DE_ROTINA_FOLGADO
+    } else {
+        INTERVALO_DE_ROTINA
+    }
+}
 pub const MINIMO_DE_AMOSTRAS: usize = 3;
 pub const RAZAO_MINIMA: f64 = 0.96;
 /// Já no modo leve, a régua para desligar de vez. Com 0,96 nas duas, o log do dono mostrou o gerador desligando com o
@@ -132,7 +147,7 @@ impl Guarda {
                 let intervalo = if self.razoes.len() < MINIMO_DE_AMOSTRAS {
                     (INTERVALO_INICIAL * 2f64.powi(self.falhas as i32)).min(INTERVALO_DE_ROTINA)
                 } else {
-                    INTERVALO_DE_ROTINA
+                    intervalo_de_rotina(&self.razoes, self.minima)
                 };
                 self.fase = Fase::Gerando {
                     proxima: agora + intervalo,
@@ -181,6 +196,20 @@ impl LinhaDoTempo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conferencia_espaca_quando_o_gerador_ja_provou_folga() {
+        assert_eq!(intervalo_de_rotina(&[1.0, 0.99, 1.01], RAZAO_MINIMA_LEVE), INTERVALO_DE_ROTINA_FOLGADO);
+        assert_eq!(intervalo_de_rotina(&[1.0, 1.0, 0.97], RAZAO_MINIMA), INTERVALO_DE_ROTINA, "perto da régua: 5 min");
+        assert_eq!(
+            intervalo_de_rotina(&[0.80, 0.80, 0.80], RAZAO_MINIMA_LEVE),
+            INTERVALO_DE_ROTINA,
+            "no leve, perder 20% não é folga: continua a cada 5 min"
+        );
+        assert_eq!(intervalo_de_rotina(&[1.0, 1.0], RAZAO_MINIMA_LEVE), INTERVALO_DE_ROTINA, "menos de três: 5 min");
+        // Só as três últimas contam: uma comparação ruim antiga não prende em 5 min para sempre.
+        assert_eq!(intervalo_de_rotina(&[0.7, 1.0, 1.0, 1.0], RAZAO_MINIMA_LEVE), INTERVALO_DE_ROTINA_FOLGADO);
+    }
 
     /// O jogo roda a `fps_com` gerando e `fps_sem` pausado; `atraso` simula o ETW entregando depois.
     fn simular(fps_com: f64, fps_sem: f64, segundos: f64, atraso: f64) -> (Guarda, Vec<Acao>) {

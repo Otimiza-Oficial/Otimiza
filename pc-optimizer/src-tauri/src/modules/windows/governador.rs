@@ -23,6 +23,10 @@ const PROTEGIDOS: &[&str] = &[
     "nvidia broadcast",
     "voicemeeter",
     "spotify",
+    // O overlay da Steam (Shift+Tab, FPS da Steam) desenha dentro do jogo: rebaixado, ele atrasa o próprio jogo. O
+    // `steamwebhelper` (o navegador da Steam) fica de fora de propósito: é ele que pesa por trás.
+    "gameoverlayui",
+    "gameoverlayui64",
     "audiodg",
     "vgc",
     "vgtray",
@@ -1029,6 +1033,8 @@ mod testes {
             "BEService.exe",
             "explorer.exe",
             "svchost.exe",
+            "GameOverlayUI.exe",
+            "gameoverlayui64.exe",
         ] {
             assert!(protegido(n), "{}", n);
         }

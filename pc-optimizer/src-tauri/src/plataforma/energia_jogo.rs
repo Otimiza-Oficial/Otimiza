@@ -235,11 +235,30 @@ pub fn definir(ligado: bool) -> Result<Painel, String> {
     Ok(painel())
 }
 
+/// **Pura.** O motor de energia dinâmico está ligado e tem perfil para este jogo? Aí a energia de jogo não entra junto.
+pub fn dinamico_cuida(ligado: bool, perfis: &[String], jogo: &str) -> bool {
+    let nome = |x: &str| x.trim().to_lowercase().trim_end_matches(".exe").to_string();
+    ligado && perfis.iter().any(|p| nome(p) == nome(jogo))
+}
+
 /// Com o jogo aberto: escreve e guarda o de antes. Já aplicado: nada.
 #[cfg(windows)]
 pub fn entrar(jogo: &str) -> Result<Option<String>, String> {
     let mut e = ler();
     if !e.ligado || e.aplicado.is_some() || impedimento().is_some() {
+        return Ok(None);
+    }
+    // O motor de energia (aba Energia, "dinâmico") tem um perfil medido para este jogo e troca o plano quando ele abre:
+    // os dois juntos reativavam o plano duas vezes no começo da partida, e o EPP podia ir parar no plano que saía.
+    let m = crate::modules::windows::motorenergia_maquina::dinamico();
+    let perfis: Vec<String> = crate::modules::windows::motorenergia_maquina::perfis_de_jogo()
+        .into_iter()
+        .map(|p| p.executavel)
+        .collect();
+    // O motor só age com licença (e administrador, que a energia de jogo também exige): sem ela, ninguém ficaria.
+    let motor_age = m.ligado && crate::modules::licenca::exigir().is_ok();
+    if dinamico_cuida(motor_age, &perfis, jogo) {
+        crate::utils::Logger::info(&format!("energia de jogo: o motor de energia cuida de {}; fico de fora", jogo));
         return Ok(None);
     }
     let (hw, notebook, ativo, plano) = ler_maquina()?;
@@ -320,6 +339,15 @@ pub fn passo(jogo_aberto: Option<&str>) -> Option<String> {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn com_o_motor_cuidando_do_jogo_a_energia_de_jogo_fica_de_fora() {
+        let perfis = vec!["FiveM_GTAProcess.exe".to_string()];
+        assert!(dinamico_cuida(true, &perfis, "fivem_gtaprocess"));
+        assert!(dinamico_cuida(true, &perfis, "FiveM_GTAProcess.exe"));
+        assert!(!dinamico_cuida(false, &perfis, "FiveM_GTAProcess.exe"), "motor desligado: a energia de jogo entra");
+        assert!(!dinamico_cuida(true, &perfis, "cs2.exe"), "sem perfil para este jogo: entra");
+    }
 
     fn conf(alias: &str, ac: u32, dc: u32) -> Configuracao {
         Configuracao {

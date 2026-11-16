@@ -1,1 +1,1 @@
-Otimiza 1.0.5 Correções no Frame Boost, no Turbo e no desfazer, e catálogo de 5 jogos (4.0.5)
+Otimiza 1.0.6 Turbo e Frame Boost mais leves, e a correção para quem tem Valorant instalado (4.0.6)
