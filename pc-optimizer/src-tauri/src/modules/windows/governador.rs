@@ -637,7 +637,26 @@ fn devolver_lista(lista: &[Acalmado]) -> Devolucao {
 
 #[cfg(windows)]
 pub fn recuperar_na_abertura() -> Result<Devolucao, String> {
-    let lista = ler()?;
+    let lista = match ler() {
+        Ok(l) => l,
+        Err(e) => {
+            // Arquivo ilegível falhava em toda abertura e, enquanto existisse, o governador nascia parado e o teste da
+            // travada recusava. Vai para o lado (o mesmo do "Zerar"): a prioridade vive só na memória, e o que ele
+            // guardava volta sozinho quando o programa fecha ou o Windows reinicia.
+            if let Some(a) = arquivo() {
+                let agora = crate::modules::changelog::now_timestamp();
+                if let Ok(Zerado::Ilegivel { guardado_em }) = zerar_em(&a, |_| Devolucao::default(), agora) {
+                    crate::utils::Logger::warn(&format!(
+                        "governador: anotação ilegível ({}) tirada do caminho{}",
+                        e,
+                        guardado_em.map(|g| format!(", guardada em {}", g.display())).unwrap_or_default()
+                    ));
+                    return Ok(Devolucao::default());
+                }
+            }
+            return Err(e);
+        }
+    };
     if lista.is_empty() {
         return Ok(Devolucao::default());
     }

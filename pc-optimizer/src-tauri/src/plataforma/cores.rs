@@ -179,6 +179,29 @@ impl Originais {
     }
 }
 
+/// O que existe na máquina agora, para saber se um original ainda tem onde voltar.
+#[derive(Debug, Clone, Default)]
+pub struct Presentes {
+    pub monitores: Vec<String>,
+    pub saidas_nvidia: Vec<u32>,
+    pub monitores_amd: usize,
+}
+
+/// **Pura.** Dos originais que NÃO voltaram, o que fica para tentar de novo: só o que ainda tem alvo. Antes o arquivo
+/// inteiro ficava (inclusive o que já tinha voltado) e era regravado em toda abertura e todo jogo fechado: com o monitor
+/// trocado ou o driver reinstalado, falhava para sempre e ainda desfazia as cores que a pessoa ajustou depois.
+/// Devolve o que manter e quantos foram descartados.
+pub fn a_manter(falhou: Originais, p: &Presentes) -> (Originais, usize) {
+    let antes = falhou.rampas.len() + falhou.nvidia.len() + falhou.amd.len();
+    let manter = Originais {
+        rampas: falhou.rampas.into_iter().filter(|(m, _)| p.monitores.iter().any(|x| x.eq_ignore_ascii_case(m))).collect(),
+        nvidia: falhou.nvidia.into_iter().filter(|(i, _)| p.saidas_nvidia.contains(i)).collect(),
+        amd: falhou.amd.into_iter().filter(|(m, _, _)| *m < p.monitores_amd).collect(),
+    };
+    let depois = manter.rampas.len() + manter.nvidia.len() + manter.amd.len();
+    (manter, antes - depois)
+}
+
 /// O ajuste salvo de cada jogo (pela chave do catálogo) e se ele liga sozinho quando o jogo abre.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -534,14 +557,17 @@ mod sistema {
             return Ok(());
         }
         let mut falhas = Vec::new();
+        let mut falhou = Originais::default();
         for (m, r) in &orig.rampas {
             if !escrever_rampa(m, r) {
                 falhas.push(format!("rampa de {}", m));
+                falhou.rampas.insert(m.clone(), r.clone());
             }
         }
         for (i, nivel) in &orig.nvidia {
             if !escrever_dvc(*i, *nivel) {
                 falhas.push(format!("vibração da saída {}", i));
+                falhou.nvidia.insert(*i, *nivel);
             }
         }
         for (m, cor, v) in &orig.amd {
@@ -555,12 +581,30 @@ mod sistema {
             };
             if amddriver::escrever_cor(*m, c, *v).is_err() {
                 falhas.push(format!("{} do monitor {}", cor, m));
+                falhou.amd.push((*m, cor.clone(), *v));
             }
         }
         if falhas.is_empty() {
             let _ = fs::remove_file(caminho_dos_originais());
+            return Ok(());
+        }
+        let presentes = Presentes {
+            monitores: crate::modules::windows::display::monitores().into_iter().map(|m| m.dispositivo).collect(),
+            saidas_nvidia: telas_nvidia(),
+            monitores_amd: crate::modules::windows::amddriver::cores().map(|t| t.len()).unwrap_or(0),
+        };
+        let (manter, descartados) = a_manter(falhou, &presentes);
+        if descartados > 0 {
+            crate::utils::Logger::warn(&format!(
+                "cores: {} original(is) sem monitor ou saída de vídeo para voltar (monitor trocado ou driver reinstalado); descartado(s)",
+                descartados
+            ));
+        }
+        if manter.vazio() {
+            let _ = fs::remove_file(caminho_dos_originais());
             Ok(())
         } else {
+            gravar(&caminho_dos_originais(), &manter)?;
             Err(format!("Não consegui devolver: {}", falhas.join(", ")))
         }
     }
@@ -625,6 +669,22 @@ pub fn ao_fechar() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn so_o_que_falhou_e_ainda_tem_alvo_fica_para_tentar_de_novo() {
+        let mut f = Originais::default();
+        f.rampas.insert(r"\\.\DISPLAY1".into(), vec![0; 768]);
+        f.rampas.insert(r"\\.\DISPLAY3".into(), vec![0; 768]);
+        f.nvidia.insert(0, 50);
+        f.nvidia.insert(2, 50);
+        f.amd.push((1, "Brilho".into(), 0));
+        let p = Presentes { monitores: vec![r"\\.\DISPLAY1".into()], saidas_nvidia: vec![0], monitores_amd: 1 };
+        let (m, descartados) = a_manter(f, &p);
+        assert_eq!(descartados, 3, "DISPLAY3, saída 2 e o monitor AMD 1 sumiram");
+        assert!(m.rampas.contains_key(r"\\.\DISPLAY1") && m.nvidia.contains_key(&0) && m.amd.is_empty());
+        let (vazio, _) = a_manter(Originais::default(), &Presentes::default());
+        assert!(vazio.vazio());
+    }
 
     #[test]
     fn rampa_normal_e_a_identidade() {
