@@ -1497,17 +1497,6 @@ fn sessao(
     let hz = hz_do_monitor(&saida.dispositivo);
 
     let mut gpu = Gpu::novo(&saida.adaptador)?;
-    // Prioridade de placa um pouco acima do normal (1.0.7): o trabalho do gerador é pequeno e precisa sair na hora do
-    // monitor; atrasado, o quadro gerado chega depois da atualização e vira tranco. Moderada (+2 de 7) para não tirar
-    // a vez do jogo; a guarda continua medindo o FPS real.
-    match gpu.dxgi_device() {
-        Ok(d) => {
-            if let Err(e) = unsafe { d.SetGPUThreadPriority(2) } {
-                crate::utils::Logger::warn(&format!("gerador: prioridade de placa não mudou ({})", e));
-            }
-        }
-        Err(e) => crate::utils::Logger::warn(&format!("gerador: sem o dispositivo DXGI para a prioridade ({})", e)),
-    }
     // Refeito (janela mudou) depois de a guarda aliviar: continua leve.
     gpu.modo_leve(config.leve || estado().leve);
     // A Duplicação é a captura de sempre. Se ela nem começa (notebook híbrido, driver que não duplica), a captura
@@ -2149,9 +2138,15 @@ fn sessao(
         } else if let Some(wgc) = captura_moderna.as_ref() {
             // Pela WGC: o quadro chega quando a tela muda; "mudou dentro do jogo" é a comparação na placa.
             if let Some(q) = wgc.proximo(espera_ms) {
-                if gpu.igual_ao_atual(&q.textura, na_textura) {
-                    contadores.iguais += 1;
-                } else {
+                // A tela mudou de tamanho (resolução, monitor): a fila foi feita para o tamanho de antes. Refaz.
+                let mut desc = Default::default();
+                unsafe { q.textura.GetDesc(&mut desc) };
+                if (desc.Width, desc.Height) != (saida.monitor.largura as u32, saida.monitor.altura as u32) {
+                    return Ok(Fim::Refazer("a tela mudou de tamanho (captura moderna)"));
+                }
+                // Sem comparar com o quadro de antes: a comparação espera a placa a cada quadro e tirava FPS do jogo.
+                // A WGC só entrega quadro quando a tela muda; com o jogo na frente, é ele que muda.
+                {
                     let chegada = segundos(inicio);
                     let medido = Instant::now();
                     composto_do_real = Some(q.composto_s - qpc_inicio).filter(|c| *c > 0.0);
