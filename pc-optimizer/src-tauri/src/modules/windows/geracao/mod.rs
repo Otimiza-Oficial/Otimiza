@@ -1310,6 +1310,11 @@ fn segundos(inicio: Instant) -> f64 {
     inicio.elapsed().as_secs_f64()
 }
 
+thread_local! {
+    /// O registro do MMCSS desta thread do gerador (0 = sem registro).
+    static MMCSS: std::cell::Cell<isize> = const { std::cell::Cell::new(0) };
+}
+
 fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -1324,6 +1329,15 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
         if SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL) == 0 {
             crate::utils::Logger::warn("gerador: não consegui subir a prioridade da thread de apresentação");
         }
+        // O agendador de multimídia do Windows (MMCSS, tarefa "Games"): a thread ganha a vez no processador na hora
+        // certa, como o áudio e os jogos que se registram. Desfeito ao sair (`AvRevertMmThreadCharacteristics`).
+        let tarefa: Vec<u16> = "Games".encode_utf16().chain(std::iter::once(0)).collect();
+        let mut indice = 0u32;
+        let mmcss = windows_sys::Win32::System::Threading::AvSetMmThreadCharacteristicsW(tarefa.as_ptr(), &mut indice);
+        if mmcss.is_null() {
+            crate::utils::Logger::warn("gerador: o agendador de multimídia (MMCSS) não registrou a thread");
+        }
+        MMCSS.with(|m| m.set(mmcss as isize));
         let _ = RegisterHotKey(
             None,
             ATALHO,
@@ -1335,6 +1349,10 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     unsafe {
         let _ = UnregisterHotKey(None, ATALHO);
         timeEndPeriod(1);
+        let mmcss = MMCSS.with(|m| m.replace(0));
+        if mmcss != 0 {
+            windows_sys::Win32::System::Threading::AvRevertMmThreadCharacteristics(mmcss as _);
+        }
     }
     r
 }
@@ -1478,6 +1496,17 @@ fn sessao(
     let hz = hz_do_monitor(&saida.dispositivo);
 
     let mut gpu = Gpu::novo(&saida.adaptador)?;
+    // Prioridade de placa um pouco acima do normal (1.0.7): o trabalho do gerador é pequeno e precisa sair na hora do
+    // monitor; atrasado, o quadro gerado chega depois da atualização e vira tranco. Moderada (+2 de 7) para não tirar
+    // a vez do jogo; a guarda continua medindo o FPS real.
+    match gpu.dxgi_device() {
+        Ok(d) => {
+            if let Err(e) = unsafe { d.SetGPUThreadPriority(2) } {
+                crate::utils::Logger::warn(&format!("gerador: prioridade de placa não mudou ({})", e));
+            }
+        }
+        Err(e) => crate::utils::Logger::warn(&format!("gerador: sem o dispositivo DXGI para a prioridade ({})", e)),
+    }
     // Refeito (janela mudou) depois de a guarda aliviar: continua leve.
     gpu.modo_leve(config.leve || estado().leve);
     let duplicacao = duplicar(&saida, &gpu)?;
