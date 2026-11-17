@@ -237,6 +237,43 @@ impl AtrasoDaExibicao {
     }
 }
 
+/// O que chegou à tela numa janela, pelo instante em que cada quadro da sobreposição APARECEU (PresentMon).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RitmoNaTela {
+    pub por_segundo: f64,
+    /// Atualizações do monitor que repetiram o quadro anterior, em % (com 2× dentro dos Hz, o ideal é perto de 0).
+    pub repetidas_pct: f64,
+    /// Buracos de 3 atualizações ou mais sem quadro novo (o tranco que se sente), fora pausas de meio segundo.
+    pub engasgos: u32,
+}
+
+/// Pura: o ritmo na tela a partir dos instantes (s, em ordem) em que os quadros apareceram. `None` sem quadros que
+/// bastem ou sem os Hz.
+pub fn ritmo_na_tela(instantes: &[f64], periodo: f64) -> Option<RitmoNaTela> {
+    if instantes.len() < 10 || periodo <= 0.0 {
+        return None;
+    }
+    let (mut atualizacoes, mut repetidas, mut engasgos, mut tempo) = (0u64, 0u64, 0u32, 0.0);
+    for par in instantes.windows(2) {
+        let d = par[1] - par[0];
+        if !(0.0..0.5).contains(&d) {
+            continue;
+        }
+        let n = (d / periodo).round().max(1.0) as u64;
+        atualizacoes += n;
+        repetidas += n - 1;
+        if n >= 3 {
+            engasgos += 1;
+        }
+        tempo += d;
+    }
+    (atualizacoes > 0 && tempo > 0.0).then(|| RitmoNaTela {
+        por_segundo: atualizacoes.saturating_sub(repetidas) as f64 / tempo,
+        repetidas_pct: repetidas as f64 / atualizacoes as f64 * 100.0,
+        engasgos,
+    })
+}
+
 /// Média de uma medida em ms (fila até a tela), sem os extremos de um engasgo.
 pub fn media_da_fila(media: Option<f64>, novas: &[f64]) -> Option<f64> {
     novas
@@ -764,6 +801,30 @@ mod tests {
             "depois de se acertar, todo gerado sai: {:?}",
             gerados_que_sairam
         );
+    }
+
+    #[test]
+    fn o_ritmo_na_tela_conta_repetidas_e_engasgos() {
+        let p = 1.0 / 144.0;
+        // Um quadro por atualização: liso.
+        let liso: Vec<f64> = (0..144).map(|i| i as f64 * p).collect();
+        let r = ritmo_na_tela(&liso, p).unwrap();
+        assert!((r.por_segundo - 144.0).abs() < 1.0 && r.repetidas_pct < 0.1 && r.engasgos == 0, "{r:?}");
+        // Um em cada dois repetido (o 2× virando 1×): metade das atualizações repetidas.
+        let metade: Vec<f64> = (0..72).map(|i| i as f64 * 2.0 * p).collect();
+        let r = ritmo_na_tela(&metade, p).unwrap();
+        assert!((r.repetidas_pct - 50.0).abs() < 1.0 && r.engasgos == 0, "{r:?}");
+        // Um buraco de 4 atualizações: um engasgo.
+        let mut buraco = liso.clone();
+        buraco.drain(50..53);
+        assert_eq!(ritmo_na_tela(&buraco, p).unwrap().engasgos, 1);
+        // Pausa longa (menu, jogo atrás) não vira engasgo.
+        let mut pausa = liso.clone();
+        for t in pausa.iter_mut().skip(70) {
+            *t += 2.0;
+        }
+        assert_eq!(ritmo_na_tela(&pausa, p).unwrap().engasgos, 0);
+        assert_eq!(ritmo_na_tela(&liso[..5], p), None);
     }
 
     #[test]

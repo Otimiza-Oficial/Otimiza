@@ -187,6 +187,11 @@ impl LinhaDoTempo {
         }
     }
 
+    /// Os instantes de `de` até `ate` (exclusive), em ordem.
+    pub fn entre(&self, de: f64, ate: f64) -> Vec<f64> {
+        self.instantes.iter().copied().filter(|t| *t >= de && *t < ate).collect()
+    }
+
     pub fn contar(&self, de: f64, ate: f64) -> u64 {
         self.instantes
             .iter()

@@ -505,6 +505,18 @@ pub fn instante_exibido(linha: &str, colunas: (usize, usize)) -> Option<i64> {
     campos.get(colunas.0)?.trim().parse().ok()
 }
 
+/// Pura: o instante (QPC) em que uma apresentação APARECEU na tela: `CPUStartQPC` + `DisplayLatency` (ms, desde o
+/// começo do quadro). Para o ritmo na tela do gerador: o instante do `Present` não diz quando a tela trocou.
+/// `colunas`: (CPUStartQPC, DisplayLatency, DisplayedTime). `frequencia`: ticks do QPC por segundo.
+pub fn instante_na_tela(linha: &str, colunas: (usize, usize, usize), frequencia: f64) -> Option<i64> {
+    let campos: Vec<&str> = linha.split(',').collect();
+    let numero = |c: usize| campos.get(c)?.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    numero(colunas.2).filter(|d| *d > 0.0)?;
+    let latencia = numero(colunas.1).filter(|l| (0.0..1000.0).contains(l))?;
+    let inicio: i64 = campos.get(colunas.0)?.trim().parse().ok()?;
+    Some(inicio + (latencia / 1000.0 * frequencia).round() as i64)
+}
+
 /// Pura: de uma apresentação que CHEGOU À TELA, quanto tempo foi da chamada do `Present` até a tela, em ms
 /// (`DisplayLatency` conta desde o começo do quadro na CPU; tira-se o `CPUBusy`, o trabalho antes do `Present`).
 /// É a fila do Windows medida, para o atraso do Frame Boost. `colunas`: (CPUBusy, DisplayLatency, DisplayedTime).
@@ -609,13 +621,26 @@ impl Vivo {
                 (true, Some(b), Some(l), Some(d)) => Some((b, l, d)),
                 _ => None,
             };
+            // Os exibidos vão pelo instante em que APARECERAM (o ritmo na tela); sem a coluna, pelo do `Present`.
+            let frequencia = {
+                let mut f = 0i64;
+                let _ = unsafe { windows::Win32::System::Performance::QueryPerformanceFrequency(&mut f) };
+                f as f64
+            };
+            let colunas_na_tela = match (coluna("DisplayLatency"), exibido) {
+                (Some(l), Some(d)) if frequencia > 0.0 => Some((qpc, l, d)),
+                _ => None,
+            };
             for linha in linhas.map_while(Result::ok) {
                 if let Some(f) = colunas_da_fila.and_then(|c| fila_ate_a_tela(&linha, c)) {
                     let _ = envia_fila.send(f);
                 }
                 let instante = match contagem {
                     Contagem::DoJogo => instante_do_quadro(&linha, (qpc, tipo)),
-                    Contagem::Exibidos => instante_exibido(&linha, (qpc, exibido.unwrap_or(0))),
+                    Contagem::Exibidos => match colunas_na_tela {
+                        Some(c) => instante_na_tela(&linha, c, frequencia),
+                        None => instante_exibido(&linha, (qpc, exibido.unwrap_or(0))),
+                    },
                 };
                 if let Some(t) = instante {
                     if envia.send(t).is_err() {
@@ -843,6 +868,16 @@ mod tests {
         let descartado = linha("Application", 1.0, 5.5556, 1.0, 2.0, None);
         assert_eq!(instante_exibido(&exibido, col), Some(10_000));
         assert_eq!(instante_exibido(&descartado, col), None, "NA: não chegou à tela");
+    }
+
+    #[test]
+    fn o_instante_na_tela_e_o_comeco_mais_a_latencia_da_tela() {
+        // CPUStartQPC na 9, DisplayLatency (12 ms) na 17, DisplayedTime na 18; QPC a 10 MHz.
+        let col = (9, 17, 18);
+        let exibido = linha("Application", 1.0, 5.5556, 1.0, 2.0, Some(5.56));
+        let descartado = linha("Application", 1.0, 5.5556, 1.0, 2.0, None);
+        assert_eq!(instante_na_tela(&exibido, col, 10_000_000.0), Some(10_000 + 120_000));
+        assert_eq!(instante_na_tela(&descartado, col, 10_000_000.0), None);
     }
 
     #[test]

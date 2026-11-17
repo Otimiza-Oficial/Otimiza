@@ -54,6 +54,24 @@ Versões: interna `4.0.X` = a que o cliente vê `1.0.X` (4.0.0 = "1.0").
 7. **Confirme no código** que a correção da assinatura existe na versão atual
    (coluna "Confirmar" abaixo) antes de dizer "já corrigido".
 
+## Frame Boost: o resumo medido (1.0.8+)
+
+Antes de ler linha a linha, rode o resumo (todos os logs juntos, o `.1` primeiro):
+```
+python -I .claude/skills/ler-log-do-cliente/frame_boost.py L.1 L
+```
+Por sessão do gerador: placa, Hz, modo (`gerador: modo ...`), medianas das janelas de 10 s com o jogo na frente e o
+veredito:
+- **Fila de 1 quadro** (modos fixos): % dos gerados "sem vez na fila". Meta ≤ 2%. Acima de 5%: a espera do gerado
+  (`ritmo::ESPERA_DO_GERADO_MS`) não basta naquela máquina.
+- **Tela** (`gerador: tela medida`, pelo instante em que cada quadro APARECEU, PresentMon): quadros novos/s contra o
+  esperado (`min(Hz, reais × multiplicador)`), % de atualizações repetidas e engasgos (3+ atualizações sem quadro
+  novo). Sem administrador não há essa linha.
+- **Atraso acrescentado**: até o Present + fila da sobreposição até a tela, também em atualizações do monitor. Fila
+  acima de 2 atualizações = a fila de 1 não pegou.
+- **FPS do jogo**: média das comparações da guarda.
+Lê logs da 1.0.7 também (campos novos saem "—"): compare a mesma pessoa, o mesmo jogo e os mesmos Hz, antes e depois.
+
 ## Assinaturas conhecidas
 
 | Linha no log | O que significa | Confirmar no código |

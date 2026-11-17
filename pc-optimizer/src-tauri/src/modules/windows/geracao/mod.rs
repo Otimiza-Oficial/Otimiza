@@ -1593,6 +1593,22 @@ fn sessao(
     // que aparece. Pelo cronômetro (o 2×/3×/4× e o "passar do limite"), às vezes caíam dois quadros na mesma
     // atualização e nenhum na seguinte: o micro-tranco.
     let pelo_monitor = config.automatico && multiplicador > 1 && !config.sem_limite && hz > 0;
+    crate::utils::Logger::info(&format!(
+        "gerador: modo {}{}{}{}{}",
+        if config.automatico {
+            format!("Auto (até {}×)", multiplicador)
+        } else {
+            format!("{}× fixo", multiplicador)
+        },
+        if pelo_monitor { ", no ritmo do monitor" } else { ", pela agenda (fila de 1 quadro)" },
+        if config.sem_limite { ", passando do limite" } else { "" },
+        if config.leve || estado().leve { ", leve" } else { "" },
+        config
+            .alvo_fps
+            .map(|a| format!(", alvo {} FPS", a))
+            .unwrap_or_default()
+            + &config.escala.map(|e| format!(", escala {:?}", e)).unwrap_or_default()
+    ));
     // Escala: a sobreposição cobre o monitor e a imagem do jogo cai ampliada no encaixe (barras quando a proporção é
     // outra). Sem gerar quadros, o `receber` só copia.
     let ampliada = config.escala.and_then(|_| {
@@ -1885,6 +1901,19 @@ fn sessao(
                 ms(fila_da_sobreposicao)
             ));
             sem_vez = 0;
+            // O que a tela mostrou de fato, pelo instante em que cada quadro apareceu (o PresentMon entrega com atraso:
+            // vale a janela de 10 s que terminou `ATRASO_DA_CONTAGEM` atrás).
+            if na_tela_vivo.is_some() {
+                let ate = segundos(inicio) - guarda::ATRASO_DA_CONTAGEM;
+                let instantes = quadros_na_tela.entre(ate - 10.0, ate);
+                match ritmo::ritmo_na_tela(&instantes, periodo_da_tela) {
+                    Some(r) => crate::utils::Logger::info(&format!(
+                        "gerador: tela medida · {:.0} quadros novos/s · {:.1}% das atualizações repetidas · {} engasgos",
+                        r.por_segundo, r.repetidas_pct, r.engasgos
+                    )),
+                    None => crate::utils::Logger::info("gerador: tela medida · sem quadros bastantes nesta janela"),
+                }
+            }
             exibicao.zerar();
             relatorio = (Instant::now(), contadores, escondida_total);
             escondida_por = [Duration::ZERO; 3];
