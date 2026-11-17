@@ -1391,7 +1391,7 @@ async fn preparar_partida(app: &tauri::AppHandle, jogo: String, executavel: &str
                 let h = app.clone();
                 let e = escolha.clone();
                 let ligado = tokio::task::spawn_blocking(move || {
-                    plataforma::frameboost::ligar(&h, e.multiplicador, false, e.escala, e.alvo_fps).map(|_| ())
+                    plataforma::frameboost::ligar(&h, e.multiplicador, false, e.escala, e.alvo_fps, false).map(|_| ())
                 })
                 .await
                 .map_err(|e| e.to_string())

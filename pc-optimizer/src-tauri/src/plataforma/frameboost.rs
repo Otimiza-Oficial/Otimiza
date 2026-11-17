@@ -603,6 +603,7 @@ pub fn ligar(
     sem_limite: bool,
     escala: Option<geracao::escala::Nivel>,
     alvo_fps: Option<u32>,
+    leve_pedido: bool,
 ) -> Result<Painel, String> {
     // Plano de refino 1.2: a licença conferida também aqui, não só no comando (desligar nunca confere).
     crate::modules::licenca::exigir()?;
@@ -687,8 +688,9 @@ pub fn ligar(
                 visivel_em_captura: false,
                 automatico,
                 sem_limite,
-                // Placa já quase cheia com o jogo: começa leve, em vez de esperar a guarda ver o jogo perder FPS.
-                leve: comecar_leve(uso_da_placa_pct()),
+                // Leve pedido pela tela (o modo Equilíbrio, 1.0.7), ou a placa já quase cheia com o jogo: começa leve,
+                // em vez de esperar a guarda ver o jogo perder FPS.
+                leve: leve_pedido || comecar_leve(uso_da_placa_pct()),
                 escala,
                 alvo_fps: alvo_fps.filter(|_| automatico),
             })?;

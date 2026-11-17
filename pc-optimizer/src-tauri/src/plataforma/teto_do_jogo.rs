@@ -198,6 +198,7 @@ pub fn revisar_teto_antigo(executavel: &str, log: &mut crate::modules::changelog
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             super::base_do_jogo::anotar_teto_desfeito(executavel, gravado_em, agora);
+            soltar_fila(executavel, log);
             crate::utils::Logger::info(&format!(
                 "teto do jogo: teto antigo de {} fps em {} desfeito (o jogo rodava a {:.0} fps num monitor de {} Hz)",
                 teto,
@@ -267,6 +268,10 @@ pub fn aplicar(
     pedido: Pedido,
     log: &mut crate::modules::changelog::ChangeLog,
 ) -> Result<Decisao, String> {
+    // O Frame Boost saiu do jogo: a fila sai PRIMEIRO, antes de qualquer `?` abaixo (ela não depende do teto).
+    if matches!(pedido, Pedido::FimDoFrameBoost) {
+        soltar_fila(executavel, log);
+    }
     let fb = matches!(pedido, Pedido::JogoLiso(_)) && frame_boost_no_jogo(executavel);
     let decisao = decidir(atual(executavel, log).as_ref(), pedido, fb);
     match &decisao {
@@ -310,10 +315,6 @@ pub fn aplicar(
             ));
         }
         Decisao::Recusar(_) | Decisao::Nada => {}
-    }
-    // O Frame Boost saiu do jogo: a fila sai junto (devolvida no perfil, que fica).
-    if matches!(pedido, Pedido::FimDoFrameBoost) && !matches!(decisao, Decisao::Recusar(_)) {
-        soltar_fila(executavel, log);
     }
     Ok(decisao)
 }

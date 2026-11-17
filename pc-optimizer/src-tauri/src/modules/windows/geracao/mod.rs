@@ -440,11 +440,13 @@ pub fn presentmon_mudo(pausada: bool, quadros_do_jogo: u64, quadros_capturados: 
 }
 
 /// **Pura.** O degrau seguinte quando o jogo perde FPS: leve, depois um multiplicador a menos, e só no 2× desliga.
-/// `teto`: o multiplicador máximo que vale agora (o pedido, ou o que a guarda já baixou).
-pub fn reacao_a_perda(ja_leve: bool, teto: u8) -> ReacaoAPerda {
+/// `teto`: o multiplicador máximo que vale agora (o pedido, ou o que a guarda já baixou). No Auto o gerador enche pelo
+/// monitor e o teto não muda o trabalho da placa: depois do leve, desliga (um degrau que não alivia nada deixaria o jogo
+/// perdendo FPS por minutos dizendo "aliviado").
+pub fn reacao_a_perda(ja_leve: bool, teto: u8, automatico: bool) -> ReacaoAPerda {
     if !ja_leve {
         ReacaoAPerda::FicarLeve
-    } else if teto > 2 {
+    } else if teto > 2 && !automatico {
         ReacaoAPerda::BaixarPara(teto - 1)
     } else {
         ReacaoAPerda::Desligar
@@ -1922,7 +1924,7 @@ fn sessao(
         match acao {
             guarda::Acao::Desligar => {
                 let razao = guarda.razao_media();
-                match reacao_a_perda(gpu.leve(), teto_da_guarda) {
+                match reacao_a_perda(gpu.leve(), teto_da_guarda, config.automatico) {
                     // No FiveM do dono a guarda desligou o gerador 7 vezes (o jogo perdendo de 5% a 35%): antes de
                     // desistir, alivia a placa e confere de novo do zero (a média de antes condenaria o modo leve),
                     // com a régua do modo leve (`RAZAO_MINIMA_LEVE`): perder pouco não tira o Frame Boost inteiro.
@@ -2309,10 +2311,13 @@ mod tests_da_guarda_leve {
 
     #[test]
     fn a_primeira_perda_alivia_e_a_segunda_desliga() {
-        assert_eq!(reacao_a_perda(false, 4), ReacaoAPerda::FicarLeve);
-        assert_eq!(reacao_a_perda(true, 4), ReacaoAPerda::BaixarPara(3), "leve no 4×: um a menos, não desliga");
-        assert_eq!(reacao_a_perda(true, 3), ReacaoAPerda::BaixarPara(2));
-        assert_eq!(reacao_a_perda(true, 2), ReacaoAPerda::Desligar, "só no fim da escada");
+        assert_eq!(reacao_a_perda(false, 4, false), ReacaoAPerda::FicarLeve);
+        assert_eq!(reacao_a_perda(true, 4, false), ReacaoAPerda::BaixarPara(3), "leve no 4×: um a menos, não desliga");
+        assert_eq!(reacao_a_perda(true, 3, false), ReacaoAPerda::BaixarPara(2));
+        assert_eq!(reacao_a_perda(true, 2, false), ReacaoAPerda::Desligar, "só no fim da escada");
+        // Auto (144 Hz, base 72, leve perdendo 30%): não há degrau que alivie; desliga em vez de fingir.
+        assert_eq!(reacao_a_perda(false, 6, true), ReacaoAPerda::FicarLeve);
+        assert_eq!(reacao_a_perda(true, 6, true), ReacaoAPerda::Desligar);
         assert!(degrau_em_palavras(Some(0.82), Some(3)).starts_with("Aliviado para 3×: o jogo perdia 18% do FPS real"));
         assert!(degrau_em_palavras(None, None).starts_with("Modo leve: o jogo perdia FPS real"));
     }

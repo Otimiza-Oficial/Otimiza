@@ -256,9 +256,9 @@ export const ferramentas = {
   frameBoost: (): Promise<PainelFrameBoost> =>
     noTauri ? como<PainelFrameBoost>(commands.frameBoostPainel()) : Promise.resolve(structuredClone(fbDemo)),
   /** `multiplicador` 0 = Auto (enche o monitor, ou o `alvo`); 1 = só escala (vale com `escala`). */
-  frameBoostLigar: (multiplicador: number, escala: NivelDeEscala | null, alvo: number | null = null): Promise<PainelFrameBoost> =>
+  frameBoostLigar: (multiplicador: number, escala: NivelDeEscala | null, alvo: number | null = null, leve = false): Promise<PainelFrameBoost> =>
     noTauri
-      ? como<PainelFrameBoost>(commands.frameBoostLigar(multiplicador, false, escala, alvo))
+      ? como<PainelFrameBoost>(commands.frameBoostLigar(multiplicador, false, escala, alvo, leve))
       : Promise.resolve(fbLigadoDemo(multiplicador, escala)),
   /** A escala do Frame Boost vale (Ajustes)? Ligada por padrão, como na 1.0; só quem desliga fica sem. */
   escalaPermitida: async (): Promise<boolean> =>

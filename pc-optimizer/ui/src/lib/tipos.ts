@@ -436,7 +436,7 @@ export const commands = {
 	 *  `EXIGEM_LICENCA`: liga o gerador do Otimiza no jogo aberto (o anticheat é conferido antes) e trava o FPS base
 	 *  (`base_do_jogo`), no histórico de mudanças do app.
 	 */
-	frameBoostLigar: (multiplicador: number, semLimite: boolean | null, escala: NivelDeEscala | null, alvo: number | null) => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_ligar", { multiplicador, semLimite, escala, alvo }),
+	frameBoostLigar: (multiplicador: number, semLimite: boolean | null, escala: NivelDeEscala | null, alvo: number | null, leve: boolean | null) => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_ligar", { multiplicador, semLimite, escala, alvo, leve }),
 	/**  Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença. */
 	frameBoostDestravarBase: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_destravar_base"),
 	/**

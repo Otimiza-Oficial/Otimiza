@@ -159,6 +159,7 @@ pub async fn frame_boost_ligar(
     sem_limite: Option<bool>,
     escala: Option<crate::modules::windows::geracao::escala::Nivel>,
     alvo: Option<u32>,
+    leve: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
     crate::modules::licenca::exigir()?;
@@ -175,6 +176,7 @@ pub async fn frame_boost_ligar(
                 sem_limite.unwrap_or(false),
                 escala,
                 alvo,
+                leve.unwrap_or(false),
             )
         })
         .await
