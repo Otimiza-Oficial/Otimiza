@@ -505,6 +505,29 @@ pub fn instante_exibido(linha: &str, colunas: (usize, usize)) -> Option<i64> {
     campos.get(colunas.0)?.trim().parse().ok()
 }
 
+/// Pura: o instante (QPC) em que uma apresentação APARECEU na tela: `CPUStartQPC` + `DisplayLatency` (ms, desde o
+/// começo do quadro). Para o ritmo na tela do gerador: o instante do `Present` não diz quando a tela trocou.
+/// `colunas`: (CPUStartQPC, DisplayLatency, DisplayedTime). `frequencia`: ticks do QPC por segundo.
+pub fn instante_na_tela(linha: &str, colunas: (usize, usize, usize), frequencia: f64) -> Option<i64> {
+    let campos: Vec<&str> = linha.split(',').collect();
+    let numero = |c: usize| campos.get(c)?.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    numero(colunas.2).filter(|d| *d > 0.0)?;
+    let latencia = numero(colunas.1).filter(|l| (0.0..1000.0).contains(l))?;
+    let inicio: i64 = campos.get(colunas.0)?.trim().parse().ok()?;
+    Some(inicio + (latencia / 1000.0 * frequencia).round() as i64)
+}
+
+/// Pura: de uma apresentação que CHEGOU À TELA, quanto tempo foi da chamada do `Present` até a tela, em ms
+/// (`DisplayLatency` conta desde o começo do quadro na CPU; tira-se o `CPUBusy`, o trabalho antes do `Present`).
+/// É a fila do Windows medida, para o atraso do Frame Boost. `colunas`: (CPUBusy, DisplayLatency, DisplayedTime).
+pub fn fila_ate_a_tela(linha: &str, colunas: (usize, usize, usize)) -> Option<f64> {
+    let campos: Vec<&str> = linha.split(',').collect();
+    let numero = |c: usize| campos.get(c)?.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    numero(colunas.2).filter(|d| *d > 0.0)?;
+    let fila = numero(colunas.1)? - numero(colunas.0)?;
+    (0.0..200.0).contains(&fila).then_some(fila)
+}
+
 /// O que o `Vivo` entrega de cada apresentação.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Contagem {
@@ -521,6 +544,8 @@ pub enum Contagem {
 pub struct Vivo {
     filho: std::process::Child,
     quadros: std::sync::mpsc::Receiver<i64>,
+    /// A fila até a tela (ms) de cada apresentação que chegou à tela (`fila_ate_a_tela`).
+    filas: std::sync::mpsc::Receiver<f64>,
     /// Cada uso tem a sua: com o mesmo nome, `--stop_existing_session` de um derrubaria o outro.
     sessao: &'static str,
 }
@@ -533,15 +558,21 @@ impl Vivo {
 
     /// O mesmo, com nome de sessão próprio (o FPS por cima do jogo mede junto com o gerador).
     pub fn iniciar_na_sessao(pid: u32, sessao: &'static str) -> Result<Vivo, String> {
-        Self::iniciar_contando(pid, sessao, Contagem::DoJogo)
+        Self::iniciar_contando(pid, sessao, Contagem::DoJogo, false)
     }
 
-    /// Os quadros que chegaram à tela de um processo (o próprio Otimiza, na sobreposição do gerador).
+    /// Os quadros que chegaram à tela de um processo (o próprio Otimiza, na sobreposição do gerador), com as filas.
     pub fn iniciar_exibidos(pid: u32, sessao: &'static str) -> Result<Vivo, String> {
-        Self::iniciar_contando(pid, sessao, Contagem::Exibidos)
+        Self::iniciar_contando(pid, sessao, Contagem::Exibidos, true)
     }
 
-    fn iniciar_contando(pid: u32, sessao: &'static str, contagem: Contagem) -> Result<Vivo, String> {
+    /// `com_filas`: só quem lê `filas_novas`; sem leitor, o canal cresceria a partida inteira.
+    fn iniciar_contando(
+        pid: u32,
+        sessao: &'static str,
+        contagem: Contagem,
+        com_filas: bool,
+    ) -> Result<Vivo, String> {
         use std::io::BufRead;
         use std::os::windows::process::CommandExt;
 
@@ -570,6 +601,7 @@ impl Vivo {
             return Err("sem a saída do PresentMon".to_string());
         };
         let (envia, recebe) = std::sync::mpsc::channel();
+        let (envia_fila, recebe_fila) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let mut linhas = std::io::BufReader::new(saida).lines();
             let Some(Ok(cabecalho)) = linhas.next() else {
@@ -584,10 +616,31 @@ impl Vivo {
             if contagem == Contagem::Exibidos && exibido.is_none() {
                 return;
             }
+            let coluna = |nome: &str| nomes.iter().position(|n| *n == nome);
+            let colunas_da_fila = match (com_filas, coluna("CPUBusy"), coluna("DisplayLatency"), exibido) {
+                (true, Some(b), Some(l), Some(d)) => Some((b, l, d)),
+                _ => None,
+            };
+            // Os exibidos vão pelo instante em que APARECERAM (o ritmo na tela); sem a coluna, pelo do `Present`.
+            let frequencia = {
+                let mut f = 0i64;
+                let _ = unsafe { windows::Win32::System::Performance::QueryPerformanceFrequency(&mut f) };
+                f as f64
+            };
+            let colunas_na_tela = match (coluna("DisplayLatency"), exibido) {
+                (Some(l), Some(d)) if frequencia > 0.0 => Some((qpc, l, d)),
+                _ => None,
+            };
             for linha in linhas.map_while(Result::ok) {
+                if let Some(f) = colunas_da_fila.and_then(|c| fila_ate_a_tela(&linha, c)) {
+                    let _ = envia_fila.send(f);
+                }
                 let instante = match contagem {
                     Contagem::DoJogo => instante_do_quadro(&linha, (qpc, tipo)),
-                    Contagem::Exibidos => instante_exibido(&linha, (qpc, exibido.unwrap_or(0))),
+                    Contagem::Exibidos => match colunas_na_tela {
+                        Some(c) => instante_na_tela(&linha, c, frequencia),
+                        None => instante_exibido(&linha, (qpc, exibido.unwrap_or(0))),
+                    },
                 };
                 if let Some(t) = instante {
                     if envia.send(t).is_err() {
@@ -599,8 +652,14 @@ impl Vivo {
         Ok(Vivo {
             filho,
             quadros: recebe,
+            filas: recebe_fila,
             sessao,
         })
+    }
+
+    /// As filas até a tela (ms) que chegaram desde a última chamada.
+    pub fn filas_novas(&mut self) -> Vec<f64> {
+        self.filas.try_iter().collect()
     }
 
     /// Os instantes que chegaram desde a última chamada. `None`: o PresentMon parou (a contagem não vale mais).
@@ -809,6 +868,28 @@ mod tests {
         let descartado = linha("Application", 1.0, 5.5556, 1.0, 2.0, None);
         assert_eq!(instante_exibido(&exibido, col), Some(10_000));
         assert_eq!(instante_exibido(&descartado, col), None, "NA: não chegou à tela");
+    }
+
+    #[test]
+    fn o_instante_na_tela_e_o_comeco_mais_a_latencia_da_tela() {
+        // CPUStartQPC na 9, DisplayLatency (12 ms) na 17, DisplayedTime na 18; QPC a 10 MHz.
+        let col = (9, 17, 18);
+        let exibido = linha("Application", 1.0, 5.5556, 1.0, 2.0, Some(5.56));
+        let descartado = linha("Application", 1.0, 5.5556, 1.0, 2.0, None);
+        assert_eq!(instante_na_tela(&exibido, col, 10_000_000.0), Some(10_000 + 120_000));
+        assert_eq!(instante_na_tela(&descartado, col, 10_000_000.0), None);
+    }
+
+    #[test]
+    fn a_fila_ate_a_tela_e_da_chamada_do_present_ate_a_tela() {
+        // CPUBusy na 11, DisplayLatency na 17, DisplayedTime na 18. DisplayLatency de 12 ms com 1 ms antes do Present.
+        let col = (11, 17, 18);
+        let exibido = linha("Application", 1.0, 5.5556, 1.0, 2.0, Some(5.56));
+        let descartado = linha("Application", 1.0, 5.5556, 1.0, 2.0, None);
+        assert_eq!(fila_ate_a_tela(&exibido, col), Some(11.0));
+        assert_eq!(fila_ate_a_tela(&descartado, col), None, "não chegou à tela: sem fila");
+        let absurda = linha("Application", 1.0, 5.5556, 30.0, 2.0, Some(5.56));
+        assert_eq!(fila_ate_a_tela(&absurda, col), None, "negativa não vale");
     }
 
     #[test]

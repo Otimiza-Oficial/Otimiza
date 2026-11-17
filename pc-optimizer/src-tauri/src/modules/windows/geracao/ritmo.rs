@@ -17,6 +17,64 @@ pub struct Apresentacao {
     pub fase: Fase,
 }
 
+/// Quanto o quadro REAL espera pela vez da tela nos modos fixos. Ele sempre sai: é o quadro do jogo.
+pub const ESPERA_DO_REAL_MS: u32 = 50;
+
+/// Quanto o GERADO espera pela vez. Com 0, no 2× a 144 Hz com o jogo a 72 FPS (o passo da agenda igual a uma
+/// atualização da tela), só 76% dos gerados saíam; com 2 ms, todos (`o_2x_no_limite_do_monitor_mostra_os_gerados`).
+/// O gerador pede `timeBeginPeriod(1)`: a espera não passa disso.
+pub const ESPERA_DO_GERADO_MS: u32 = 2;
+
+/// MODOS FIXOS (2×–4×), com um quadro na fila do Windows, no máximo: o gerado espera um pouco pela vez e, sem ela, é
+/// descartado (esperar mais atrasaria o real seguinte). O real espera a vez e sai de todo jeito.
+/// `esperar(ms, sai_de_todo_jeito)`: `true` quando a fila tem lugar.
+pub fn vez_no_modo_fixo(fase: Fase, esperar: impl FnOnce(u32, bool) -> bool) -> bool {
+    match fase {
+        Fase::Gerado(_) => esperar(ESPERA_DO_GERADO_MS, false),
+        Fase::Real => {
+            esperar(ESPERA_DO_REAL_MS, true);
+            true
+        }
+    }
+}
+
+/// A vez da tela é um semáforo do Windows: cada quadro que sai da fila devolve uma vaga. Um `Present` feito sem ter
+/// tomado a vaga (o real que passou da espera) deixa uma vaga a mais quando sai, e a fila voltaria a aceitar dois.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Divida {
+    /// As vagas a devolver.
+    pub vagas: u32,
+    /// Pagou alguma desde a última espera que deu certo. Se a espera seguinte estoura, a dívida era falsa (a vaga
+    /// tinha se perdido: `Present` ocluído, quadro que o Windows descartou), e não se cobra mais nada: senão, cada
+    /// real pagaria a vaga do anterior e esperaria 50 ms, e a tela ficaria em 20 FPS para sempre.
+    pub pagou: bool,
+}
+
+/// Antes de esperar, toma de volta as vagas que já sobraram (sem esperar por elas). `tentar(ms)`: tenta tomar uma
+/// vaga. Devolve se a vaga desta espera veio.
+pub fn esperar_a_vez_pagando(
+    divida: &mut Divida,
+    ms: u32,
+    sai_de_todo_jeito: bool,
+    mut tentar: impl FnMut(u32) -> bool,
+) -> bool {
+    while divida.vagas > 0 && tentar(0) {
+        divida.vagas -= 1;
+        divida.pagou = true;
+    }
+    let veio = tentar(ms);
+    if veio {
+        divida.pagou = false;
+    } else if sai_de_todo_jeito {
+        if divida.pagou {
+            *divida = Divida::default();
+        } else {
+            divida.vagas = (divida.vagas + 1).min(8);
+        }
+    }
+    veio
+}
+
 pub fn agenda(chegada: f64, intervalo: f64, multiplicador: u8) -> Vec<Apresentacao> {
     let m = multiplicador.clamp(1, 8) as usize;
     if m == 1 || intervalo <= 0.0 {
@@ -177,6 +235,58 @@ impl AtrasoDaExibicao {
     pub fn segundos(&self) -> f64 {
         self.intervalo.unwrap_or(0.02) + self.preparo.unwrap_or(0.005) + Self::FOLGA
     }
+}
+
+/// O que chegou à tela numa janela, pelo instante em que cada quadro da sobreposição APARECEU (PresentMon).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RitmoNaTela {
+    pub por_segundo: f64,
+    /// Atualizações do monitor que repetiram o quadro anterior, em % (com 2× dentro dos Hz, o ideal é perto de 0).
+    pub repetidas_pct: f64,
+    /// Buracos de 3 atualizações ou mais sem quadro novo (o tranco que se sente), fora pausas de meio segundo.
+    pub engasgos: u32,
+}
+
+/// Pura: o ritmo na tela a partir dos instantes (s, em ordem) em que os quadros apareceram. `None` sem quadros que
+/// bastem ou sem os Hz.
+pub fn ritmo_na_tela(instantes: &[f64], periodo: f64) -> Option<RitmoNaTela> {
+    if instantes.len() < 10 || periodo <= 0.0 {
+        return None;
+    }
+    let (mut atualizacoes, mut repetidas, mut engasgos, mut tempo) = (0u64, 0u64, 0u32, 0.0);
+    for par in instantes.windows(2) {
+        let d = par[1] - par[0];
+        if !(0.0..0.5).contains(&d) {
+            continue;
+        }
+        let n = (d / periodo).round().max(1.0) as u64;
+        atualizacoes += n;
+        repetidas += n - 1;
+        if n >= 3 {
+            engasgos += 1;
+        }
+        tempo += d;
+    }
+    (atualizacoes > 0 && tempo > 0.0).then(|| RitmoNaTela {
+        por_segundo: atualizacoes.saturating_sub(repetidas) as f64 / tempo,
+        repetidas_pct: repetidas as f64 / atualizacoes as f64 * 100.0,
+        engasgos,
+    })
+}
+
+/// Média de uma medida em ms (fila até a tela), sem os extremos de um engasgo.
+pub fn media_da_fila(media: Option<f64>, novas: &[f64]) -> Option<f64> {
+    novas
+        .iter()
+        .filter(|v| (0.0..200.0).contains(*v))
+        .fold(media, |m, v| Some(m.map_or(*v, |m| m * 0.95 + v * 0.05)))
+}
+
+/// O atraso que o Frame Boost acrescenta, em ms: do quadro do jogo composto pelo Windows (perto da atualização em que
+/// ele apareceria) até a sobreposição chegar à tela. `ate_o_present` pelo relógio do gerador, mais a fila inteira da
+/// sobreposição até a tela, pelo PresentMon. Continua ESTIMADO: são duas médias, e não o mesmo quadro casado.
+pub fn atraso_acrescentado(ate_o_present: Option<f64>, fila_da_sobreposicao: Option<f64>) -> Option<f64> {
+    ate_o_present.map(|a| a + fila_da_sobreposicao.unwrap_or(0.0))
 }
 
 /// Gerado além da taxa do monitor não aparece: vira descarte ou rasgo e custa placa à toa.
@@ -622,6 +732,172 @@ mod tests {
         assert!(!quadro_aprovado(Some(0.25)));
         assert!(!quadro_aprovado(None));
         assert!(!quadro_aprovado(Some(f32::NAN)));
+    }
+
+    #[test]
+    fn o_atraso_soma_a_fila_inteira_da_sobreposicao() {
+        // A fila do jogo acontece ANTES da composição de onde a conta parte: não se desconta.
+        assert_eq!(atraso_acrescentado(Some(9.0), Some(6.0)), Some(15.0));
+        assert_eq!(atraso_acrescentado(Some(9.0), None), Some(9.0), "sem PresentMon, como antes");
+        assert_eq!(atraso_acrescentado(None, Some(6.0)), None);
+    }
+
+    #[test]
+    fn a_vaga_de_um_present_sem_vez_e_devolvida() {
+        let mut divida = Divida::default();
+        // O real passa da espera e sai de todo jeito: fica devendo.
+        assert!(!esperar_a_vez_pagando(&mut divida, 50, true, |_| false));
+        assert_eq!(divida.vagas, 1);
+        // Os dois quadros saem da fila: duas vagas no semáforo (uma a mais que o certo).
+        let mut vagas = 2u32;
+        let mut tentar = |_ms: u32| {
+            if vagas > 0 {
+                vagas -= 1;
+                true
+            } else {
+                false
+            }
+        };
+        assert!(esperar_a_vez_pagando(&mut divida, 2, false, &mut tentar));
+        assert_eq!(divida.vagas, 0);
+        // Sem vaga sobrando: a fila não aceita um segundo quadro.
+        assert!(!esperar_a_vez_pagando(&mut divida, 2, false, &mut tentar));
+        assert_eq!(divida.vagas, 0, "o gerado sem vez não sai, e não deve nada");
+    }
+
+    #[test]
+    fn uma_vaga_perdida_nao_prende_a_tela_em_20_fps() {
+        // O semáforo e a fila do Windows, com a vaga perdida: nada livre e nada na fila.
+        let (mut vagas, mut fila) = (0u32, 0u32);
+        let mut divida = Divida::default();
+        let mut gerados_que_sairam = Vec::new();
+        for volta in 0..8 {
+            for fase in [Fase::Real, Fase::Gerado(0.5)] {
+                let vez = vez_no_modo_fixo(fase, |ms, sai| {
+                    esperar_a_vez_pagando(&mut divida, ms, sai, |_| {
+                        if vagas > 0 {
+                            vagas -= 1;
+                            true
+                        } else {
+                            false
+                        }
+                    })
+                });
+                if vez {
+                    fila += 1;
+                }
+                if let Fase::Gerado(_) = fase {
+                    gerados_que_sairam.push((volta, vez));
+                }
+                // Uma atualização da tela: o quadro da fila sai e devolve a vaga.
+                if fila > 0 {
+                    fila -= 1;
+                    vagas += 1;
+                }
+            }
+        }
+        assert!(
+            gerados_que_sairam.iter().skip(3).all(|(_, saiu)| *saiu),
+            "depois de se acertar, todo gerado sai: {:?}",
+            gerados_que_sairam
+        );
+    }
+
+    #[test]
+    fn o_ritmo_na_tela_conta_repetidas_e_engasgos() {
+        let p = 1.0 / 144.0;
+        // Um quadro por atualização: liso.
+        let liso: Vec<f64> = (0..144).map(|i| i as f64 * p).collect();
+        let r = ritmo_na_tela(&liso, p).unwrap();
+        assert!((r.por_segundo - 144.0).abs() < 1.0 && r.repetidas_pct < 0.1 && r.engasgos == 0, "{r:?}");
+        // Um em cada dois repetido (o 2× virando 1×): metade das atualizações repetidas.
+        let metade: Vec<f64> = (0..72).map(|i| i as f64 * 2.0 * p).collect();
+        let r = ritmo_na_tela(&metade, p).unwrap();
+        assert!((r.repetidas_pct - 50.0).abs() < 1.0 && r.engasgos == 0, "{r:?}");
+        // Um buraco de 4 atualizações: um engasgo.
+        let mut buraco = liso.clone();
+        buraco.drain(50..53);
+        assert_eq!(ritmo_na_tela(&buraco, p).unwrap().engasgos, 1);
+        // Pausa longa (menu, jogo atrás) não vira engasgo.
+        let mut pausa = liso.clone();
+        for t in pausa.iter_mut().skip(70) {
+            *t += 2.0;
+        }
+        assert_eq!(ritmo_na_tela(&pausa, p).unwrap().engasgos, 0);
+        assert_eq!(ritmo_na_tela(&liso[..5], p), None);
+    }
+
+    #[test]
+    fn a_media_da_fila_ignora_o_absurdo() {
+        assert_eq!(media_da_fila(None, &[]), None);
+        assert_eq!(media_da_fila(None, &[10.0]), Some(10.0));
+        assert_eq!(media_da_fila(Some(10.0), &[500.0, -1.0]), Some(10.0));
+        assert!((media_da_fila(Some(10.0), &[30.0]).unwrap() - 11.0).abs() < 1e-9);
+    }
+
+    /// Simulação do 2× fixo no limite do monitor: a fila de 1 quadro esvazia na atualização seguinte ao `Present`.
+    /// Devolve a fração dos gerados que chegou à tela.
+    fn gerados_na_tela(hz: f64, fps: f64, variacao: f64, espera_do_gerado_ms: f64) -> f64 {
+        let periodo = 1.0 / hz;
+        let intervalo = 1.0 / fps;
+        let mut ultimo_present = -1.0f64;
+        let (mut gerados, mut mostrados) = (0u32, 0u32);
+        let mut semente = 12345u64;
+        for i in 0..2000 {
+            semente = semente.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let ruido = ((semente >> 33) as f64 / (1u64 << 31) as f64 - 0.5) * 2.0 * variacao;
+            let chegada = i as f64 * intervalo + ruido;
+            for a in agenda(chegada, intervalo, 2) {
+                let livre = (ultimo_present / periodo).floor() * periodo + periodo;
+                let t = a.instante.max(ultimo_present);
+                let vez = vez_no_modo_fixo(a.fase, |ms, _| {
+                    let espera = match a.fase {
+                        Fase::Gerado(_) => espera_do_gerado_ms,
+                        Fase::Real => ms as f64,
+                    } / 1000.0;
+                    livre <= t + espera
+                });
+                if let Fase::Gerado(_) = a.fase {
+                    gerados += 1;
+                    if vez {
+                        mostrados += 1;
+                    }
+                }
+                if vez {
+                    ultimo_present = t.max(livre);
+                }
+            }
+        }
+        mostrados as f64 / gerados as f64
+    }
+
+    #[test]
+    fn o_2x_no_limite_do_monitor_mostra_os_gerados() {
+        let espera = ESPERA_DO_GERADO_MS as f64;
+        for fps in [60.0, 70.0, 72.0] {
+            let f = gerados_na_tela(144.0, fps, 0.0005, espera);
+            assert!(f >= 0.99, "144 Hz, {fps} FPS: {:.1}% dos gerados", f * 100.0);
+        }
+        // Acima de Hz/2 o 2× já não cabe inteiro (`multiplicador_que_cabe` tolera 3%): ainda assim, quase todos.
+        assert!(gerados_na_tela(144.0, 74.0, 0.0005, espera) >= 0.95);
+        // Sem espera, o caso de 72 FPS perdia um quarto: a trava de que a espera importa.
+        assert!(gerados_na_tela(144.0, 72.0, 0.0005, 0.0) < 0.9);
+    }
+
+    #[test]
+    fn no_modo_fixo_o_gerado_espera_pouco_e_o_real_sempre_sai() {
+        let mut pedido = None;
+        assert!(!vez_no_modo_fixo(Fase::Gerado(0.5), |ms, sai| {
+            pedido = Some((ms, sai));
+            false
+        }));
+        assert_eq!(pedido, Some((ESPERA_DO_GERADO_MS, false)), "o gerado quase não segura o laço");
+        assert!(vez_no_modo_fixo(Fase::Gerado(0.5), |_, _| true));
+        assert!(vez_no_modo_fixo(Fase::Real, |ms, sai| {
+            pedido = Some((ms, sai));
+            false
+        }));
+        assert_eq!(pedido, Some((ESPERA_DO_REAL_MS, true)));
     }
 
     #[test]
