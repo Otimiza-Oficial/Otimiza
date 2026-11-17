@@ -1126,6 +1126,34 @@ impl WindowsOptimizer {
         })
     }
 
+    /// A fila de 1 quadro do driver no perfil do jogo, junto com o Frame Boost (decisão do dono, 16/11: entra sozinha com
+    /// ele e sai com ele). Já aplicada: nada. Histórico que não grava: desfaz na hora.
+    pub fn fila_nvidia(&self, executavel: &str, caminho: Option<&str>, log: &mut ChangeLog) -> Result<bool, String> {
+        let id = nvdriver::id_da_fila(executavel);
+        if log.is_applied(&id) {
+            return Ok(false);
+        }
+        let feito = nvdriver::fila_de_um(executavel, caminho)?;
+        let change = ChangeRecord::FilaNvidia {
+            executavel: executavel.to_string(),
+            valor_anterior: feito.valor_anterior,
+            caminho: caminho.map(str::to_string),
+        };
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id,
+            name: format!("Fila de 1 quadro em {} (driver NVIDIA, com o Frame Boost)", executavel),
+            timestamp: now_timestamp(),
+            changes: vec![change.clone()],
+        }) {
+            if let Err(falhas) = revert_changes(&[change]) {
+                return Err(format!("{} E não consegui devolver a fila: {}", erro, falhas.join("; ")));
+            }
+            return Err(erro);
+        }
+        crate::utils::Logger::info(&format!("fila do driver NVIDIA em 1 quadro: {}", executavel));
+        Ok(true)
+    }
+
     /// NUNCA no perfil global (prenderia área de trabalho e todo jogo). Trocar o número de um jogo já limitado desfaz o
     /// anterior primeiro.
     /// Smooth Motion no perfil do jogo (experimental, atrás de `smooth_motion_drs`). Mesmo caminho do limite: grava o
@@ -3000,6 +3028,11 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 valor_anterior,
                 ..
             } => nvdriver::desfazer_smooth_motion(executavel, valor_anterior),
+            ChangeRecord::FilaNvidia {
+                executavel,
+                valor_anterior,
+                caminho,
+            } => nvdriver::desfazer_fila(executavel, caminho.as_deref(), valor_anterior),
 
             ChangeRecord::DriverAmd {
                 opcao,
