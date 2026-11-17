@@ -990,6 +990,8 @@ export type Ativo_Deserialize = {
 	placa_pct?: number | null,
 	/**  No modo leve (placa sem folga, ou a guarda aliviou). */
 	leve?: boolean,
+	/**  O último degrau da guarda (modo leve, multiplicador baixado): por que o Frame Boost aliviou em vez de sumir. */
+	degrau?: string | null,
 	/**  FPS do jogo agora, com o gerador ligado (o que ele capturou de quadros reais). */
 	fps_do_jogo?: number | null,
 	/**  Quanto do FPS o jogo mantém com o gerador ligado, em %, MEDIDO pela guarda (com e sem ele, colados no tempo). */
@@ -1030,6 +1032,8 @@ export type Ativo_Serialize = {
 	placa_pct: number | null,
 	/**  No modo leve (placa sem folga, ou a guarda aliviou). */
 	leve: boolean,
+	/**  O último degrau da guarda (modo leve, multiplicador baixado): por que o Frame Boost aliviou em vez de sumir. */
+	degrau: string | null,
 	/**  FPS do jogo agora, com o gerador ligado (o que ele capturou de quadros reais). */
 	fps_do_jogo: number | null,
 	/**  Quanto do FPS o jogo mantém com o gerador ligado, em %, MEDIDO pela guarda (com e sem ele, colados no tempo). */

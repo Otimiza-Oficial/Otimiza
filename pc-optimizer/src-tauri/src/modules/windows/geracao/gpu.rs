@@ -943,7 +943,7 @@ impl Gpu {
             self.ctx.Draw(3, 0);
             // A mesma textura vira alvo no passe seguinte.
             self.ctx
-                .PSSetShaderResources(0, Some(&[None, None, None, None, None]));
+                .PSSetShaderResources(0, Some(&[None, None, None, None, None, None]));
             self.ctx.OMSetRenderTargets(None, None);
         }
     }
@@ -2637,7 +2637,16 @@ mod qualidade {
         gpu.estimar();
         gpu.compor(destino.rtv.as_ref().unwrap(), l, a, Some(0.5));
         let gerado = ler_de_volta(gpu, &destino.textura, l, a);
+        if let Ok(mut g) = ULTIMO_GERADO.lock() {
+            *g = gerado.clone();
+        }
         super::super::metrica::laudo(&gerado, meio, antes, depois, l, a)
+    }
+
+    static ULTIMO_GERADO: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new(Vec::new());
+
+    fn ultimo_gerado(_gpu: &Gpu, _l: u32, _a: u32) -> Vec<u8> {
+        ULTIMO_GERADO.lock().map(|g| g.clone()).unwrap_or_default()
     }
 
     /// O laboratório nas cenas sintéticas, com os shaders reais na GPU em software. Roda em qualquer máquina (sem
@@ -2657,6 +2666,7 @@ mod qualidade {
             ("parado", quadro(l, a, 100, 0, true), quadro(l, a, 100, 0, true), quadro(l, a, 100, 0, true)),
         ];
         let mut relatorio = Vec::new();
+        let mut volta_da_mira: Option<(f64, f64, f64)> = None;
         for (nome, antes, meio, depois) in &cenas {
             let r = laudo_no_warp(&mut gpu, l, a, antes, meio, depois);
             println!("laboratório {nome}: {r:?}");
@@ -2665,11 +2675,28 @@ mod qualidade {
             }
             relatorio.push((nome.to_string(), r));
         }
+        // A mira em panorâmica: o anel de 4 px em volta da cruz (o fundo passa por trás dela).
+        {
+            use super::super::metrica::{anel, cenas::mascara_da_mira, erro_na_mascara};
+            let (_, antes, meio, depois) = &cenas[1];
+            let volta = anel(&mascara_da_mira(l, a), l, a, 4);
+            laudo_no_warp(&mut gpu, l, a, antes, meio, depois);
+            let gerado = ultimo_gerado(&gpu, l, a);
+            let (g, rep) = (erro_na_mascara(&gerado, meio, &volta), erro_na_mascara(antes, meio, &volta));
+            let cruz = erro_na_mascara(&gerado, meio, &mascara_da_mira(l, a));
+            println!("laboratório volta_da_mira: gerado {g:.2} × repetir {rep:.2}; na cruz {cruz:.2}");
+            volta_da_mira = Some((g, rep, cruz));
+        }
         // Trava contra piora (medido em 16/11 com o gerador da 1.0.6): nas cenas com movimento, gerar ganha de repetir o
         // quadro real. Mudança que perde para repetir não passa.
         for (nome, r) in &relatorio[..2] {
             assert!(r.ssim > r.ssim_repetir, "{nome}: o gerado perdeu para repetir o real: {r:?}");
             assert!(r.erro_mira <= r.erro_mira_repetir, "{nome}: a mira ficou pior que repetir: {r:?}");
+        }
+        // Em volta da mira (1.0.7): o fundo que passa atrás dela. Medido 5,69 antes do `ErroNaCruzSemHud`, 5,49 depois.
+        if let Some((g, rep, cruz)) = volta_da_mira {
+            assert!(cruz < 0.5, "a cruz parada saiu alterada: {cruz}");
+            assert!(g < 5.6 && g < rep, "o fundo em volta da mira piorou: {g:.2} (repetir {rep:.2})");
         }
         // Cena parada: o gerado tem de ser o próprio quadro (nada a interpolar).
         let parado = &relatorio[2].1;

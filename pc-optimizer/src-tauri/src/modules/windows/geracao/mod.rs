@@ -109,6 +109,9 @@ pub struct Estado {
     /// Com escala e o jogo ainda do tamanho do monitor (ele repôs o tamanho): o que fazer no menu do jogo.
     #[serde(default)]
     pub aviso_da_escala: Option<String>,
+    /// O último degrau da guarda (1.0.7), para a tela dizer por que o Frame Boost aliviou em vez de sumir.
+    #[serde(default)]
+    pub degrau: Option<String>,
 }
 
 impl Default for Estado {
@@ -140,6 +143,7 @@ impl Default for Estado {
             escala: None,
             ampliada: None,
             aviso_da_escala: None,
+            degrau: None,
         }
     }
 }
@@ -398,7 +402,10 @@ impl Configuracao {
 pub enum ReacaoAPerda {
     /// Primeiro alivia a placa e confere de novo, do zero.
     FicarLeve,
-    /// Já estava leve e o jogo ainda perde: desliga.
+    /// Já leve e o jogo ainda perde: um quadro gerado a menos por real (4× → 3× → 2×), menos trabalho para a placa,
+    /// e confere de novo (1.0.7). Antes, daqui o Frame Boost desligava de vez.
+    BaixarPara(u8),
+    /// Já leve, no 2×, e o jogo ainda perde: desliga.
     Desligar,
 }
 
@@ -432,11 +439,28 @@ pub fn presentmon_mudo(pausada: bool, quadros_do_jogo: u64, quadros_capturados: 
     !pausada && quadros_do_jogo == 0 && quadros_capturados >= 30
 }
 
-pub fn reacao_a_perda(ja_leve: bool) -> ReacaoAPerda {
-    if ja_leve {
-        ReacaoAPerda::Desligar
-    } else {
+/// **Pura.** O degrau seguinte quando o jogo perde FPS: leve, depois um multiplicador a menos, e só no 2× desliga.
+/// `teto`: o multiplicador máximo que vale agora (o pedido, ou o que a guarda já baixou).
+pub fn reacao_a_perda(ja_leve: bool, teto: u8) -> ReacaoAPerda {
+    if !ja_leve {
         ReacaoAPerda::FicarLeve
+    } else if teto > 2 {
+        ReacaoAPerda::BaixarPara(teto - 1)
+    } else {
+        ReacaoAPerda::Desligar
+    }
+}
+
+/// **Pura.** A frase da tela para o degrau: o que a guarda viu e o que fez.
+pub fn degrau_em_palavras(razao: Option<f64>, baixou_para: Option<u8>) -> String {
+    let perda = razao.map(|r| ((1.0 - r) * 100.0).round().max(0.0) as u32);
+    let viu = match perda {
+        Some(p) if p > 0 => format!("o jogo perdia {}% do FPS real", p),
+        _ => "o jogo perdia FPS real".to_string(),
+    };
+    match baixou_para {
+        Some(m) => format!("Aliviado para {}×: {}. O Frame Boost continua, com menos trabalho para a placa.", m, viu),
+        None => format!("Modo leve: {}. O Frame Boost continua, com menos trabalho para a placa.", viu),
     }
 }
 
@@ -1583,6 +1607,8 @@ fn sessao(
     let mut janela_de_contagem = (segundos(inicio), 0u64, 0u64);
     let mut ultima_checagem = Instant::now();
     let mut cabe_atual = multiplicador;
+    // O teto que a guarda deixou (`ReacaoAPerda::BaixarPara`): começa no pedido e só desce.
+    let mut teto_da_guarda = multiplicador;
     // Automático: a fração de quadro que sobra de um real para o outro, e quantos coube no último.
     let mut acumulado_do_automatico = 0.0;
     let mut ultimo_do_automatico = 1u8;
@@ -1811,7 +1837,8 @@ fn sessao(
                         multiplicador
                     } else {
                         ritmo::multiplicador_que_cabe(multiplicador, 1.0 / fps_janela, hz)
-                    };
+                    }
+                    .min(teto_da_guarda);
                     if quer == cabe_atual {
                         pedidos_de_troca = 0;
                     } else {
@@ -1895,7 +1922,7 @@ fn sessao(
         match acao {
             guarda::Acao::Desligar => {
                 let razao = guarda.razao_media();
-                match reacao_a_perda(gpu.leve()) {
+                match reacao_a_perda(gpu.leve(), teto_da_guarda) {
                     // No FiveM do dono a guarda desligou o gerador 7 vezes (o jogo perdendo de 5% a 35%): antes de
                     // desistir, alivia a placa e confere de novo do zero (a média de antes condenaria o modo leve),
                     // com a régua do modo leve (`RAZAO_MINIMA_LEVE`): perder pouco não tira o Frame Boost inteiro.
@@ -1909,6 +1936,20 @@ fn sessao(
                         publicar(|e| {
                             e.leve = true;
                             e.razao_fps = None;
+                            e.degrau = Some(degrau_em_palavras(razao, None));
+                        });
+                    }
+                    ReacaoAPerda::BaixarPara(novo) => {
+                        teto_da_guarda = novo;
+                        cabe_atual = cabe_atual.min(novo);
+                        guarda = guarda::Guarda::nova_leve(segundos(inicio));
+                        crate::utils::Logger::warn(&format!(
+                            "gerador: o jogo ainda perdia FPS no modo leve (razão {:?}); multiplicador baixado para {}×",
+                            razao, novo
+                        ));
+                        publicar(|e| {
+                            e.razao_fps = None;
+                            e.degrau = Some(degrau_em_palavras(razao, Some(novo)));
                         });
                     }
                     ReacaoAPerda::Desligar => {
@@ -2268,8 +2309,12 @@ mod tests_da_guarda_leve {
 
     #[test]
     fn a_primeira_perda_alivia_e_a_segunda_desliga() {
-        assert_eq!(reacao_a_perda(false), ReacaoAPerda::FicarLeve);
-        assert_eq!(reacao_a_perda(true), ReacaoAPerda::Desligar);
+        assert_eq!(reacao_a_perda(false, 4), ReacaoAPerda::FicarLeve);
+        assert_eq!(reacao_a_perda(true, 4), ReacaoAPerda::BaixarPara(3), "leve no 4×: um a menos, não desliga");
+        assert_eq!(reacao_a_perda(true, 3), ReacaoAPerda::BaixarPara(2));
+        assert_eq!(reacao_a_perda(true, 2), ReacaoAPerda::Desligar, "só no fim da escada");
+        assert!(degrau_em_palavras(Some(0.82), Some(3)).starts_with("Aliviado para 3×: o jogo perdia 18% do FPS real"));
+        assert!(degrau_em_palavras(None, None).starts_with("Modo leve: o jogo perdia FPS real"));
     }
 }
 

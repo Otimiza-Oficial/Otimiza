@@ -6,7 +6,9 @@
 // chegam com atraso (o ETW entrega em lotes), por isso a conta só é feita `ATRASO_DA_CONTAGEM` depois de a janela
 // sem geração fechar. Sem PresentMon, conta a captura da tela, como antes.
 
-pub const JANELA: f64 = 1.5;
+/// 1 s com e 1 s sem (1.0.7; era 1,5 s): o tranco da conferência é o tempo sem o Frame Boost, e um segundo a 60 fps já
+/// são 60 quadros por lado. A decisão continua pela média de várias comparações.
+pub const JANELA: f64 = 1.0;
 pub const INTERVALO_INICIAL: f64 = 5.0;
 /// Cada conferência pausa o Frame Boost por `JANELA` segundos, e a pessoa vê o tranco (o FPS do jogo sozinho por um
 /// instante). Com 30 s, e a conferência que falhava repetindo a cada 13 s para sempre, o log de uma sessão do FiveM

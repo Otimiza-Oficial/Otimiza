@@ -233,6 +233,7 @@
             </div>
             {#if linha}<p class="apoio">{linha}</p>{/if}
             {#if prova}<p class="apoio">{prova}</p>{/if}
+            {#if a.degrau}<p class="aviso">{a.degrau}</p>{/if}
           {:else if estimativa}
             {@const de = n(estimativa.minimo)}
             {@const ate = n(estimativa.maximo)}

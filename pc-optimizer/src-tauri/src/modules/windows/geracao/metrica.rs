@@ -89,6 +89,29 @@ pub fn mascara_do_centro(largura: u32, altura: u32, fracao: f64) -> Vec<bool> {
         .collect()
 }
 
+/// O anel em volta de uma máscara: pixels fora dela a até `raio` de algum pixel dela. É onde o fundo passa por trás da
+/// mira e da HUD, e onde o fluxo se confunde com o que está parado (o borrão em volta da mira).
+pub fn anel(mascara: &[bool], largura: u32, altura: u32, raio: i32) -> Vec<bool> {
+    let (l, h) = (largura as i32, altura as i32);
+    let mut r = vec![false; mascara.len()];
+    for y in 0..h {
+        for x in 0..l {
+            if !mascara[(y * l + x) as usize] {
+                continue;
+            }
+            for dy in -raio..=raio {
+                for dx in -raio..=raio {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx >= 0 && ny >= 0 && nx < l && ny < h && !mascara[(ny * l + nx) as usize] {
+                        r[(ny * l + nx) as usize] = true;
+                    }
+                }
+            }
+        }
+    }
+    r
+}
+
 /// Erro médio absoluto da luminância (0–255) só nos pixels da máscara. Sem pixel na máscara: 0.
 pub fn erro_na_mascara(gerado: &[u8], real: &[u8], mascara: &[bool]) -> f64 {
     let (mut soma, mut n) = (0.0, 0usize);
@@ -200,6 +223,18 @@ pub fn laudo(gerado: &[u8], real: &[u8], antes: &[u8], depois: &[u8], largura: u
 #[cfg(test)]
 pub mod cenas {
     //! Cenas sintéticas BGRA para o laboratório: as mesmas que o WARP roda nos shaders reais.
+
+    /// Os pixels da cruz que `quadro(.., mira = true)` desenha: a HUD de verdade da cena.
+    pub fn mascara_da_mira(largura: u32, altura: u32) -> Vec<bool> {
+        let (l, h) = (largura as i32, altura as i32);
+        let (cx, cy) = (l / 2, h / 2);
+        (0..l * h)
+            .map(|i| {
+                let (x, y) = (i % l, i / l);
+                ((x - cx).abs() <= 6 && (y - cy).abs() <= 1) || ((y - cy).abs() <= 6 && (x - cx).abs() <= 1)
+            })
+            .collect()
+    }
 
     /// Fundo com textura (para o fluxo ter o que seguir), um quadrado claro em `x_quadrado` e, se `mira`, uma cruz
     /// branca fixa no centro. `deslocamento_fundo` faz panorâmica.

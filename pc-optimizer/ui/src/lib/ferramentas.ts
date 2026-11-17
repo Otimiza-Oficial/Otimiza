@@ -70,6 +70,8 @@ export interface PainelFrameBoost {
     nota: string | null;
     placa_pct: number | null;
     leve: boolean;
+    /** O último degrau da guarda (1.0.7): por que aliviou em vez de desligar. */
+    degrau?: string | null;
     fps_do_jogo: number | null;
     manteve_pct: number | null;
     comparacoes: number;
