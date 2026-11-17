@@ -1033,8 +1033,13 @@ struct Sobreposicao {
     rtv: Option<ID3D11RenderTargetView>,
     largura: u32,
     altura: u32,
-    /// No ritmo do monitor: o objeto que avisa a vez da tela (latência máxima de 1 quadro) e `Present(1)`.
+    /// O objeto que avisa a vez da tela (latência máxima de 1 quadro), nos dois ritmos. Nos modos fixos (2×–4×) o
+    /// `Present(0)` sem ele deixava até 3 quadros na fila do Windows: a imagem saía até 3 atualizações atrasada.
     vez_da_tela: Option<windows::Win32::Foundation::HANDLE>,
+    /// No ritmo do monitor: `Present(1)`, um quadro por atualização. Nos modos fixos, `Present(0)` pela agenda.
+    pelo_monitor: bool,
+    /// Vagas da fila a devolver (`ritmo::esperar_a_vez_pagando`).
+    divida: std::cell::Cell<ritmo::Divida>,
     /// Com escala: onde a imagem ampliada cai dentro da sobreposição (que cobre o monitor).
     ampliar: Option<Retangulo>,
     /// Com escala: onde o cursor ampliado vai, na sobreposição (nenhum = escondido ou fora do jogo).
@@ -1123,11 +1128,7 @@ impl Sobreposicao {
                         Scaling: DXGI_SCALING_STRETCH,
                         SwapEffect: DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
                         AlphaMode: DXGI_ALPHA_MODE_IGNORE,
-                        Flags: if pelo_monitor {
-                            DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32
-                        } else {
-                            0
-                        },
+                        Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
                         ..Default::default()
                     },
                     None,
@@ -1141,13 +1142,11 @@ impl Sobreposicao {
             }
             // Um quadro na fila, no máximo: cada atualização do monitor recebe o quadro feito para ela, e não um de
             // três atualizações atrás.
-            let vez_da_tela = if pelo_monitor {
+            let vez_da_tela = {
                 let s2: IDXGISwapChain2 = swap.cast().map_err(|e| e.message().to_string())?;
                 s2.SetMaximumFrameLatency(1)
                     .map_err(|e| format!("latência da swap chain: {}", e.message()))?;
                 Some(s2.GetFrameLatencyWaitableObject())
-            } else {
-                None
             };
             visual
                 .SetContent(&swap)
@@ -1167,6 +1166,8 @@ impl Sobreposicao {
                 largura: area.largura as u32,
                 altura: area.altura as u32,
                 vez_da_tela,
+                pelo_monitor,
+                divida: std::cell::Cell::new(ritmo::Divida::default()),
                 ampliar,
                 cursor: None,
             };
@@ -1226,21 +1227,35 @@ impl Sobreposicao {
                 }
             }
             unsafe {
-                let intervalo = if self.vez_da_tela.is_some() { 1 } else { 0 };
-                let _ = self.swap.Present(intervalo, DXGI_PRESENT(0));
+                let intervalo = if self.pelo_monitor { 1 } else { 0 };
+                let r = self.swap.Present(intervalo, DXGI_PRESENT(0));
+                // Ocluída ou com erro, talvez nada entre na fila e a vez fique presa: uma vez por sessão, no log.
+                if r != windows::Win32::Foundation::S_OK
+                    && !PRESENT_ESTRANHO_AVISADO.swap(true, Ordering::Relaxed)
+                {
+                    crate::utils::Logger::warn(&format!("gerador: o Present devolveu {:?}", r));
+                }
             }
         }
     }
 }
 
+static PRESENT_ESTRANHO_AVISADO: AtomicBool = AtomicBool::new(false);
+
 impl Sobreposicao {
-    /// No ritmo do monitor: espera a vez da próxima atualização da tela (no máximo `ms`).
-    fn esperar_a_vez(&self, ms: u32) {
-        if let Some(h) = self.vez_da_tela {
-            unsafe {
-                windows_sys::Win32::System::Threading::WaitForSingleObjectEx(h.0 as _, ms, 1);
-            }
-        }
+    /// Espera a vez da próxima atualização da tela (no máximo `ms`). `false`: a fila ainda está cheia.
+    /// `sai_de_todo_jeito`: o quadro vai para a tela mesmo sem a vez (fica devendo a vaga).
+    fn esperar_a_vez(&self, ms: u32, sai_de_todo_jeito: bool) -> bool {
+        let Some(h) = self.vez_da_tela else {
+            return true;
+        };
+        let mut divida = self.divida.get();
+        let veio = ritmo::esperar_a_vez_pagando(&mut divida, ms, sai_de_todo_jeito, |ms| unsafe {
+            windows_sys::Win32::System::Threading::WaitForSingleObjectEx(h.0 as _, ms, 1)
+                == windows_sys::Win32::Foundation::WAIT_OBJECT_0
+        });
+        self.divida.set(divida);
+        veio
     }
 }
 
@@ -1306,6 +1321,11 @@ fn jogo_na_frente(pid: u32) -> bool {
 
 /// Ctrl+Alt+G desliga o gerador de qualquer lugar, inclusive de dentro do jogo.
 const ATALHO: i32 = 0x4F47;
+
+/// Para o log: "12.3 ms" ou "?".
+fn ms(v: Option<f64>) -> String {
+    v.map_or_else(|| "?".to_string(), |v| format!("{:.1} ms", v))
+}
 
 fn segundos(inicio: Instant) -> f64 {
     inicio.elapsed().as_secs_f64()
@@ -1714,6 +1734,10 @@ fn sessao(
     // O que chegou à tela, contado pelo PresentMon no próprio Otimiza (a sobreposição é deste processo).
     let mut na_tela_vivo = super::presentmon::Vivo::iniciar_exibidos(std::process::id(), "OtimizaNaTela").ok();
     let mut quadros_na_tela = guarda::LinhaDoTempo::default();
+    // Da chamada do `Present` até a tela (ms), pelo PresentMon: a da sobreposição e a do próprio jogo.
+    let mut fila_da_sobreposicao: Option<f64> = None;
+    // Gerados que perderam a vez na fila de 1 quadro (modos fixos), para o log de 10 s.
+    let mut sem_vez = 0u64;
     while !parar.load(Ordering::Relaxed) {
         if bombear_mensagens() {
             return Ok(Fim::Parou);
@@ -1722,6 +1746,7 @@ fn sessao(
             c.colher(&gpu);
         }
         if let Some(v) = na_tela_vivo.as_mut() {
+            fila_da_sobreposicao = ritmo::media_da_fila(fila_da_sobreposicao, &v.filas_novas());
             match v.novos() {
                 Some(lote) => {
                     for qpc in lote {
@@ -1839,7 +1864,7 @@ fn sessao(
                 _ => "placa sem medida".to_string(),
             };
             crate::utils::Logger::info(&format!(
-"gerador: 10 s · {:.0} reais/s · {:.0} gerados/s · {:.0} iguais/s · {:.0} fora do jogo/s · {} recusados · escondida {:.0}% (sem quadro {:.1} s, guarda {:.1} s, jogo atrás {:.1} s) · {}× · custo {:.1} ms · {} · na tela {:.0}/s, {:.0}% das atualizações repetidas",
+"gerador: 10 s · {:.0} reais/s · {:.0} gerados/s · {:.0} iguais/s · {:.0} fora do jogo/s · {} recusados · escondida {:.0}% (sem quadro {:.1} s, guarda {:.1} s, jogo atrás {:.1} s) · {}× · custo {:.1} ms · {} · na tela {:.0}/s, {:.0}% das atualizações repetidas · {:.0} descartados/s ({} sem vez na fila) · atraso até o Present {}, fila da sobreposição até a tela {}",
                 (contadores.reais - antes.reais) as f64 / segs,
                 (contadores.gerados - antes.gerados) as f64 / segs,
                 (contadores.iguais - antes.iguais) as f64 / segs,
@@ -1853,8 +1878,13 @@ fn sessao(
                 contadores.custo_ms,
                 placa_no_log,
                 exibicao.exibidos as f64 / segs,
-                exibicao.repetidas_pct()
+                exibicao.repetidas_pct(),
+                (contadores.descartados - antes.descartados) as f64 / segs,
+                sem_vez,
+                ms(atraso_medio),
+                ms(fila_da_sobreposicao)
             ));
+            sem_vez = 0;
             exibicao.zerar();
             relatorio = (Instant::now(), contadores, escondida_total);
             escondida_por = [Duration::ZERO; 3];
@@ -1922,6 +1952,7 @@ fn sessao(
                     ));
                 }
                 let comparacoes = guarda.razoes.len() as u32;
+                let atraso = ritmo::atraso_acrescentado(atraso_medio, fila_da_sobreposicao);
                 publicar(|e| {
                     e.fps_reais = (reais as f64 / dt * 10.0).round() / 10.0;
                     e.fps_apresentados = (apresentados as f64 / dt * 10.0).round() / 10.0;
@@ -1936,7 +1967,7 @@ fn sessao(
                         cabe_atual
                     };
                     e.razao_fps = guarda.razao_media();
-                    e.atraso_ms = atraso_medio.map(|a| (a * 10.0).round() / 10.0);
+                    e.atraso_ms = atraso.map(|a| (a * 10.0).round() / 10.0);
                     e.fps_exibidos = exibidos;
                     e.situacao = if gerando {
                         Situacao::Gerando
@@ -2227,8 +2258,13 @@ fn sessao(
         }
 
         if pelo_monitor {
+            // Escondida, nada vai para a tela: esperar a vez prenderia o laço em 50 ms (a fila não esvazia).
+            if escondida {
+                std::thread::sleep(Duration::from_millis(4));
+                continue;
+            }
             // A vez da tela: um quadro por atualização do monitor.
-            sobreposicao.esperar_a_vez(50);
+            sobreposicao.esperar_a_vez(50, true);
             let agora = segundos(inicio);
             // O instante do jogo que esta atualização mostra: a hora em que ela aparece, menos o atraso.
             let no_jogo = agora + periodo_da_tela - atraso_da_exibicao.segundos();
@@ -2270,7 +2306,13 @@ fn sessao(
             vencido = agenda.pop_front();
         }
         if let Some(a) = vencido {
+            // Escondida, nada vai para a tela: apresentar só encheria a fila (e o Windows nem a esvazia).
             match a.fase {
+                _ if escondida => {}
+                _ if !ritmo::vez_no_modo_fixo(a.fase, |ms, sai| sobreposicao.esperar_a_vez(ms, sai)) => {
+                    contadores.descartados += 1;
+                    sem_vez += 1;
+                }
                 Fase::Gerado(t) => {
                     sobreposicao.apresentar(&gpu, Some(t), cronometro.as_mut());
                     contadores.gerados += 1;
