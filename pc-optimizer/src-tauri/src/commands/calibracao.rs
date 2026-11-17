@@ -224,7 +224,7 @@ fn calibrar(
     atual.resultado.candidato = "atual".to_string();
     resultados.push(atual.resultado);
 
-    maquina::marcar_teste_em_andamento(true);
+    maquina::marcar_teste_comecando()?;
     let mut testar = |c: &motor::Candidato, id: &str| -> Result<motor::ResultadoDoCandidato, String> {
         for m in &c.mudancas {
             if !controlados.contains(&m.alias) {

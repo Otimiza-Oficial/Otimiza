@@ -1,6 +1,6 @@
 ---
 name: publicar-versao
-description: Use quando o dono aprovar publicar uma versão nova do Otimiza (ex. "pode publicar a 1.0.5"). O ritual completo: número da versão nos 7 arquivos, notas, PR de ui/premium para main, checagens, merge, tag anotada e acompanhar a esteira "Publicar versão" até os instaladores saírem.
+description: "Use quando o dono aprovar publicar uma versão nova do Otimiza (ex. 'pode publicar a 1.0.5'). O ritual completo: número da versão nos 7 arquivos, notas, PR de ui/premium para main, checagens, merge, tag anotada e acompanhar a esteira 'Publicar versão' até os instaladores saírem."
 ---
 
 # Publicar versão

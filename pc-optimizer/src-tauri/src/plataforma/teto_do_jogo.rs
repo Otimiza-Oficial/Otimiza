@@ -113,12 +113,7 @@ fn guardar(executavel: &str, registro: Option<Registro>) {
         None => t.remove(&executavel.to_lowercase()),
     };
     let p = arquivo();
-    if let Some(d) = p.parent() {
-        let _ = fs::create_dir_all(d);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&t) {
-        let _ = fs::write(p, json);
-    }
+    crate::utils::arquivo::escrever_json_ou_avisar(&p, &t);
 }
 
 /// **Pura.** Quem pôs o teto que o driver usa, em palavras para a tela. `registro`: o do Otimiza para este jogo;
@@ -203,6 +198,7 @@ pub fn revisar_teto_antigo(executavel: &str, log: &mut crate::modules::changelog
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
             super::base_do_jogo::anotar_teto_desfeito(executavel, gravado_em, agora);
+            soltar_fila(executavel, log);
             crate::utils::Logger::info(&format!(
                 "teto do jogo: teto antigo de {} fps em {} desfeito (o jogo rodava a {:.0} fps num monitor de {} Hz)",
                 teto,
@@ -272,6 +268,10 @@ pub fn aplicar(
     pedido: Pedido,
     log: &mut crate::modules::changelog::ChangeLog,
 ) -> Result<Decisao, String> {
+    // O Frame Boost saiu do jogo: a fila sai PRIMEIRO, antes de qualquer `?` abaixo (ela não depende do teto).
+    if matches!(pedido, Pedido::FimDoFrameBoost) {
+        soltar_fila(executavel, log);
+    }
     let fb = matches!(pedido, Pedido::JogoLiso(_)) && frame_boost_no_jogo(executavel);
     let decisao = decidir(atual(executavel, log).as_ref(), pedido, fb);
     match &decisao {
@@ -284,6 +284,17 @@ pub fn aplicar(
                 log,
             )?;
             guardar(executavel, Some(r.clone()));
+            // A fila de 1 quadro do driver vai junto com a base do Frame Boost (o atraso que ele acrescenta é menor
+            // com o jogo sem quadros enfileirados). Falhar aqui não impede o teto: só vai para o log.
+            if r.origem == Origem::FrameBoost {
+                if let Err(e) = crate::modules::windows::WindowsOptimizer::new().fila_nvidia(
+                    executavel,
+                    caminho.or(aberto.as_deref()),
+                    log,
+                ) {
+                    crate::utils::Logger::warn(&format!("teto do jogo: não pus a fila de 1 quadro em {}: {}", executavel, e));
+                }
+            }
             crate::utils::Logger::info(&format!(
                 "teto do jogo: {} fps em {} pelo {:?}{}",
                 r.fps,
@@ -306,6 +317,17 @@ pub fn aplicar(
         Decisao::Recusar(_) | Decisao::Nada => {}
     }
     Ok(decisao)
+}
+
+/// Devolve a fila de 1 quadro deste jogo, se o Otimiza a pôs.
+#[cfg(target_os = "windows")]
+pub fn soltar_fila(executavel: &str, log: &mut crate::modules::changelog::ChangeLog) {
+    let id = crate::modules::windows::nvdriver::id_da_fila(executavel);
+    if log.is_applied(&id) {
+        if let Err(e) = crate::modules::windows::WindowsOptimizer::new().revert(&id, log) {
+            crate::utils::Logger::warn(&format!("teto do jogo: não devolvi a fila de {}: {}", executavel, e));
+        }
+    }
 }
 
 /// **Pura.** O teto da base do Frame Boost fica no driver depois que o jogo fecha? Só se a partida abriu pelo "Jogar", o

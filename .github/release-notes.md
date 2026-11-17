@@ -8,13 +8,33 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.6_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.6_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.7_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.7_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.7: Correções de bugs no Frame Boost: menos desligamentos, menos atraso e uma tela mais simples
+
+Atualização da 1.0 (número interno 4.0.7).
+
+## Correções
+
+- **Frame Boost desligando sozinho:** nos modos fixos (2×, 3×, 4×), quando o jogo começava a perder FPS, ele desligava de vez. Agora alivia a placa em degraus: primeiro o modo leve, depois um quadro gerado a menos. Só desliga se nada disso bastar, e a tela diz o que fez e por quê. No Auto ele alivia para o modo leve e só desliga se o jogo continuar perdendo FPS.
+- **Tranco da conferência:** de tempos em tempos o Frame Boost pausa para conferir se o jogo perde FPS. A pausa ficou mais curta (1 s em vez de 1,5 s).
+- **Atraso com placa NVIDIA:** junto com o Frame Boost, a fila de quadros do driver fica em 1 no perfil do jogo (o "Modo de baixa latência" do painel da NVIDIA). Vale a partir da próxima vez que o jogo abrir. Fica no Histórico e sai junto com o Frame Boost.
+- **Borrão em volta da mira:** o fundo que passa atrás da mira e da HUD sai um pouco mais certo nos quadros gerados.
+- **Frame Boost que não ligava em alguns notebooks e drivers:** quando a captura de sempre não começa, o Otimiza agora tenta a captura moderna do Windows antes de desistir.
+- **Gravações pela metade:** se a energia caía na hora de gravar o estado do Otimiza (o teto de FPS do jogo, a base do Frame Boost), o arquivo podia ficar pela metade. Agora ele é gravado inteiro ou não é trocado.
+- **Testes de energia e prova do Turbo:** só começam com a marca de recuperação gravada. Se o PC desligar no meio, a abertura seguinte desfaz o que ficou pela metade.
+
+## Novo
+
+- **Frame Boost em três modos:** Qualidade, Equilíbrio (o padrão de quem nunca escolheu) e Desempenho. O Equilíbrio usa o cálculo de movimento mais leve, com menos trabalho para a placa. As opções de antes ficam em "Avançado", e quem já tinha escolhido continua com a escolha.
 
 ---
 

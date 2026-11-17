@@ -920,7 +920,7 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> V
         }
     }
     if let Some(m) = r.multiplicador {
-        match super::frameboost::ligar(app, m, false, r.escala, None) {
+        match super::frameboost::ligar(app, m, false, r.escala, None, false) {
             Ok(_) => passos.push(match (r.escala, m) {
                 (Some(n), 1) => format!("Escala {:?}: ligada, sem geração.", n),
                 (Some(n), _) => format!("Escala {:?} e geração de quadros: ligadas.", n),
@@ -1072,7 +1072,7 @@ fn ligar_o_lado(app: &tauri::AppHandle, r: &Receita) -> Result<(), String> {
         super::energia_jogo::definir(true).map(|_| ())?;
     }
     if let Some(m) = r.multiplicador {
-        super::frameboost::ligar(app, m, false, r.escala, None).map(|_| ())?;
+        super::frameboost::ligar(app, m, false, r.escala, None, false).map(|_| ())?;
     }
     Ok(())
 }
@@ -1139,10 +1139,10 @@ pub fn provar(
         armado: true,
     };
     let _ = desligar();
-    if let Ok(t) = serde_json::to_string(&ProvaEmAndamento { energia_antes }) {
-        let _ = fs::create_dir_all(pasta());
-        let _ = fs::write(marcador_da_prova(), t);
-    }
+    // A marca da prova, conferida (1.0.7): sem ela, uma queda no meio deixaria o lado "com" ligado sem a abertura
+    // seguinte saber. Sem marca, a prova não começa (o `fim` devolve o lado "sem").
+    crate::utils::arquivo::escrever_json(&marcador_da_prova(), &ProvaEmAndamento { energia_antes })
+        .map_err(|e| format!("Não comecei a prova: {}", e))?;
 
     let pid = jogo.pid;
     let nome = jogo.executavel.clone();

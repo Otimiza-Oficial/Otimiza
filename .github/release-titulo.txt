@@ -1,1 +1,1 @@
-Otimiza 1.0.6 Turbo e Frame Boost mais leves, e a correção para quem tem Valorant instalado (4.0.6)
+Otimiza 1.0.7 Frame Boost mais estável, mais leve e mais simples (4.0.7)

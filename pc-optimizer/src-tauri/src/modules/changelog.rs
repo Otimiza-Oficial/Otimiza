@@ -114,6 +114,14 @@ pub enum ChangeRecord {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         caminho: Option<String>,
     },
+    /// A fila de 1 quadro do driver NVIDIA no perfil do jogo, junto com o Frame Boost (1.0.7). O desfazer devolve o valor
+    /// e não apaga o perfil (o teto da base pode estar nele).
+    FilaNvidia {
+        executavel: String,
+        valor_anterior: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caminho: Option<String>,
+    },
     /// Smooth Motion ligado no perfil do jogo (experimental). O desfazer devolve o valor e não apaga o perfil.
     SmoothMotionNvidia {
         executavel: String,
@@ -275,6 +283,9 @@ impl ChangeRecord {
             ),
             ChangeRecord::SmoothMotionNvidia { executavel, .. } => {
                 format!("driver NVIDIA · Smooth Motion ligado em {}", executavel)
+            }
+            ChangeRecord::FilaNvidia { executavel, .. } => {
+                format!("driver NVIDIA · fila de 1 quadro em {} (menos atraso no Frame Boost)", executavel)
             }
             ChangeRecord::BootValor { nome, anterior } => format!(
                 "boot · {} (antes: {})",
@@ -722,6 +733,21 @@ mod tests_1_8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fila_do_frame_boost_aparece_no_historico_com_o_jogo() {
+        let c = ChangeRecord::FilaNvidia {
+            executavel: "FiveM_GTAProcess.exe".to_string(),
+            valor_anterior: "0".to_string(),
+            caminho: None,
+        };
+        assert!(c.describe().contains("fila de 1 quadro em FiveM_GTAProcess.exe"));
+        assert_eq!(crate::modules::windows::nvdriver::id_da_fila("FiveM_GTAProcess.exe"), "fila_nvidia:fivem_gtaprocess.exe");
+        // Registro gravado sem o caminho (formato curto) volta a ser lido.
+        let json = serde_json::to_string(&c).unwrap();
+        assert!(!json.contains("caminho"));
+        let _: ChangeRecord = serde_json::from_str(&json).unwrap();
+    }
 
     fn sample(id: &str) -> AppliedOptimization {
         AppliedOptimization {

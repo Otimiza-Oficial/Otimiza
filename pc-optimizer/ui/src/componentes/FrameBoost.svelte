@@ -19,6 +19,17 @@
   const CHAVE_ESCALA = "otimiza-fb-escala";
   const CHAVE_ALVO = "otimiza-fb-alvo";
   const CHAVE_NITIDEZ = "otimiza-fb-nitidez";
+  const CHAVE_PRESET = "otimiza-fb-preset";
+  const CHAVE_LEVE = "otimiza-fb-leve";
+
+  // Três jeitos prontos (1.0.7, decisão do dono: Equilíbrio é o padrão de quem nunca escolheu). Só mexem no que o
+  // gerador já aceita: quadros gerados, FPS alvo e escala. "Personalizado" é qualquer outra combinação do Avançado.
+  type Preset = "qualidade" | "equilibrio" | "desempenho";
+  const PRESETS: { id: Preset; nome: string; dica: string }[] = [
+    { id: "qualidade", nome: "Qualidade", dica: "Enche o monitor de quadros. Mais trabalho para a placa." },
+    { id: "equilibrio", nome: "Equilíbrio", dica: "Enche o monitor com o cálculo de movimento mais leve: menos trabalho para a placa, para o jogo não perder FPS." },
+    { id: "desempenho", nome: "Desempenho", dica: "Para placa no limite: o jogo desenha menos pixels e o gerador, leve, completa." },
+  ];
   /** FB6: três pontos da faixa do FSR (0 a 2 "stops"); o padrão é o dos exemplos da AMD. */
   const NITIDEZES = [
     { nome: "Suave", stops: 1 },
@@ -36,6 +47,8 @@
   let escalaPedida = $state<NivelDeEscala | null>(lerEscala());
   let alvoPedido = $state<number | null>(Number(ler(CHAVE_ALVO, "")) || null);
   let nitidez = $state(Number(ler(CHAVE_NITIDEZ, "0.2")));
+  /** O cálculo de movimento leve (menos trabalho para a placa). O gerador também entra leve sozinho com a placa cheia. */
+  let leve = $state(ler(CHAVE_LEVE, "0") === "1");
   /** Com a escala desligada nos Ajustes, as opções dela nem aparecem: o Otimiza não muda a resolução do jogo. */
   let escalaPermitida = $state(true);
   let relogio: ReturnType<typeof setInterval> | undefined;
@@ -189,6 +202,42 @@
     escalaPedida = e;
     gravar(CHAVE_ESCALA, e);
   }
+
+  function escolherLeve(v: boolean) {
+    leve = v;
+    gravar(CHAVE_LEVE, v ? "1" : "0");
+  }
+  // O FPS alvo do Auto não vale no caminho que acompanha o monitor (o Auto de todo dia): os modos não o usam.
+  function valoresDo(id: Preset): { mult: number; alvo: number | null; escala: NivelDeEscala | null; leve: boolean } {
+    if (id === "qualidade") return { mult: 0, alvo: null, escala: null, leve: false };
+    if (id === "equilibrio") return { mult: 0, alvo: null, escala: null, leve: true };
+    return escalaPermitida
+      ? { mult: 0, alvo: null, escala: "Qualidade", leve: true }
+      : { mult: 2, alvo: null, escala: null, leve: true };
+  }
+  function escolherPreset(id: Preset) {
+    const v = valoresDo(id);
+    escolherMult(v.mult);
+    escolherAlvo(v.alvo);
+    escolherEscala(v.escala);
+    escolherLeve(v.leve);
+    gravar(CHAVE_PRESET, id);
+  }
+  /** O preset que bate com o que está escolhido agora; `null` = Personalizado (mexeu no Avançado). */
+  const presetAtual = $derived.by((): Preset | null => {
+    for (const { id } of PRESETS) {
+      const v = valoresDo(id);
+      if (v.mult === mult && v.alvo === alvo && v.escala === escala && v.leve === leve) return id;
+    }
+    return null;
+  });
+  // Quem nunca escolheu nada começa no Equilíbrio, assim que o painel sabe os Hz do monitor.
+  let presetInicial = false;
+  $effect(() => {
+    if (presetInicial || !p?.hz || !doOtimiza) return;
+    presetInicial = true;
+    if (ler(CHAVE_PRESET, "") === "" && ler(CHAVE_MULT, "") === "") escolherPreset("equilibrio");
+  });
 </script>
 
 <section class="secao fb" class:aceso={!!a}>
@@ -233,6 +282,7 @@
             </div>
             {#if linha}<p class="apoio">{linha}</p>{/if}
             {#if prova}<p class="apoio">{prova}</p>{/if}
+            {#if a.degrau}<p class="aviso">{a.degrau}</p>{/if}
           {:else if estimativa}
             {@const de = n(estimativa.minimo)}
             {@const ate = n(estimativa.maximo)}
@@ -253,6 +303,18 @@
 
         <div class="controles">
           {#if doOtimiza && !a}
+            <div class="escolha">
+              <span class="rotulo">Modo</span>
+              <div class="segmento" role="radiogroup" aria-label="Modo do Frame Boost">
+                {#each PRESETS as o (o.id)}
+                  <button role="radio" aria-checked={presetAtual === o.id} onclick={() => escolherPreset(o.id)}>{o.nome}</button>
+                {/each}
+              </div>
+              <p class="dica">{presetAtual ? PRESETS.find((o) => o.id === presetAtual)?.dica : "Personalizado: a combinação escolhida no Avançado."}</p>
+            </div>
+            <details class="avancado">
+              <summary class="apoio">Avançado</summary>
+              <div class="avancado-corpo">
             {#if escalaPermitida}
               <div class="escolha">
                 <span class="rotulo">Escala</span>
@@ -275,6 +337,14 @@
               </div>
               <p class="dica">{mult === 0 ? "Enche o monitor. Para jogo competitivo, o 2× tem menos atraso." : mult === 1 ? "Sem gerar quadros: só a escala." : `${mult} quadros na tela para cada um do jogo.`}</p>
             </div>
+            <div class="escolha">
+              <span class="rotulo">Cálculo de movimento</span>
+              <div class="segmento" role="radiogroup" aria-label="Cálculo de movimento">
+                <button role="radio" aria-checked={!leve} onclick={() => escolherLeve(false)}>Completo</button>
+                <button role="radio" aria-checked={leve} onclick={() => escolherLeve(true)}>Leve</button>
+              </div>
+              <p class="dica">{leve ? "Menos trabalho para a placa; em movimento muito rápido a imagem gerada é um pouco mais simples." : "O cálculo inteiro: melhor imagem, mais trabalho para a placa."}</p>
+            </div>
             {#if mult === 0 && alvos.length}
               <div class="escolha">
                 <span class="rotulo">FPS na tela</span>
@@ -287,6 +357,8 @@
                 <p class="dica">{alvo ? `Menos quadros gerados: gasta menos placa e o jogo fica com mais FPS de verdade.` : "Abaixo do monitor, o gerador gasta menos placa."}</p>
               </div>
             {/if}
+              </div>
+            </details>
           {/if}
 
           {#if doOtimiza && (escala || a?.escala)}
@@ -307,7 +379,7 @@
                 <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostMedir)}>{ocupado ? "Medindo 6 s…" : "Medir agora"}</button>
               {/if}
             {:else}
-              <button class="btn primario grande" disabled={ocupado || !liga} onclick={() => agir(() => ferramentas.frameBoostLigar(mult, escala, mult === 0 ? alvo : null))}>
+              <button class="btn primario grande" disabled={ocupado || !liga} onclick={() => agir(() => ferramentas.frameBoostLigar(mult, escala, mult === 0 ? alvo : null, leve))}>
                 {experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Liga pelo painel do driver"}
               </button>
             {/if}
@@ -412,6 +484,11 @@
 </section>
 
 <style>
+  .avancado-corpo {
+    display: grid;
+    gap: 16px;
+    padding-top: 12px;
+  }
   .fb {
     display: grid;
     gap: 16px;

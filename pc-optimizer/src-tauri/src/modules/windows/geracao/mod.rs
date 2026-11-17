@@ -9,7 +9,9 @@ pub mod cursor;
 pub mod escala;
 pub mod gpu;
 pub mod guarda;
+pub mod metrica;
 pub mod resumo;
+pub mod wgc;
 pub mod ritmo;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -108,6 +110,9 @@ pub struct Estado {
     /// Com escala e o jogo ainda do tamanho do monitor (ele repôs o tamanho): o que fazer no menu do jogo.
     #[serde(default)]
     pub aviso_da_escala: Option<String>,
+    /// O último degrau da guarda (1.0.7), para a tela dizer por que o Frame Boost aliviou em vez de sumir.
+    #[serde(default)]
+    pub degrau: Option<String>,
 }
 
 impl Default for Estado {
@@ -139,6 +144,7 @@ impl Default for Estado {
             escala: None,
             ampliada: None,
             aviso_da_escala: None,
+            degrau: None,
         }
     }
 }
@@ -397,7 +403,10 @@ impl Configuracao {
 pub enum ReacaoAPerda {
     /// Primeiro alivia a placa e confere de novo, do zero.
     FicarLeve,
-    /// Já estava leve e o jogo ainda perde: desliga.
+    /// Já leve e o jogo ainda perde: um quadro gerado a menos por real (4× → 3× → 2×), menos trabalho para a placa,
+    /// e confere de novo (1.0.7). Antes, daqui o Frame Boost desligava de vez.
+    BaixarPara(u8),
+    /// Já leve, no 2×, e o jogo ainda perde: desliga.
     Desligar,
 }
 
@@ -431,11 +440,30 @@ pub fn presentmon_mudo(pausada: bool, quadros_do_jogo: u64, quadros_capturados: 
     !pausada && quadros_do_jogo == 0 && quadros_capturados >= 30
 }
 
-pub fn reacao_a_perda(ja_leve: bool) -> ReacaoAPerda {
-    if ja_leve {
-        ReacaoAPerda::Desligar
-    } else {
+/// **Pura.** O degrau seguinte quando o jogo perde FPS: leve, depois um multiplicador a menos, e só no 2× desliga.
+/// `teto`: o multiplicador máximo que vale agora (o pedido, ou o que a guarda já baixou). No Auto o gerador enche pelo
+/// monitor e o teto não muda o trabalho da placa: depois do leve, desliga (um degrau que não alivia nada deixaria o jogo
+/// perdendo FPS por minutos dizendo "aliviado").
+pub fn reacao_a_perda(ja_leve: bool, teto: u8, automatico: bool) -> ReacaoAPerda {
+    if !ja_leve {
         ReacaoAPerda::FicarLeve
+    } else if teto > 2 && !automatico {
+        ReacaoAPerda::BaixarPara(teto - 1)
+    } else {
+        ReacaoAPerda::Desligar
+    }
+}
+
+/// **Pura.** A frase da tela para o degrau: o que a guarda viu e o que fez.
+pub fn degrau_em_palavras(razao: Option<f64>, baixou_para: Option<u8>) -> String {
+    let perda = razao.map(|r| ((1.0 - r) * 100.0).round().max(0.0) as u32);
+    let viu = match perda {
+        Some(p) if p > 0 => format!("o jogo perdia {}% do FPS real", p),
+        _ => "o jogo perdia FPS real".to_string(),
+    };
+    match baixou_para {
+        Some(m) => format!("Aliviado para {}×: {}. O Frame Boost continua, com menos trabalho para a placa.", m, viu),
+        None => format!("Modo leve: {}. O Frame Boost continua, com menos trabalho para a placa.", viu),
     }
 }
 
@@ -1283,6 +1311,11 @@ fn segundos(inicio: Instant) -> f64 {
     inicio.elapsed().as_secs_f64()
 }
 
+thread_local! {
+    /// O registro do MMCSS desta thread do gerador (0 = sem registro).
+    static MMCSS: std::cell::Cell<isize> = const { std::cell::Cell::new(0) };
+}
+
 fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -1297,6 +1330,15 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
         if SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL) == 0 {
             crate::utils::Logger::warn("gerador: não consegui subir a prioridade da thread de apresentação");
         }
+        // O agendador de multimídia do Windows (MMCSS, tarefa "Games"): a thread ganha a vez no processador na hora
+        // certa, como o áudio e os jogos que se registram. Desfeito ao sair (`AvRevertMmThreadCharacteristics`).
+        let tarefa: Vec<u16> = "Games".encode_utf16().chain(std::iter::once(0)).collect();
+        let mut indice = 0u32;
+        let mmcss = windows_sys::Win32::System::Threading::AvSetMmThreadCharacteristicsW(tarefa.as_ptr(), &mut indice);
+        if mmcss.is_null() {
+            crate::utils::Logger::warn("gerador: o agendador de multimídia (MMCSS) não registrou a thread");
+        }
+        MMCSS.with(|m| m.set(mmcss as isize));
         let _ = RegisterHotKey(
             None,
             ATALHO,
@@ -1308,6 +1350,10 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     unsafe {
         let _ = UnregisterHotKey(None, ATALHO);
         timeEndPeriod(1);
+        let mmcss = MMCSS.with(|m| m.replace(0));
+        if mmcss != 0 {
+            windows_sys::Win32::System::Threading::AvRevertMmThreadCharacteristics(mmcss as _);
+        }
     }
     r
 }
@@ -1453,10 +1499,34 @@ fn sessao(
     let mut gpu = Gpu::novo(&saida.adaptador)?;
     // Refeito (janela mudou) depois de a guarda aliviar: continua leve.
     gpu.modo_leve(config.leve || estado().leve);
-    let duplicacao = duplicar(&saida, &gpu)?;
-    let formato = match formato_da_captura(&duplicacao) {
-        Ok(f) => f.unwrap_or(DXGI_FORMAT_B8G8R8A8_UNORM),
-        Err(fim) => return Ok(fim),
+    // A Duplicação é a captura de sempre. Se ela nem começa (notebook híbrido, driver que não duplica), a captura
+    // moderna do Windows (WGC) tenta o mesmo monitor; sem as duas, vale o erro da Duplicação (1.0.7).
+    let (duplicacao, captura_moderna) = match duplicar(&saida, &gpu) {
+        Ok(d) => (Some(d), None),
+        Err(motivo) => {
+            let monitor = unsafe { saida.saida.GetDesc() }.map(|d| d.Monitor);
+            match monitor.map_err(|e| e.message()).and_then(|m| wgc::Wgc::do_monitor(&gpu.device, m)) {
+                Ok(w) => {
+                    crate::utils::Logger::info(&format!(
+                        "gerador: a Duplicação não começou ({}); capturando pela WGC",
+                        motivo
+                    ));
+                    (None, Some(w))
+                }
+                Err(e) => {
+                    crate::utils::Logger::warn(&format!("gerador: a WGC também não começou ({})", e));
+                    return Err(motivo);
+                }
+            }
+        }
+    };
+    let formato = match duplicacao.as_ref() {
+        Some(d) => match formato_da_captura(d) {
+            Ok(f) => f.unwrap_or(DXGI_FORMAT_B8G8R8A8_UNORM),
+            Err(fim) => return Ok(fim),
+        },
+        // A WGC entrega BGRA de 8 bits.
+        None => DXGI_FORMAT_B8G8R8A8_UNORM,
     };
     let hdr = formato == DXGI_FORMAT_R16G16B16A16_FLOAT;
     if !hdr && formato != DXGI_FORMAT_B8G8R8A8_UNORM {
@@ -1467,7 +1537,11 @@ fn sessao(
     }
     // Monitor girado (em pé): a captura vem na orientação do painel. A área do jogo é convertida para a textura, e a
     // imagem, girada de volta na entrada.
-    let giro = ritmo::Giro::de_dxgi(unsafe { duplicacao.GetDesc() }.Rotation.0);
+    // A WGC já entrega a imagem na orientação da área de trabalho.
+    let giro = duplicacao
+        .as_ref()
+        .map(|d| ritmo::Giro::de_dxgi(unsafe { d.GetDesc() }.Rotation.0))
+        .unwrap_or(ritmo::Giro::Nenhum);
     let na_textura = ritmo::na_textura(recorte, giro, saida.monitor.largura, saida.monitor.altura);
     gpu.preparar(recorte.largura as u32, recorte.altura as u32, hdr, giro)?;
     crate::utils::Logger::info(&format!(
@@ -1532,7 +1606,8 @@ fn sessao(
     gpu.sem_geracao = multiplicador <= 1;
     // Com escala: o mouse preso na janela pequena e o cursor do sistema trocado pelo ampliado (os dois devolvidos ao
     // esconder a sobreposição e ao sair). Monitor girado fica sem cursor ampliado.
-    let cursor_ampliado = ampliada.is_some() && giro == ritmo::Giro::Nenhum;
+    // O cursor ampliado vem da forma que a Duplicação entrega; pela WGC, fica o do sistema.
+    let cursor_ampliado = ampliada.is_some() && giro == ritmo::Giro::Nenhum && duplicacao.is_some();
     let mut mouse = cursor::MousePreso::novo();
     let mut cursor_do_sistema = cursor_ampliado.then(cursor::CursorDoSistema::novo);
     let mut ponteiro: Option<(i32, i32)> = None;
@@ -1582,6 +1657,8 @@ fn sessao(
     let mut janela_de_contagem = (segundos(inicio), 0u64, 0u64);
     let mut ultima_checagem = Instant::now();
     let mut cabe_atual = multiplicador;
+    // O teto que a guarda deixou (`ReacaoAPerda::BaixarPara`): começa no pedido e só desce.
+    let mut teto_da_guarda = multiplicador;
     // Automático: a fração de quadro que sobra de um real para o outro, e quantos coube no último.
     let mut acumulado_do_automatico = 0.0;
     let mut ultimo_do_automatico = 1u8;
@@ -1810,7 +1887,8 @@ fn sessao(
                         multiplicador
                     } else {
                         ritmo::multiplicador_que_cabe(multiplicador, 1.0 / fps_janela, hz)
-                    };
+                    }
+                    .min(teto_da_guarda);
                     if quer == cabe_atual {
                         pedidos_de_troca = 0;
                     } else {
@@ -1894,7 +1972,7 @@ fn sessao(
         match acao {
             guarda::Acao::Desligar => {
                 let razao = guarda.razao_media();
-                match reacao_a_perda(gpu.leve()) {
+                match reacao_a_perda(gpu.leve(), teto_da_guarda, config.automatico) {
                     // No FiveM do dono a guarda desligou o gerador 7 vezes (o jogo perdendo de 5% a 35%): antes de
                     // desistir, alivia a placa e confere de novo do zero (a média de antes condenaria o modo leve),
                     // com a régua do modo leve (`RAZAO_MINIMA_LEVE`): perder pouco não tira o Frame Boost inteiro.
@@ -1908,6 +1986,20 @@ fn sessao(
                         publicar(|e| {
                             e.leve = true;
                             e.razao_fps = None;
+                            e.degrau = Some(degrau_em_palavras(razao, None));
+                        });
+                    }
+                    ReacaoAPerda::BaixarPara(novo) => {
+                        teto_da_guarda = novo;
+                        cabe_atual = cabe_atual.min(novo);
+                        guarda = guarda::Guarda::nova_leve(segundos(inicio));
+                        crate::utils::Logger::warn(&format!(
+                            "gerador: o jogo ainda perdia FPS no modo leve (razão {:?}); multiplicador baixado para {}×",
+                            razao, novo
+                        ));
+                        publicar(|e| {
+                            e.razao_fps = None;
+                            e.degrau = Some(degrau_em_palavras(razao, Some(novo)));
                         });
                     }
                     ReacaoAPerda::Desligar => {
@@ -1937,169 +2029,201 @@ fn sessao(
             continue;
         }
 
-        let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
-        let mut recurso: Option<IDXGIResource> = None;
-        match unsafe { duplicacao.AcquireNextFrame(espera_ms, &mut info, &mut recurso) } {
-            Ok(()) => {
-                // Só conta o que mudou DENTRO da janela do jogo: a cena do Otimiza, um vídeo no navegador ou o relógio
-                // da barra de tarefas no mesmo monitor inflavam o FPS do jogo, e o multiplicador caía para 1×.
-                if info.LastPresentTime != 0 && {
-                    let no_jogo = mudou_no_jogo(&duplicacao, &info, na_textura);
-                    if !no_jogo {
-                        contadores.fora_do_jogo += 1;
-                    }
-                    no_jogo
-                } {
-                    // Igual ao último real não é quadro novo do jogo (num monitor girado, a tela recomposta pela própria
-                    // sobreposição chega assim). Formato diferente passa, para a trava de HDR abaixo refazer.
-                    if let Some(tex) = recurso
-                        .as_ref()
-                        .and_then(|r| r.cast::<ID3D11Texture2D>().ok())
-                        .filter(|t| {
-                            if formato_da_textura(t) != formato {
-                                return true;
-                            }
-                            // Só em monitor girado: é lá que a tela recomposta pela própria sobreposição chega como
-                            // quadro "novo". Fora dele, a comparação só custaria placa.
-                            if giro == ritmo::Giro::Nenhum {
-                                return true;
-                            }
-                            let igual = gpu.igual_ao_atual(t, na_textura);
-                            if igual {
-                                contadores.iguais += 1;
-                            }
-                            !igual
-                        })
-                    {
-                        let chegada = segundos(inicio);
-                        let medido = Instant::now();
-                        composto_do_real =
-                            Some(info.LastPresentTime as f64 / qpc_frequencia - qpc_inicio);
-                        // A pessoa ligou ou desligou o HDR do Windows com o gerador ligado: copiar entre formatos
-                        // diferentes daria lixo na tela.
-                        if formato_da_textura(&tex) != formato {
-                            unsafe {
-                                let _ = duplicacao.ReleaseFrame();
-                            }
-                            return Ok(Fim::Refazer("o formato da tela mudou (HDR)"));
+        let mut chegou_real: Option<(f64, Instant)> = None;
+        if let Some(duplicacao) = duplicacao.as_ref() {
+            let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
+            let mut recurso: Option<IDXGIResource> = None;
+            match unsafe { duplicacao.AcquireNextFrame(espera_ms, &mut info, &mut recurso) } {
+                Ok(()) => {
+                    // Só conta o que mudou DENTRO da janela do jogo: a cena do Otimiza, um vídeo no navegador ou o relógio
+                    // da barra de tarefas no mesmo monitor inflavam o FPS do jogo, e o multiplicador caía para 1×.
+                    if info.LastPresentTime != 0 && {
+                        let no_jogo = mudou_no_jogo(&duplicacao, &info, na_textura);
+                        if !no_jogo {
+                            contadores.fora_do_jogo += 1;
                         }
-                        gpu.receber(&tex, na_textura);
-                        intervalo.registrar(chegada);
-                        quadros_capturados.registrar(chegada);
-                        contadores.reais += 1;
-                        ultimo_real = Instant::now();
-
-                        contadores.descartados += agenda.len() as u64;
-                        agenda.clear();
-                        if pelo_monitor {
-                            par_no_monitor = None;
-                            real_ja_mostrado = false;
-                            // Sem carimbo (raro), vale a chegada.
-                            let carimbo = carimbo_suave
-                                .suavizar(composto_do_real.filter(|c| *c > 0.0).unwrap_or(chegada));
-                            let anterior = ultimo_carimbo.replace(carimbo);
-                            if gpu.tem_par() && intervalo.pode_gerar() && !guarda.pausada() {
-                                match cronometro.as_mut() {
-                                    Some(c) => c.medir(&gpu, || gpu.estimar()),
-                                    None => gpu.estimar(),
+                        no_jogo
+                    } {
+                        // Igual ao último real não é quadro novo do jogo (num monitor girado, a tela recomposta pela própria
+                        // sobreposição chega assim). Formato diferente passa, para a trava de HDR abaixo refazer.
+                        if let Some(tex) = recurso
+                            .as_ref()
+                            .and_then(|r| r.cast::<ID3D11Texture2D>().ok())
+                            .filter(|t| {
+                                if formato_da_textura(t) != formato {
+                                    return true;
                                 }
-                                if let Some(a) = anterior.filter(|a| carimbo > *a) {
-                                    par_no_monitor = Some((a, carimbo));
-                                    atraso_da_exibicao
-                                        .registrar(carimbo - a, segundos(inicio) - carimbo);
+                                // Só em monitor girado: é lá que a tela recomposta pela própria sobreposição chega como
+                                // quadro "novo". Fora dele, a comparação só custaria placa.
+                                if giro == ritmo::Giro::Nenhum {
+                                    return true;
                                 }
-                            }
-                        } else
-                        // A tela já recebe o que o monitor mostra: não gasta placa à toa.
-                        if gpu.tem_par()
-                            && intervalo.pode_gerar()
-                            && !guarda.pausada()
-                            && cabe_atual > 1
+                                let igual = gpu.igual_ao_atual(t, na_textura);
+                                if igual {
+                                    contadores.iguais += 1;
+                                }
+                                !igual
+                            })
                         {
-                            // SEM ESPERAR A PLACA. Antes, a nota do quadro (um passe a mais em meia resolução e uma
-                            // leitura de volta) e a espera pelo fim do trabalho paravam o gerador até 28 ms por quadro
-                            // e faziam a placa trocar de contexto com o jogo o tempo todo: o jogo perdia ~30% do FPS.
-                            // Movimento que não dá para interpolar (troca de cena, giro rapidíssimo) é decidido pixel a
-                            // pixel no `Final`: onde os dois reais discordam demais, sai o real mais próximo.
-                            match cronometro.as_mut() {
-                                Some(c) => c.medir(&gpu, || gpu.estimar()),
-                                None => gpu.estimar(),
+                            let chegada = segundos(inicio);
+                            let medido = Instant::now();
+                            composto_do_real =
+                                Some(info.LastPresentTime as f64 / qpc_frequencia - qpc_inicio);
+                            // A pessoa ligou ou desligou o HDR do Windows com o gerador ligado: copiar entre formatos
+                            // diferentes daria lixo na tela.
+                            if formato_da_textura(&tex) != formato {
+                                unsafe {
+                                    let _ = duplicacao.ReleaseFrame();
+                                }
+                                return Ok(Fim::Refazer("o formato da tela mudou (HDR)"));
                             }
-                            // O que custou para o processador mandar o trabalho (a placa trabalha depois, em paralelo).
-                            let custo = medido.elapsed().as_secs_f64() * 1000.0;
-                            contadores.custo_ms = if contadores.custo_ms == 0.0 {
-                                custo
-                            } else {
-                                contadores.custo_ms * 0.9 + custo * 0.1
-                            };
-                            let pronto = segundos(inicio);
-                            let janela = intervalo.estimado.unwrap_or(0.0) - (pronto - chegada);
-                            let cabe = if config.automatico {
-                                let m = ritmo::quadros_no_automatico(
-                                    &mut acumulado_do_automatico,
-                                    intervalo.estimado.unwrap_or(0.0),
-                                    ritmo::mira_do_automatico(hz, config.sem_limite, config.alvo_fps),
-                                    multiplicador,
-                                );
-                                ultimo_do_automatico = m;
-                                m
-                            } else {
-                                cabe_atual
-                            };
-                            agenda.extend(ritmo::agenda(pronto, janela.max(0.0), cabe));
-                        } else {
-                            agenda.push_back(Apresentacao {
-                                instante: chegada,
-                                fase: Fase::Real,
-                            });
+                            gpu.receber(&tex, na_textura);
+                            intervalo.registrar(chegada);
+                            quadros_capturados.registrar(chegada);
+                            contadores.reais += 1;
+                            ultimo_real = Instant::now();
+
+                            contadores.descartados += agenda.len() as u64;
+                            agenda.clear();
+                            chegou_real = Some((chegada, medido));
                         }
+                    }
+                    // O cursor ampliado: a forma vem quando muda, a posição quando o mouse anda.
+                    if let Some(destino) = ampliada.filter(|_| cursor_ampliado) {
+                        let mut mudou = false;
+                        if info.PointerShapeBufferSize > 0 {
+                            if let Some(f) = forma_do_cursor(&duplicacao, info.PointerShapeBufferSize) {
+                                if gpu.definir_cursor(&f).is_ok() {
+                                    forma = Some((f.ponta, (f.largura as i32, f.altura as i32)));
+                                    mudou = true;
+                                }
+                            }
+                        }
+                        if info.LastMouseUpdateTime != 0 {
+                            let p = info.PointerPosition;
+                            ponteiro = p.Visible.as_bool().then_some((p.Position.x, p.Position.y));
+                            mudou = true;
+                        }
+                        if mudou {
+                            let onde = match (ponteiro, forma) {
+                                (Some(p), Some((ponta, tamanho))) => {
+                                    escala::cursor_na_tela(p, ponta, tamanho, recorte, destino)
+                                }
+                                _ => None,
+                            };
+                            if onde != sobreposicao.cursor {
+                                sobreposicao.cursor = onde;
+                                // Jogo parado (menu) e o mouse andando: mostra o mesmo real com o cursor no lugar novo.
+                                // (Só sem real novo nesta volta: com real, a agenda logo abaixo já o mostra.)
+                                if agenda.is_empty() && gpu.reais > 0 && !pelo_monitor && chegou_real.is_none() {
+                                    agenda.push_back(Apresentacao {
+                                        instante: segundos(inicio),
+                                        fase: Fase::Real,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    unsafe {
+                        let _ = duplicacao.ReleaseFrame();
                     }
                 }
-                // O cursor ampliado: a forma vem quando muda, a posição quando o mouse anda.
-                if let Some(destino) = ampliada.filter(|_| cursor_ampliado) {
-                    let mut mudou = false;
-                    if info.PointerShapeBufferSize > 0 {
-                        if let Some(f) = forma_do_cursor(&duplicacao, info.PointerShapeBufferSize) {
-                            if gpu.definir_cursor(&f).is_ok() {
-                                forma = Some((f.ponta, (f.largura as i32, f.altura as i32)));
-                                mudou = true;
-                            }
-                        }
-                    }
-                    if info.LastMouseUpdateTime != 0 {
-                        let p = info.PointerPosition;
-                        ponteiro = p.Visible.as_bool().then_some((p.Position.x, p.Position.y));
-                        mudou = true;
-                    }
-                    if mudou {
-                        let onde = match (ponteiro, forma) {
-                            (Some(p), Some((ponta, tamanho))) => {
-                                escala::cursor_na_tela(p, ponta, tamanho, recorte, destino)
-                            }
-                            _ => None,
-                        };
-                        if onde != sobreposicao.cursor {
-                            sobreposicao.cursor = onde;
-                            // Jogo parado (menu) e o mouse andando: mostra o mesmo real com o cursor no lugar novo.
-                            if agenda.is_empty() && gpu.reais > 0 && !pelo_monitor {
-                                agenda.push_back(Apresentacao {
-                                    instante: segundos(inicio),
-                                    fase: Fase::Real,
-                                });
-                            }
-                        }
-                    }
+                Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => {}
+                // Troca de resolução, UAC, tela cheia exclusiva: o Windows invalida a captura. Refaz quando a tela voltar.
+                Err(e) if e.code() == DXGI_ERROR_ACCESS_LOST => {
+                    return Ok(Fim::Refazer("o Windows trocou o modo de vídeo"));
                 }
-                unsafe {
-                    let _ = duplicacao.ReleaseFrame();
+                Err(e) => return Err(format!("captura: {}", e.message())),
+            }
+        } else if let Some(wgc) = captura_moderna.as_ref() {
+            // Pela WGC: o quadro chega quando a tela muda; "mudou dentro do jogo" é a comparação na placa.
+            if let Some(q) = wgc.proximo(espera_ms) {
+                // A tela mudou de tamanho (resolução, monitor): a fila foi feita para o tamanho de antes. Refaz.
+                let mut desc = Default::default();
+                unsafe { q.textura.GetDesc(&mut desc) };
+                if (desc.Width, desc.Height) != (saida.monitor.largura as u32, saida.monitor.altura as u32) {
+                    return Ok(Fim::Refazer("a tela mudou de tamanho (captura moderna)"));
+                }
+                // Sem comparar com o quadro de antes: a comparação espera a placa a cada quadro e tirava FPS do jogo.
+                // A WGC só entrega quadro quando a tela muda; com o jogo na frente, é ele que muda.
+                {
+                    let chegada = segundos(inicio);
+                    let medido = Instant::now();
+                    composto_do_real = Some(q.composto_s - qpc_inicio).filter(|c| *c > 0.0);
+                    gpu.receber(&q.textura, na_textura);
+                    intervalo.registrar(chegada);
+                    quadros_capturados.registrar(chegada);
+                    contadores.reais += 1;
+                    ultimo_real = Instant::now();
+                    contadores.descartados += agenda.len() as u64;
+                    agenda.clear();
+                    chegou_real = Some((chegada, medido));
                 }
             }
-            Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => {}
-            // Troca de resolução, UAC, tela cheia exclusiva: o Windows invalida a captura. Refaz quando a tela voltar.
-            Err(e) if e.code() == DXGI_ERROR_ACCESS_LOST => {
-                return Ok(Fim::Refazer("o Windows trocou o modo de vídeo"));
+        }
+        if let Some((chegada, medido)) = chegou_real {
+        if pelo_monitor {
+            par_no_monitor = None;
+            real_ja_mostrado = false;
+            // Sem carimbo (raro), vale a chegada.
+            let carimbo = carimbo_suave
+                .suavizar(composto_do_real.filter(|c| *c > 0.0).unwrap_or(chegada));
+            let anterior = ultimo_carimbo.replace(carimbo);
+            if gpu.tem_par() && intervalo.pode_gerar() && !guarda.pausada() {
+                match cronometro.as_mut() {
+                    Some(c) => c.medir(&gpu, || gpu.estimar()),
+                    None => gpu.estimar(),
+                }
+                if let Some(a) = anterior.filter(|a| carimbo > *a) {
+                    par_no_monitor = Some((a, carimbo));
+                    atraso_da_exibicao
+                        .registrar(carimbo - a, segundos(inicio) - carimbo);
+                }
             }
-            Err(e) => return Err(format!("captura: {}", e.message())),
+        } else
+        // A tela já recebe o que o monitor mostra: não gasta placa à toa.
+        if gpu.tem_par()
+            && intervalo.pode_gerar()
+            && !guarda.pausada()
+            && cabe_atual > 1
+        {
+            // SEM ESPERAR A PLACA. Antes, a nota do quadro (um passe a mais em meia resolução e uma
+            // leitura de volta) e a espera pelo fim do trabalho paravam o gerador até 28 ms por quadro
+            // e faziam a placa trocar de contexto com o jogo o tempo todo: o jogo perdia ~30% do FPS.
+            // Movimento que não dá para interpolar (troca de cena, giro rapidíssimo) é decidido pixel a
+            // pixel no `Final`: onde os dois reais discordam demais, sai o real mais próximo.
+            match cronometro.as_mut() {
+                Some(c) => c.medir(&gpu, || gpu.estimar()),
+                None => gpu.estimar(),
+            }
+            // O que custou para o processador mandar o trabalho (a placa trabalha depois, em paralelo).
+            let custo = medido.elapsed().as_secs_f64() * 1000.0;
+            contadores.custo_ms = if contadores.custo_ms == 0.0 {
+                custo
+            } else {
+                contadores.custo_ms * 0.9 + custo * 0.1
+            };
+            let pronto = segundos(inicio);
+            let janela = intervalo.estimado.unwrap_or(0.0) - (pronto - chegada);
+            let cabe = if config.automatico {
+                let m = ritmo::quadros_no_automatico(
+                    &mut acumulado_do_automatico,
+                    intervalo.estimado.unwrap_or(0.0),
+                    ritmo::mira_do_automatico(hz, config.sem_limite, config.alvo_fps),
+                    multiplicador,
+                );
+                ultimo_do_automatico = m;
+                m
+            } else {
+                cabe_atual
+            };
+            agenda.extend(ritmo::agenda(pronto, janela.max(0.0), cabe));
+        } else {
+            agenda.push_back(Apresentacao {
+                instante: chegada,
+                fase: Fase::Real,
+            });
+        }
         }
 
         if pelo_monitor {
@@ -2267,8 +2391,15 @@ mod tests_da_guarda_leve {
 
     #[test]
     fn a_primeira_perda_alivia_e_a_segunda_desliga() {
-        assert_eq!(reacao_a_perda(false), ReacaoAPerda::FicarLeve);
-        assert_eq!(reacao_a_perda(true), ReacaoAPerda::Desligar);
+        assert_eq!(reacao_a_perda(false, 4, false), ReacaoAPerda::FicarLeve);
+        assert_eq!(reacao_a_perda(true, 4, false), ReacaoAPerda::BaixarPara(3), "leve no 4×: um a menos, não desliga");
+        assert_eq!(reacao_a_perda(true, 3, false), ReacaoAPerda::BaixarPara(2));
+        assert_eq!(reacao_a_perda(true, 2, false), ReacaoAPerda::Desligar, "só no fim da escada");
+        // Auto (144 Hz, base 72, leve perdendo 30%): não há degrau que alivie; desliga em vez de fingir.
+        assert_eq!(reacao_a_perda(false, 6, true), ReacaoAPerda::FicarLeve);
+        assert_eq!(reacao_a_perda(true, 6, true), ReacaoAPerda::Desligar);
+        assert!(degrau_em_palavras(Some(0.82), Some(3)).starts_with("Aliviado para 3×: o jogo perdia 18% do FPS real"));
+        assert!(degrau_em_palavras(None, None).starts_with("Modo leve: o jogo perdia FPS real"));
     }
 }
 

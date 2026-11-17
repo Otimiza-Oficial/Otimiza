@@ -130,9 +130,8 @@ fn ler_memoria() -> Memoria {
 }
 
 fn gravar_memoria(m: &Memoria) {
-    if let (Some(a), Ok(json)) = (arquivo(), serde_json::to_string(m)) {
-        let _ = std::fs::create_dir_all(a.parent().unwrap_or(&a));
-        let _ = std::fs::write(a, json);
+    if let Some(a) = arquivo() {
+        crate::utils::arquivo::escrever_json_ou_avisar(&a, m);
     }
 }
 

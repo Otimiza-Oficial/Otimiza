@@ -934,6 +934,41 @@ float ErroNaCruz(float2 uv, float2 v)
     return erro * 0.2;
 }
 
+// Parado nos dois reais naquele lugar: HUD, mira, placar (a máscara no tempo, T3, ou A igual a B ali mesmo).
+float ParadoEm(float2 uv)
+{
+    float3 a = T0.SampleLevel(Linear, uv, 0).rgb;
+    float3 b = T1.SampleLevel(Linear, uv, 0).rgb;
+    float pelaMascara = T3.SampleLevel(Linear, uv, 0).r > 0.5 ? 1.0 : 0.0;
+    float igual = dot(abs(a - b), float3(0.3333, 0.3333, 0.3333)) < 0.004 ? 1.0 : 0.0;
+    return max(pelaMascara, igual);
+}
+
+// O erro da cruz SEM os pontos que caem em pixel parado (1.0.7). Em volta da mira o fundo se mexe e a cruz não: um
+// ponto da conta que cai na cruz discorda de todo vetor do fundo e empurrava o pixel para "parado", arrastando o fundo
+// junto com a mira (o borrão em volta dela). O que está parado não diz nada sobre o movimento do fundo.
+float ErroNaCruzSemHud(float2 uv, float2 v)
+{
+    float2 o = texelDestino;
+    float2 da = -v * texelDestino * t;
+    float2 db = v * texelDestino * (1.0 - t);
+    float erro = 0;
+    float peso = 0;
+    [unroll] for (int k = 0; k < 5; k++)
+    {
+        float2 d = k == 0 ? float2(0, 0) : k == 1 ? float2(1.5, 0) : k == 2 ? float2(-1.5, 0) : k == 3 ? float2(0, 1.5) : float2(0, -1.5);
+        float2 pa = uv + d * o + da;
+        float2 pb = uv + d * o + db;
+        float vale = 1.0 - max(ParadoEm(pa), ParadoEm(pb));
+        float3 a = T0.SampleLevel(Linear, pa, 0).rgb;
+        float3 b = T1.SampleLevel(Linear, pb, 0).rgb;
+        erro += vale * dot(abs(a - b), PESOS_LUMA);
+        peso += vale;
+    }
+    // Todos os pontos em pixel parado: sem informação; a conta antiga decide.
+    return peso > 0.5 ? erro / peso : ErroNaCruz(uv, v);
+}
+
 float4 FinalDenso(Saida e) : SV_Target
 {
     float2 uv = e.pos.xy * texelDestino;
@@ -1019,12 +1054,12 @@ float4 FinalBidirecional(Saida e) : SV_Target
         return float4(Sair(t < 0.5 ? anteriorNoLugar : atualNoLugar), 1);
 
     float2 v = T2.SampleLevel(Linear, uv, 0).xy;
-    float melhor = ErroNaCruz(uv, v) - 0.005;
+    float melhor = ErroNaCruzSemHud(uv, v) - 0.005;
     [unroll] for (int k = 0; k < 5; k++)
     {
         float2 d = (k == 0 ? float2(8, 0) : k == 1 ? float2(-8, 0) : k == 2 ? float2(0, 8) : float2(0, -8)) * texelDestino;
         float2 outro = k == 4 ? float2(0, 0) : T2.SampleLevel(Linear, uv + d, 0).xy;
-        float erro = ErroNaCruz(uv, outro);
+        float erro = ErroNaCruzSemHud(uv, outro);
         if (erro < melhor) { melhor = erro; v = outro; }
     }
     float2 pa = uv - v * texelDestino * t;

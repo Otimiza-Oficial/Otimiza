@@ -5,7 +5,7 @@ use windows::core::{Interface, PCSTR};
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
 use windows::Win32::Graphics::Direct3D::{
-    ID3DBlob, D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_0,
+    ID3DBlob, D3D_DRIVER_TYPE_UNKNOWN, D3D_DRIVER_TYPE_WARP, D3D_FEATURE_LEVEL_11_0,
 };
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::Dxgi::Common::*;
@@ -344,12 +344,28 @@ fn bytes(b: &ID3DBlob) -> &[u8] {
 
 impl Gpu {
     pub fn novo(adaptador: &IDXGIAdapter1) -> Result<Gpu, String> {
+        Self::novo_com(Some(adaptador))
+    }
+
+    /// A GPU em software do Windows (WARP): os shaders REAIS rodam em qualquer máquina, sem placa, para o laboratório
+    /// medir a qualidade do quadro gerado nos testes (`qualidade::warp_*`). Mede qualidade, nunca custo.
+    #[cfg(test)]
+    pub fn nova_warp() -> Result<Gpu, String> {
+        Self::novo_com(None)
+    }
+
+    fn novo_com(adaptador: Option<&IDXGIAdapter1>) -> Result<Gpu, String> {
         let mut device = None;
         let mut ctx = None;
+        let tipo = if adaptador.is_some() { D3D_DRIVER_TYPE_UNKNOWN } else { D3D_DRIVER_TYPE_WARP };
+        let adaptador: Option<windows::Win32::Graphics::Dxgi::IDXGIAdapter> = adaptador
+            .map(windows::core::Interface::cast)
+            .transpose()
+            .map_err(|e| erro("o adaptador da placa", e))?;
         unsafe {
             D3D11CreateDevice(
-                adaptador,
-                D3D_DRIVER_TYPE_UNKNOWN,
+                adaptador.as_ref(),
+                tipo,
                 HMODULE::default(),
                 D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                 Some(&[D3D_FEATURE_LEVEL_11_0]),
@@ -927,7 +943,7 @@ impl Gpu {
             self.ctx.Draw(3, 0);
             // A mesma textura vira alvo no passe seguinte.
             self.ctx
-                .PSSetShaderResources(0, Some(&[None, None, None, None, None]));
+                .PSSetShaderResources(0, Some(&[None, None, None, None, None, None]));
             self.ctx.OMSetRenderTargets(None, None);
         }
     }
@@ -2596,6 +2612,100 @@ mod qualidade {
         };
         println!("seguidos (min, mediana, max) = {:?}", resumo(&mut seguidos));
         println!("cortes   (min, mediana, max) = {:?}", resumo(&mut cortes));
+    }
+
+    /// Gera o quadro do meio de `antes`→`depois` nos shaders reais (no WARP, sem placa) e devolve o laudo contra o real.
+    fn laudo_no_warp(
+        gpu: &mut Gpu,
+        l: u32,
+        a: u32,
+        antes: &[u8],
+        meio: &[u8],
+        depois: &[u8],
+    ) -> super::super::metrica::Laudo {
+        gpu.preparar(l, a, false, Giro::Nenhum).unwrap();
+        let destino = gpu.alvo(l, a, DXGI_FORMAT_B8G8R8A8_UNORM, true).unwrap();
+        let tudo = Retangulo { x: 0, y: 0, largura: l as i32, altura: a as i32 };
+        // Alguns pares antes: a máscara de HUD é uma média no tempo, como na partida.
+        gpu.reais = 0;
+        for _ in 0..3 {
+            gpu.receber(&textura(gpu, l, a, antes), tudo);
+            gpu.receber(&textura(gpu, l, a, depois), tudo);
+        }
+        gpu.receber(&textura(gpu, l, a, antes), tudo);
+        gpu.receber(&textura(gpu, l, a, depois), tudo);
+        gpu.estimar();
+        gpu.compor(destino.rtv.as_ref().unwrap(), l, a, Some(0.5));
+        let gerado = ler_de_volta(gpu, &destino.textura, l, a);
+        if let Ok(mut g) = ULTIMO_GERADO.lock() {
+            *g = gerado.clone();
+        }
+        super::super::metrica::laudo(&gerado, meio, antes, depois, l, a)
+    }
+
+    static ULTIMO_GERADO: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new(Vec::new());
+
+    fn ultimo_gerado(_gpu: &Gpu, _l: u32, _a: u32) -> Vec<u8> {
+        ULTIMO_GERADO.lock().map(|g| g.clone()).unwrap_or_default()
+    }
+
+    /// O laboratório nas cenas sintéticas, com os shaders reais na GPU em software. Roda em qualquer máquina (sem
+    /// `#[ignore]`): é a régua que a Onda 2 (mira, HUD, confiança) tem de melhorar. `OTIMIZA_LAB_DIR` grava o JSON.
+    #[test]
+    fn warp_laboratorio_das_cenas() {
+        use super::super::metrica::cenas::quadro;
+        let (l, a) = (320u32, 180u32);
+        let mut gpu = match Gpu::nova_warp() {
+            Ok(g) => g,
+            // Windows sem WARP (servidor mínimo): sem laboratório, sem falso vermelho.
+            Err(e) => return eprintln!("sem WARP: {e}"),
+        };
+        let cenas: Vec<(&str, Vec<u8>, Vec<u8>, Vec<u8>)> = vec![
+            ("quadrado_andando", quadro(l, a, 100, 0, false), quadro(l, a, 116, 0, false), quadro(l, a, 132, 0, false)),
+            ("mira_em_panoramica", quadro(l, a, 100, 0, true), quadro(l, a, 100, 6, true), quadro(l, a, 100, 12, true)),
+            ("parado", quadro(l, a, 100, 0, true), quadro(l, a, 100, 0, true), quadro(l, a, 100, 0, true)),
+        ];
+        let mut relatorio = Vec::new();
+        let mut volta_da_mira: Option<(f64, f64, f64)> = None;
+        for (nome, antes, meio, depois) in &cenas {
+            let r = laudo_no_warp(&mut gpu, l, a, antes, meio, depois);
+            println!("laboratório {nome}: {r:?}");
+            for v in [r.ssim, r.psnr, r.erro_hud, r.erro_mira, r.fantasma, r.cintilacao] {
+                assert!(v.is_finite(), "{nome}: número inválido em {r:?}");
+            }
+            relatorio.push((nome.to_string(), r));
+        }
+        // A mira em panorâmica: o anel de 4 px em volta da cruz (o fundo passa por trás dela).
+        {
+            use super::super::metrica::{anel, cenas::mascara_da_mira, erro_na_mascara};
+            let (_, antes, meio, depois) = &cenas[1];
+            let volta = anel(&mascara_da_mira(l, a), l, a, 4);
+            laudo_no_warp(&mut gpu, l, a, antes, meio, depois);
+            let gerado = ultimo_gerado(&gpu, l, a);
+            let (g, rep) = (erro_na_mascara(&gerado, meio, &volta), erro_na_mascara(antes, meio, &volta));
+            let cruz = erro_na_mascara(&gerado, meio, &mascara_da_mira(l, a));
+            println!("laboratório volta_da_mira: gerado {g:.2} × repetir {rep:.2}; na cruz {cruz:.2}");
+            volta_da_mira = Some((g, rep, cruz));
+        }
+        // Trava contra piora (medido em 16/11 com o gerador da 1.0.6): nas cenas com movimento, gerar ganha de repetir o
+        // quadro real. Mudança que perde para repetir não passa.
+        for (nome, r) in &relatorio[..2] {
+            assert!(r.ssim > r.ssim_repetir, "{nome}: o gerado perdeu para repetir o real: {r:?}");
+            assert!(r.erro_mira <= r.erro_mira_repetir, "{nome}: a mira ficou pior que repetir: {r:?}");
+        }
+        // Em volta da mira (1.0.7): o fundo que passa atrás dela. Medido 5,69 antes do `ErroNaCruzSemHud`, 5,49 depois.
+        if let Some((g, rep, cruz)) = volta_da_mira {
+            assert!(cruz < 0.5, "a cruz parada saiu alterada: {cruz}");
+            assert!(g < 5.6 && g < rep, "o fundo em volta da mira piorou: {g:.2} (repetir {rep:.2})");
+        }
+        // Cena parada: o gerado tem de ser o próprio quadro (nada a interpolar).
+        let parado = &relatorio[2].1;
+        assert!(parado.ssim > 0.98 && parado.erro_mira < 2.0, "cena parada alterada: {parado:?}");
+        if let Ok(pasta) = std::env::var("OTIMIZA_LAB_DIR") {
+            let _ = std::fs::create_dir_all(&pasta);
+            let json = serde_json::to_string_pretty(&relatorio).unwrap();
+            std::fs::write(std::path::Path::new(&pasta).join("warp.json"), json).unwrap();
+        }
     }
 
     #[test]

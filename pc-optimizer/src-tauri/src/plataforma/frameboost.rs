@@ -50,6 +50,8 @@ pub struct Ativo {
     /// No modo leve (placa sem folga, ou a guarda aliviou).
     #[serde(default)]
     pub leve: bool,
+    /// O último degrau da guarda (modo leve, multiplicador baixado): por que o Frame Boost aliviou em vez de sumir.
+    pub degrau: Option<String>,
     /// FPS do jogo agora, com o gerador ligado (o que ele capturou de quadros reais).
     #[serde(default)]
     pub fps_do_jogo: Option<f64>,
@@ -198,6 +200,7 @@ pub fn ativo_de(e: &geracao::Estado) -> Option<Ativo> {
         nota: None,
         placa_pct: e.placa_ms_por_s.map(|ms| (ms / 10.0 * 10.0).round() / 10.0),
         leve: e.leve,
+        degrau: e.degrau.clone(),
         fps_do_jogo: (e.situacao == Situacao::Gerando && e.fps_reais > 0.0).then_some(e.fps_reais.round()),
         manteve_pct: manteve_pct(e),
         comparacoes: e.comparacoes,
@@ -267,6 +270,7 @@ pub fn ativo_do_driver(recurso: Recurso, medicao: Option<&Medicao>) -> Ativo {
         pelo_driver: true,
         placa_pct: None,
         leve: false,
+        degrau: None,
         fps_do_jogo: None,
         manteve_pct: None,
         comparacoes: 0,
@@ -599,6 +603,7 @@ pub fn ligar(
     sem_limite: bool,
     escala: Option<geracao::escala::Nivel>,
     alvo_fps: Option<u32>,
+    leve_pedido: bool,
 ) -> Result<Painel, String> {
     // Plano de refino 1.2: a licença conferida também aqui, não só no comando (desligar nunca confere).
     crate::modules::licenca::exigir()?;
@@ -683,8 +688,9 @@ pub fn ligar(
                 visivel_em_captura: false,
                 automatico,
                 sem_limite,
-                // Placa já quase cheia com o jogo: começa leve, em vez de esperar a guarda ver o jogo perder FPS.
-                leve: comecar_leve(uso_da_placa_pct()),
+                // Leve pedido pela tela (o modo Equilíbrio, 1.0.7), ou a placa já quase cheia com o jogo: começa leve,
+                // em vez de esperar a guarda ver o jogo perder FPS.
+                leve: leve_pedido || comecar_leve(uso_da_placa_pct()),
                 escala,
                 alvo_fps: alvo_fps.filter(|_| automatico),
             })?;

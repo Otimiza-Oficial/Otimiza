@@ -1235,6 +1235,74 @@ pub fn ligar_smooth_motion(executavel: &str) -> Result<LimiteAplicado, String> {
     })
 }
 
+/// A fila de quadros do driver (o "Modo de baixa latência: Ligado" do painel da NVIDIA): no máximo 1 quadro preparado
+/// à frente. `PRERENDERLIMIT_ID` do `NvApiDriverSettings.h`. Vale em DirectX 9/11 (o FiveM); em DX12 e Vulkan quem
+/// manda na fila é o jogo, e o ajuste não muda nada.
+pub const FILA_DO_DRIVER: u32 = 0x007B_A09E;
+pub const FILA_DE_UM: u32 = 1;
+
+/// Liga a fila de 1 quadro no perfil que o driver usa para o jogo (achado pelo caminho, como o teto: o FiveM se
+/// cadastra pelo caminho), ou num perfil novo do Otimiza. Vale na próxima vez que o jogo abrir.
+pub fn fila_de_um(executavel: &str, caminho: Option<&str>) -> Result<LimiteAplicado, String> {
+    executavel_valido(executavel)?;
+    let nome_do_app = utf16_fixo(executavel)
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let nome_do_perfil = utf16_fixo(&nome_do_perfil_do_otimiza(executavel))
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let busca = utf16_fixo(caminho.unwrap_or(executavel))
+        .ok_or_else(|| "o caminho do jogo é longo demais para o driver.".to_string())?;
+    na_sessao_da_drs(move |api, sessao| {
+        let perfis = api.perfis.as_ref().ok_or_else(|| {
+            "este driver não oferece perfil por jogo, então a fila do driver não foi mudada.".to_string()
+        })?;
+        let (perfil, perfil_criado) = match perfil_do_executavel(perfis, sessao, &busca) {
+            Some(p) => (p, false),
+            None => perfil_ou_novo(perfis, sessao, nome_do_app, nome_do_perfil)?,
+        };
+        let (era_o_padrao, anterior) = ler_anterior_para_gravar(api, sessao, perfil, FILA_DO_DRIVER)?;
+        escrever_valor_cru(api, sessao, perfil, FILA_DO_DRIVER, FILA_DE_UM)?;
+        Ok(LimiteAplicado {
+            perfil_criado,
+            valor_anterior: codificar_anterior(era_o_padrao, anterior),
+        })
+    })
+}
+
+/// Devolve a fila de antes no perfil do jogo. Como o Smooth Motion, nunca apaga o perfil: o teto do Frame Boost pode
+/// estar nele.
+pub fn desfazer_fila(executavel: &str, caminho: Option<&str>, valor_anterior: &str) -> Result<(), String> {
+    executavel_valido(executavel)?;
+    let busca = utf16_fixo(caminho.unwrap_or(executavel))
+        .ok_or_else(|| "o caminho do jogo é longo demais para o driver.".to_string())?;
+    let nome_do_app = utf16_fixo(executavel)
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let plano = plano_de_desfazer(valor_anterior);
+    na_sessao_da_drs(move |api, sessao| {
+        let perfis = api
+            .perfis
+            .as_ref()
+            .ok_or_else(|| "este driver não oferece perfil por jogo.".to_string())?;
+        let Some(perfil) =
+            perfil_do_executavel(perfis, sessao, &busca).or_else(|| perfil_do_executavel(perfis, sessao, &nome_do_app))
+        else {
+            return Ok(());
+        };
+        match plano {
+            PlanoDeDesfazer::RestaurarPadrao => {
+                if unsafe { (api.restaurar_ajuste)(sessao, perfil, FILA_DO_DRIVER) } != NVAPI_OK {
+                    return Err(format!("não consegui devolver a fila do driver de \"{}\".", executavel));
+                }
+                Ok(())
+            }
+            PlanoDeDesfazer::Escrever(valor) => escrever_valor_cru(api, sessao, perfil, FILA_DO_DRIVER, valor),
+        }
+    })
+}
+
+pub fn id_da_fila(executavel: &str) -> String {
+    format!("fila_nvidia:{}", executavel.to_lowercase())
+}
+
 /// Devolve o valor de antes NO PERFIL, e nunca apaga o perfil: ele pode ter recebido um limite de FPS depois, e apagar
 /// levaria o limite junto. Um perfil vazio do Otimiza não muda nada no jogo.
 pub fn desfazer_smooth_motion(executavel: &str, valor_anterior: &str) -> Result<(), String> {
