@@ -8,13 +8,25 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.7_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.7_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.8_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.8_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.8: Correções de bugs no Frame Boost: menos atraso nos modos 2×, 3× e 4×
+
+Atualização da 1.0 (número interno 4.0.8).
+
+## Correções
+
+- **Atraso nos modos 2×, 3× e 4×:** a imagem do Frame Boost podia esperar até 3 quadros na fila do Windows antes de aparecer, e o jogo parecia "pesado" na mão. Agora espera no máximo 1, como já acontecia no Auto. Quando um quadro gerado chegaria atrasado, ele fica de fora; o quadro do jogo sempre aparece.
+- **Atraso mostrado na tela:** o número de atraso do Frame Boost agora inclui também o tempo até a imagem chegar à tela, quando o Otimiza consegue medir esse trecho. Por isso ele pode aparecer um pouco maior que na 1.0.7. Continua marcado como estimado.
+- **Registro para o suporte:** o registro do Otimiza agora traz quantos quadros gerados ficaram de fora e quanto tempo a imagem levou até a tela. Se notar o Frame Boost menos liso, mande o registro por **Ajustes → Registro do Otimiza → Salvar em Downloads**.
 
 ---
 

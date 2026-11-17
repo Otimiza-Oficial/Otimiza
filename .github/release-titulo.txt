@@ -1,1 +1,1 @@
-Otimiza 1.0.7 Frame Boost mais estável, mais leve e mais simples (4.0.7)
+Otimiza 1.0.8 Frame Boost com menos atraso no 2×, 3× e 4× (4.0.8)
