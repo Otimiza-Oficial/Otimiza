@@ -94,12 +94,7 @@ pub fn gravar(executavel: &str, base: BaseMedida) {
     let mut t = todas();
     t.insert(executavel.to_lowercase(), base);
     let p = arquivo();
-    if let Some(d) = p.parent() {
-        let _ = fs::create_dir_all(d);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&t) {
-        let _ = fs::write(p, json);
-    }
+    crate::utils::arquivo::escrever_json_ou_avisar(&p, &t);
 }
 
 fn arquivo_dos_desfeitos() -> PathBuf {
@@ -119,12 +114,7 @@ pub fn anotar_teto_desfeito(executavel: &str, gravado_em: u64, desfeito_em: u64)
     let mut t = desfeitos();
     t.insert(executavel.to_lowercase(), (gravado_em, desfeito_em));
     let p = arquivo_dos_desfeitos();
-    if let Some(d) = p.parent() {
-        let _ = fs::create_dir_all(d);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&t) {
-        let _ = fs::write(p, json);
-    }
+    crate::utils::arquivo::escrever_json_ou_avisar(&p, &t);
 }
 
 /// Pura: a medição foi feita enquanto o teto antigo valia? Ela mediu o teto (72), não o jogo (130): não serve de base.
@@ -161,12 +151,7 @@ pub fn solta(executavel: &str) -> bool {
 /// Marca (Destravar) ou desmarca (Travar de novo) o jogo.
 pub fn soltar(executavel: &str, solta: bool) {
     let p = arquivo_das_soltas();
-    if let Some(d) = p.parent() {
-        let _ = fs::create_dir_all(d);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&com_a_solta(soltas(), executavel, solta)) {
-        let _ = fs::write(p, json);
-    }
+    crate::utils::arquivo::escrever_json_ou_avisar(&p, &com_a_solta(soltas(), executavel, solta));
 }
 
 /// A medição mais nova de 10 s ou mais deste jogo: a do Jogo liso ou a automática.

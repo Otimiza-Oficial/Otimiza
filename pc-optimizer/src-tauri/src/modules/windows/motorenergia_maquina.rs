@@ -326,6 +326,14 @@ pub fn marcar_teste_em_andamento(em_andamento: bool) {
     }
 }
 
+/// A marca do teste, gravada E conferida antes de trocar o plano (1.0.7). Sem ela no disco, uma queda no meio deixaria o
+/// PC no plano do teste sem a abertura seguinte saber: o teste não começa.
+pub fn marcar_teste_comecando() -> Result<(), String> {
+    crate::utils::arquivo::escrever_atomico(&pasta().join("teste_em_andamento"), b"1").map_err(|e| {
+        format!("Não comecei o teste de energia: {}. Sem essa marca, uma queda no meio deixaria o PC no plano do teste.", e)
+    })
+}
+
 pub fn teste_foi_interrompido() -> bool {
     pasta().join("teste_em_andamento").exists()
 }

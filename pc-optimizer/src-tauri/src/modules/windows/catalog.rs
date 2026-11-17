@@ -312,9 +312,8 @@ fn arquivo_dos_desligados() -> Option<std::path::PathBuf> {
 /// Troca a lista (memória e disco). Vazia religa tudo.
 pub fn definir_desligados(ids: &[String]) {
     let lista = filtrar_desligados(ids);
-    if let (Some(a), Ok(json)) = (arquivo_dos_desligados(), serde_json::to_string(&lista)) {
-        let _ = std::fs::create_dir_all(a.parent().unwrap_or(&a));
-        let _ = std::fs::write(a, json);
+    if let Some(a) = arquivo_dos_desligados() {
+        crate::utils::arquivo::escrever_json_ou_avisar(&a, &lista);
     }
     if let Ok(mut l) = DESLIGADOS_REMOTOS.write() {
         *l = lista;

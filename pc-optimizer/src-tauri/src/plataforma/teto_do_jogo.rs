@@ -113,12 +113,7 @@ fn guardar(executavel: &str, registro: Option<Registro>) {
         None => t.remove(&executavel.to_lowercase()),
     };
     let p = arquivo();
-    if let Some(d) = p.parent() {
-        let _ = fs::create_dir_all(d);
-    }
-    if let Ok(json) = serde_json::to_string_pretty(&t) {
-        let _ = fs::write(p, json);
-    }
+    crate::utils::arquivo::escrever_json_ou_avisar(&p, &t);
 }
 
 /// **Pura.** Quem pôs o teto que o driver usa, em palavras para a tela. `registro`: o do Otimiza para este jogo;

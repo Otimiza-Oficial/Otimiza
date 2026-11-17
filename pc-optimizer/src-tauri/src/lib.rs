@@ -450,9 +450,9 @@ pub fn run() {
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
                         // A troca do cl_drawFPS no fivem.cfg que esperava o FiveM fechar.
-                        let _ = tokio::task::spawn_blocking(plataforma::contador_fivem::cuidar).await;
+                        utils::avisar_panico("lib.rs:453", tokio::task::spawn_blocking(plataforma::contador_fivem::cuidar).await);
                         // O FOV pedido com o FiveM aberto, idem.
-                        let _ = tokio::task::spawn_blocking(plataforma::fov_fivem::cuidar).await;
+                        utils::avisar_panico("lib.rs:455", tokio::task::spawn_blocking(plataforma::fov_fivem::cuidar).await);
                         // O perfil gráfico pedido no cartão do Turbo, idem. Este escreve: fica parado no modo seguro.
                         if !utils::diagnostico::modo_seguro() {
                             if let Some(frase) = commands::aplicar_perfil_pendente(&handle).await {
@@ -473,7 +473,7 @@ pub fn run() {
                         // As cores do jogo: devolve as do anterior e liga as deste, se a pessoa pediu "só com o jogo
                         // aberto". Mexe no monitor, então só com licença (e feedback) em dia.
                         let exe = mudou.as_ref().map(|j| j.executavel.clone());
-                        let _ = tokio::task::spawn_blocking(move || {
+                        utils::avisar_panico("lib.rs:476", tokio::task::spawn_blocking(move || {
                             if anterior.is_some() {
                                 plataforma::cores::ao_fechar();
                             }
@@ -483,11 +483,11 @@ pub fn run() {
                                 }
                             }
                         })
-                        .await;
+                        .await);
                         // O teto gravado ainda está no perfil que o driver usa, com o jogo já aberto? (O FiveM mexe no
                         // perfil dele ao abrir: o log diz se o teto sobreviveu.)
                         if let Some(exe) = mudou.as_ref().map(|j| j.executavel.clone()) {
-                            let _ = tokio::task::spawn_blocking(move || {
+                            utils::avisar_panico("lib.rs:490", tokio::task::spawn_blocking(move || {
                                 if let Some(gravado) = plataforma::jogo_liso::teto_gravado(&exe) {
                                     utils::Logger::info(&format!(
                                         "teto do driver em {}: {} gravado, {:?} no perfil que o driver usa",
@@ -497,13 +497,13 @@ pub fn run() {
                                     ));
                                 }
                             })
-                            .await;
+                            .await);
                         }
                         // O FPS por cima do jogo liga sozinho no jogo que abriu (se a pessoa escolheu um modo e o jogo deixa).
                         if let Some(j) = mudou.as_ref() {
                             let h = handle.clone();
                             let j = j.clone();
-                            let _ = tokio::task::spawn_blocking(move || plataforma::overlay::ao_abrir(&h, &j)).await;
+                            utils::avisar_panico("lib.rs:506", tokio::task::spawn_blocking(move || plataforma::overlay::ao_abrir(&h, &j)).await);
                         }
                         let _ = handle.emit("jogo:sessao", &mudou);
                         // A partida (Plano "Partida de respeito"): ao fechar, a tela monta o cartão; ao abrir pelo
@@ -512,11 +512,11 @@ pub fn run() {
                             // FB8: o Frame Boost que a guarda aprovou nesta partida fica lembrado para o próximo "Jogar".
                             // R5: a marca de prioridade do jogo sai junto com ele.
                             let fechado = executavel.clone();
-                            let _ = tokio::task::spawn_blocking(move || {
+                            utils::avisar_panico("lib.rs:515", tokio::task::spawn_blocking(move || {
                                 plataforma::fb_por_jogo::ao_fechar_o_jogo(&fechado);
                                 plataforma::prioridade_jogo::limpar();
                             })
-                            .await;
+                            .await);
                             // O teto da base do Frame Boost sai junto com ele, se ele não volta sozinho neste jogo
                             // (antes ficava no driver e o jogo abria preso em 72, sem quadro gerado).
                             #[cfg(target_os = "windows")]
@@ -559,7 +559,7 @@ pub fn run() {
                         if mudou.is_none() && plataforma::bandeja::fechado_com_jogo() && escondida {
                             // O que só grava com o FiveM fechado (cl_drawFPS, FOV): o processo do jogo some antes do
                             // lançador, e sair agora deixaria a troca para a próxima abertura do Otimiza.
-                            let _ = tokio::task::spawn_blocking(|| {
+                            utils::avisar_panico("lib.rs:562", tokio::task::spawn_blocking(|| {
                                 let pendente = || {
                                     plataforma::contador_fivem::estado().pendente
                                         || plataforma::fov_fivem::estado().pendente
@@ -573,7 +573,7 @@ pub fn run() {
                                 plataforma::contador_fivem::cuidar();
                                 plataforma::fov_fivem::cuidar();
                             })
-                            .await;
+                            .await);
                             utils::Logger::info("o jogo fechou e o Otimiza estava só na bandeja: saindo");
                             handle.exit(0);
                         }
@@ -799,7 +799,7 @@ pub fn run() {
                     utils::Logger::info(&format!("prova alternada interrompida: plano do Otimiza reativado na abertura: {:?}", r));
                 }
                 // Escala: a sessão anterior pode ter caído com o cursor do Windows escondido e a janela do jogo pequena.
-                let _ = tokio::task::spawn_blocking(modules::windows::geracao::cursor::devolver_na_abertura).await;
+                utils::avisar_panico("lib.rs:802", tokio::task::spawn_blocking(modules::windows::geracao::cursor::devolver_na_abertura).await);
                 if let Ok(Some(feito)) = tokio::task::spawn_blocking(modules::windows::geracao::devolver_janela_na_abertura).await {
                     utils::Logger::info(&format!("escala interrompida, na abertura: {}", feito));
                 }
@@ -826,14 +826,14 @@ pub fn run() {
             // olhadas sem jogo antes de devolver: a troca de processo da tela de carregamento não derruba o ajuste.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
-                let _ = tokio::task::spawn_blocking(|| {
+                utils::avisar_panico("lib.rs:829", tokio::task::spawn_blocking(|| {
                     if crate::plataforma::sessao::atual().is_none() {
                         if let Err(e) = crate::plataforma::energia_jogo::devolver() {
                             utils::Logger::warn(&format!("energia de jogo na abertura: {}", e));
                         }
                     }
                 })
-                .await;
+                .await);
                 let mut sem_jogo = 0u32;
                 // Só age quando o jogo muda (abriu, fechou, trocou): ler a máquina a cada olhada custaria um powercfg.
                 let mut visto: Option<String> = None;
@@ -891,7 +891,7 @@ pub fn run() {
             // O espaço livre do disco custa segundos na primeira leitura: aquecido aqui, a listagem já o encontra.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
-                let _ = tokio::task::spawn_blocking(modules::windows::aquecer_condicoes).await;
+                utils::avisar_panico("lib.rs:894", tokio::task::spawn_blocking(modules::windows::aquecer_condicoes).await);
             });
 
             // Afinidade morre com o processo: reaplica a cada abertura do jogo, só onde foi MEDIDO e rendeu.

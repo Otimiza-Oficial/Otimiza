@@ -94,7 +94,7 @@ pub async fn energia_testar_candidato(
                 controlados.push(m.alias.clone());
             }
         }
-        maquina::marcar_teste_em_andamento(true);
+        maquina::marcar_teste_comecando()?;
         let aplicacao = maquina::aplicar(&candidato, &controlados)?;
         let mut medicao = maquina::medir_atual(
             &candidato.id,

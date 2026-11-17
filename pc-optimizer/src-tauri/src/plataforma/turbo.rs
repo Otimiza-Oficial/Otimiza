@@ -1139,10 +1139,10 @@ pub fn provar(
         armado: true,
     };
     let _ = desligar();
-    if let Ok(t) = serde_json::to_string(&ProvaEmAndamento { energia_antes }) {
-        let _ = fs::create_dir_all(pasta());
-        let _ = fs::write(marcador_da_prova(), t);
-    }
+    // A marca da prova, conferida (1.0.7): sem ela, uma queda no meio deixaria o lado "com" ligado sem a abertura
+    // seguinte saber. Sem marca, a prova não começa (o `fim` devolve o lado "sem").
+    crate::utils::arquivo::escrever_json(&marcador_da_prova(), &ProvaEmAndamento { energia_antes })
+        .map_err(|e| format!("Não comecei a prova: {}", e))?;
 
     let pid = jogo.pid;
     let nome = jogo.executavel.clone();
