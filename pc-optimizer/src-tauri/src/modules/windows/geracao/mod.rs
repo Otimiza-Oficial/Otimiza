@@ -9,6 +9,7 @@ pub mod cursor;
 pub mod escala;
 pub mod gpu;
 pub mod guarda;
+pub mod metrica;
 pub mod resumo;
 pub mod ritmo;
 
