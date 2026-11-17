@@ -19,6 +19,16 @@
   const CHAVE_ESCALA = "otimiza-fb-escala";
   const CHAVE_ALVO = "otimiza-fb-alvo";
   const CHAVE_NITIDEZ = "otimiza-fb-nitidez";
+  const CHAVE_PRESET = "otimiza-fb-preset";
+
+  // Três jeitos prontos (1.0.7, decisão do dono: Equilíbrio é o padrão de quem nunca escolheu). Só mexem no que o
+  // gerador já aceita: quadros gerados, FPS alvo e escala. "Personalizado" é qualquer outra combinação do Avançado.
+  type Preset = "qualidade" | "equilibrio" | "desempenho";
+  const PRESETS: { id: Preset; nome: string; dica: string }[] = [
+    { id: "qualidade", nome: "Qualidade", dica: "Enche o monitor de quadros. Mais trabalho para a placa." },
+    { id: "equilibrio", nome: "Equilíbrio", dica: "Gera um pouco abaixo do monitor: menos trabalho para a placa e menos defeito na imagem." },
+    { id: "desempenho", nome: "Desempenho", dica: "Para placa no limite: o jogo desenha menos pixels e o gerador completa." },
+  ];
   /** FB6: três pontos da faixa do FSR (0 a 2 "stops"); o padrão é o dos exemplos da AMD. */
   const NITIDEZES = [
     { nome: "Suave", stops: 1 },
@@ -189,6 +199,41 @@
     escalaPedida = e;
     gravar(CHAVE_ESCALA, e);
   }
+
+  /** O alvo do Equilíbrio: o maior alvo até 85% dos Hz (120 num de 144); sem alvo abaixo, o próprio monitor. */
+  function alvoDoEquilibrio(): number | null {
+    const hz = p?.hz ?? 0;
+    return [...alvos].reverse().find((v) => v <= hz * 0.85) ?? null;
+  }
+  function valoresDo(id: Preset): { mult: number; alvo: number | null; escala: NivelDeEscala | null } {
+    if (id === "qualidade") return { mult: 0, alvo: null, escala: null };
+    if (id === "equilibrio") return { mult: 0, alvo: alvoDoEquilibrio(), escala: null };
+    return escalaPermitida
+      ? { mult: 0, alvo: alvoDoEquilibrio(), escala: "Qualidade" }
+      : { mult: 2, alvo: null, escala: null };
+  }
+  function escolherPreset(id: Preset) {
+    const v = valoresDo(id);
+    escolherMult(v.mult);
+    escolherAlvo(v.alvo);
+    escolherEscala(v.escala);
+    gravar(CHAVE_PRESET, id);
+  }
+  /** O preset que bate com o que está escolhido agora; `null` = Personalizado (mexeu no Avançado). */
+  const presetAtual = $derived.by((): Preset | null => {
+    for (const { id } of PRESETS) {
+      const v = valoresDo(id);
+      if (v.mult === mult && v.alvo === alvo && v.escala === escala) return id;
+    }
+    return null;
+  });
+  // Quem nunca escolheu nada começa no Equilíbrio, assim que o painel sabe os Hz do monitor.
+  let presetInicial = false;
+  $effect(() => {
+    if (presetInicial || !p?.hz || !doOtimiza) return;
+    presetInicial = true;
+    if (ler(CHAVE_PRESET, "") === "" && ler(CHAVE_MULT, "") === "") escolherPreset("equilibrio");
+  });
 </script>
 
 <section class="secao fb" class:aceso={!!a}>
@@ -254,6 +299,18 @@
 
         <div class="controles">
           {#if doOtimiza && !a}
+            <div class="escolha">
+              <span class="rotulo">Modo</span>
+              <div class="segmento" role="radiogroup" aria-label="Modo do Frame Boost">
+                {#each PRESETS as o (o.id)}
+                  <button role="radio" aria-checked={presetAtual === o.id} onclick={() => escolherPreset(o.id)}>{o.nome}</button>
+                {/each}
+              </div>
+              <p class="dica">{presetAtual ? PRESETS.find((o) => o.id === presetAtual)?.dica : "Personalizado: a combinação escolhida no Avançado."}</p>
+            </div>
+            <details class="avancado">
+              <summary class="apoio">Avançado</summary>
+              <div class="avancado-corpo">
             {#if escalaPermitida}
               <div class="escolha">
                 <span class="rotulo">Escala</span>
@@ -288,6 +345,8 @@
                 <p class="dica">{alvo ? `Menos quadros gerados: gasta menos placa e o jogo fica com mais FPS de verdade.` : "Abaixo do monitor, o gerador gasta menos placa."}</p>
               </div>
             {/if}
+              </div>
+            </details>
           {/if}
 
           {#if doOtimiza && (escala || a?.escala)}
@@ -413,6 +472,11 @@
 </section>
 
 <style>
+  .avancado-corpo {
+    display: grid;
+    gap: 16px;
+    padding-top: 12px;
+  }
   .fb {
     display: grid;
     gap: 16px;
