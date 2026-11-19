@@ -1,1 +1,1 @@
-Otimiza 1.0.8 Frame Boost com menos atraso no 2×, 3× e 4× (4.0.8)
+Otimiza 1.0.9 Frame Boost que se vê, mais leve na placa e no PC (4.0.9)
