@@ -1774,13 +1774,8 @@ fn sessao(
     let mut quadros_na_tela = guarda::LinhaDoTempo::default();
     // Da chamada do `Present` até a tela (ms), pelo PresentMon: a da sobreposição e a do próprio jogo.
     let mut fila_da_sobreposicao: Option<f64> = None;
-    // No ritmo do monitor: a espera pela atualização (`WaitForVBlank`) e, se o Windows a recusar ou ela voltar sem
-    // esperar, o relógio com prazo absoluto.
-    let mut espera_do_monitor_recusada = false;
-    let mut espera_do_monitor = ritmo::EsperaDoMonitor::default();
-    let mut ultima_espera = Instant::now();
-    let mut prazo_do_relogio: Option<f64> = None;
-    let mut vrr_avisado = false;
+    // No ritmo do monitor: quando saiu a última imagem (o relógio do intervalo mínimo).
+    let mut ultima_imagem = Instant::now();
     // Gerados que perderam a vez na fila de 1 quadro (modos fixos), para o log de 10 s.
     let mut sem_vez = 0u64;
     while !parar.load(Ordering::Relaxed) {
@@ -1933,16 +1928,7 @@ fn sessao(
                 ms(fila_da_sobreposicao)
             ));
             sem_vez = 0;
-            if pelo_monitor {
-                crate::utils::Logger::info(&format!(
-                    "gerador: espera do monitor {}",
-                    match (espera_do_monitor_recusada, espera_do_monitor.intervalo) {
-                        (true, _) => "pelo relógio".to_string(),
-                        (false, Some(i)) => format!("a {:.0} Hz", 1.0 / i),
-                        (false, None) => "sem medida".to_string(),
-                    }
-                ));
-            }
+
             // O que a tela mostrou de fato, pelo instante em que cada quadro apareceu (o PresentMon entrega com atraso:
             // vale a janela de 10 s que terminou `ATRASO_DA_CONTAGEM` atrás).
             if na_tela_vivo.is_some() {
@@ -2353,37 +2339,12 @@ fn sessao(
                 std::thread::sleep(Duration::from_millis(4));
                 continue;
             }
-            // UM QUADRO POR ATUALIZAÇÃO DO MONITOR. A vez da fila sozinha não segurava: no log do sócio (GTX 1650,
-            // 144 Hz) o Auto apresentava de 180 a 274 quadros por segundo, a tela mostrava de 104 a 128 novos, e o
-            // gerador ocupava de 75% a 82% da placa desenhando quadros que nunca apareciam. Espera a atualização do
-            // monitor do jogo; se o Windows recusar, espera pelo relógio.
-            if !espera_do_monitor_recusada {
-                if unsafe { saida.saida.WaitForVBlank() }.is_err() {
-                    espera_do_monitor_recusada = true;
-                    crate::utils::Logger::warn("gerador: a espera do monitor foi recusada; o ritmo segue pelo relógio");
-                } else if espera_do_monitor.registrar(ultima_espera.elapsed().as_secs_f64(), periodo_da_tela) {
-                    espera_do_monitor_recusada = true;
-                    crate::utils::Logger::warn("gerador: a espera do monitor volta sem esperar; o ritmo segue pelo relógio");
-                }
-                ultima_espera = Instant::now();
-                // VRR na janela: a espera segue o jogo, não os Hz, e o atraso calculado fica errado. Só avisa no log.
-                if let Some(i) = espera_do_monitor.intervalo.filter(|i| !vrr_avisado && *i > periodo_da_tela * 1.25) {
-                    vrr_avisado = true;
-                    crate::utils::Logger::warn(&format!(
-                        "gerador: o monitor atualiza a {:.0} Hz e não a {} Hz (VRR seguindo o jogo?)",
-                        1.0 / i,
-                        hz
-                    ));
-                }
-            }
-            if espera_do_monitor_recusada {
-                let agora = segundos(inicio);
-                let prazo = ritmo::proximo_prazo(prazo_do_relogio.unwrap_or(agora), agora, periodo_da_tela);
-                prazo_do_relogio = Some(prazo);
-                let falta = prazo - agora;
-                if falta > 0.0 {
-                    std::thread::sleep(Duration::from_secs_f64(falta));
-                }
+            // Uma imagem a cada 3/4 de atualização, no máximo, pelo relógio (`ritmo::INTERVALO_MINIMO_ENTRE_IMAGENS`):
+            // toda atualização recebe imagem nova e a placa não desenha o dobro à toa. Sem esperar a atualização do monitor
+            // (a 1.0.9 esperava, e os engasgos dobraram no FiveM com a placa ocupada).
+            let espera = ritmo::espera_ate_a_proxima_imagem(ultima_imagem.elapsed().as_secs_f64(), periodo_da_tela);
+            if espera > 0.0 {
+                std::thread::sleep(Duration::from_secs_f64(espera));
             }
             let agora = segundos(inicio);
             // O instante do jogo que esta atualização mostra: a hora em que ela aparece, menos o atraso.
@@ -2408,6 +2369,10 @@ fn sessao(
             // seguinte ficava 50 ms parada (revisão da 1.0.9). Na repetição, a espera do monitor já segura o ritmo.
             if decisao != ritmo::NaAtualizacao::Repetir {
                 sobreposicao.esperar_a_vez(50, true);
+                ultima_imagem = Instant::now();
+            } else {
+                // Nada novo: um respiro curto antes de olhar a captura de novo, sem girar o processador.
+                std::thread::sleep(Duration::from_millis(1));
             }
             match decisao {
                 ritmo::NaAtualizacao::Gerado(t) => {

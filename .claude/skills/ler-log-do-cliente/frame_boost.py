@@ -49,7 +49,7 @@ class Sessao:
             "reais": campo(rf"· {NUM} reais/s", t),
             "gerados": campo(rf"· {NUM} gerados/s", t),
             "escondida": campo(rf"escondida {NUM}%", t),
-            "mult": campo(r"· (\d+)× ·", t, int),
+            "mult": campo(r"· ([\d.]+)× ·", t),
             "placa_pct": campo(rf"\({NUM}% do tempo\)", t),
             "repetidas_antigo": campo(rf"{NUM}% das atualizações repetidas", t),
             "descartados": campo(rf"· {NUM} descartados/s", t),
@@ -125,7 +125,9 @@ def veredito(s):
         novos = mediana(t["novos"] for t in s.telas)
         eng = sum(t["engasgos"] or 0 for t in s.telas)
         minutos = len(s.telas) * 10 / 60
-        esperado = min(s.hz or 0, (reais or 0) * (mult or 1)) if reais else None
+        # Auto: enche o monitor (os Hz). Fixo: reais × multiplicador, até os Hz.
+        auto = (s.modo or "").startswith("Auto")
+        esperado = (s.hz if auto else min(s.hz or 0, (reais or 0) * (mult or 1))) if reais else None
         falta = (1 - novos / esperado) * 100 if esperado and novos else None
         estado = "OK" if (falta is not None and falta <= 5 and eng / max(minutos, 0.1) <= 2) else "ATENÇÃO"
         out.append(

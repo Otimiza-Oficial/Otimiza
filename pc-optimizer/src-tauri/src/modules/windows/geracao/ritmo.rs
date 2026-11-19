@@ -226,37 +226,19 @@ pub fn vale_gerar(hz: u32, intervalo_do_jogo: Option<f64>) -> bool {
     intervalo_do_jogo.is_some_and(|i| hz as f64 * i > 1.1)
 }
 
-/// O `WaitForVBlank` que volta sem esperar (relatado em notebook híbrido e área de trabalho remota) devolve `S_OK` e
-/// deixaria o laço solto de novo. Dez esperas seguidas abaixo de meia atualização: não confia mais nela.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct EsperaDoMonitor {
-    curtas_seguidas: u32,
-    /// Média do intervalo entre esperas (s): com VRR na janela, segue o jogo e não os Hz.
-    pub intervalo: Option<f64>,
-}
+/// O intervalo mínimo entre duas imagens no ritmo do monitor, em frações da atualização da tela. Menor que 1: toda
+/// atualização recebe pelo menos uma imagem nova (o Windows mostra a mais nova). Maior que 1/2: nunca mais de duas por
+/// atualização (a 1.0.8 apresentava 180-274 por segundo num monitor de 144 Hz e ocupava 75-82% da placa).
+///
+/// 1.0.9 esperava a atualização do monitor (`WaitForVBlank`) antes de cada imagem: no log do testador (GTX 1650, 144 Hz,
+/// FiveM a 72-83) a placa caiu para 40%, mas os engasgos (3+ atualizações sem imagem nova) foram de ~2/s para 4-10/s.
+/// Com a placa ocupada pelo jogo, a imagem que perdia uma atualização ainda esperava a seguinte inteira: duas perdas
+/// somadas. Pelo relógio, o laço nunca para esperando a tela.
+pub const INTERVALO_MINIMO_ENTRE_IMAGENS: f64 = 0.75;
 
-impl EsperaDoMonitor {
-    pub const CURTAS_PARA_DESCONFIAR: u32 = 10;
-
-    /// Registra o intervalo desde a espera anterior. `true`: a espera não está segurando o ritmo.
-    pub fn registrar(&mut self, desde_a_anterior: f64, periodo: f64) -> bool {
-        if (0.0..0.25).contains(&desde_a_anterior) {
-            self.intervalo = Some(self.intervalo.map_or(desde_a_anterior, |m| m * 0.95 + desde_a_anterior * 0.05));
-        }
-        if periodo > 0.0 && desde_a_anterior < periodo * 0.5 {
-            self.curtas_seguidas += 1;
-        } else {
-            self.curtas_seguidas = 0;
-        }
-        self.curtas_seguidas >= Self::CURTAS_PARA_DESCONFIAR
-    }
-}
-
-/// Pura: o prazo da próxima atualização pelo relógio, preso a um prazo absoluto (contar a partir de "agora" e arredondar
-/// para baixo escorregava). Atrasado mais de uma atualização, recomeça a partir de agora.
-pub fn proximo_prazo(prazo: f64, agora: f64, periodo: f64) -> f64 {
-    let p = prazo + periodo;
-    if p < agora { agora + periodo } else { p }
+/// Pura: quanto esperar (s) antes da próxima imagem, desde a última que foi para a tela.
+pub fn espera_ate_a_proxima_imagem(desde_a_ultima: f64, periodo: f64) -> f64 {
+    (periodo * INTERVALO_MINIMO_ENTRE_IMAGENS - desde_a_ultima).max(0.0)
 }
 
 /// Pura: o teto de onde a guarda desce, pelo que o gerador faz de verdade. Um 4× com base 60 em 144 Hz já faz ~2,4
@@ -917,29 +899,17 @@ mod tests {
     }
 
     #[test]
-    fn a_espera_do_monitor_que_volta_na_hora_e_desacreditada() {
+    fn pelo_relogio_toda_atualizacao_tem_imagem_e_nunca_mais_de_duas() {
         let p = 1.0 / 144.0;
-        let mut e = EsperaDoMonitor::default();
-        for _ in 0..50 {
-            assert!(!e.registrar(p, p));
+        assert!((espera_ate_a_proxima_imagem(0.0, p) - p * 0.75).abs() < 1e-12);
+        assert_eq!(espera_ate_a_proxima_imagem(p, p), 0.0, "atrasado: segue sem esperar");
+        // Imagens a cada 3/4 de atualização: cada atualização recebe 1 ou 2, nunca 0.
+        let (mut t, mut por_atualizacao) = (0.0f64, [0u32; 400]);
+        while t < 300.0 * p {
+            por_atualizacao[(t / p) as usize] += 1;
+            t += p * INTERVALO_MINIMO_ENTRE_IMAGENS + espera_ate_a_proxima_imagem(p * 0.75, p);
         }
-        assert!((e.intervalo.unwrap() - p).abs() < 1e-4);
-        let mut desconfia = false;
-        for _ in 0..EsperaDoMonitor::CURTAS_PARA_DESCONFIAR {
-            desconfia = e.registrar(0.0002, p);
-        }
-        assert!(desconfia);
-        // Uma curta sozinha (a primeira espera, um vblank logo ali) não derruba.
-        let mut e = EsperaDoMonitor::default();
-        assert!(!e.registrar(0.0002, p));
-        assert!(!e.registrar(p, p));
-    }
-
-    #[test]
-    fn o_relogio_da_reserva_nao_escorrega() {
-        let p = 0.01;
-        assert!((proximo_prazo(1.0, 1.003, p) - 1.01).abs() < 1e-12);
-        assert!((proximo_prazo(1.0, 1.05, p) - 1.06).abs() < 1e-12, "atrasado: recomeça de agora");
+        assert!(por_atualizacao[..299].iter().all(|n| (1..=2).contains(n)));
     }
 
     #[test]
