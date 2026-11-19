@@ -474,8 +474,12 @@ pub fn degrau_em_palavras(razao: Option<f64>, baixou_para: Option<u8>) -> String
 /// O teto do automático: com o jogo a 30 fps num monitor de 180 Hz, seis quadros por real.
 pub const MAXIMO_DO_AUTOMATICO: u8 = 6;
 
+/// O teto que a guarda deixou nesta ligada (0 = nenhum): vale de um "refazer" para o outro.
+static TETO_DA_GUARDA: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
 pub fn ligar(config: Configuracao) -> Result<Estado, String> {
     desligar();
+    TETO_DA_GUARDA.store(0, Ordering::Relaxed);
     if config.processo.trim().is_empty() {
         return Err("Diga qual é o jogo.".to_string());
     }
@@ -1703,12 +1707,19 @@ fn sessao(
     let mut ultima_checagem = Instant::now();
     let mut cabe_atual = multiplicador;
     // O teto que a guarda deixou (`ReacaoAPerda::BaixarPara`): começa no pedido e só desce.
-    let mut teto_da_guarda = multiplicador;
+    // O degrau da guarda sobrevive ao "refazer" (alt-tab, janela mudou): antes voltava ao topo e passava de novo ~1 min
+    // acima do orçamento. Zera a cada `ligar`.
+    let mut teto_da_guarda = match TETO_DA_GUARDA.load(Ordering::Relaxed) {
+        0 => multiplicador,
+        t => t.min(multiplicador),
+    };
     // Automático: a fração de quadro que sobra de um real para o outro, e quantos coube no último.
     let mut acumulado_do_automatico = 0.0;
     let mut ultimo_do_automatico = 1u8;
-    // No ritmo do monitor: quadros na tela por real, medido na última janela (para o log).
+    // No ritmo do monitor: imagens novas na tela por real, medido na última janela (tela, log e guarda).
     let mut multiplicador_no_monitor: Option<f64> = None;
+    let mut imagens_no_monitor = 0u64;
+    let mut imagens_na_janela = 0u64;
     let mut pedidos_de_troca = 0u32;
     let mut ultimo_real = Instant::now();
 
@@ -1991,7 +2002,9 @@ fn sessao(
                 }
                 let apresentados = (contadores.reais + contadores.gerados) - janela_de_contagem.2;
                 if pelo_monitor {
-                    if let Some(m) = ritmo::multiplicador_medido(reais, apresentados) {
+                    let imagens = imagens_no_monitor - imagens_na_janela;
+                    imagens_na_janela = imagens_no_monitor;
+                    if let Some(m) = ritmo::multiplicador_medido(reais, imagens) {
                         multiplicador_no_monitor = Some(m);
                         ultimo_do_automatico = m.round().clamp(1.0, 8.0) as u8;
                     }
@@ -2027,9 +2040,12 @@ fn sessao(
                     }
                     e.comparacoes = comparacoes;
                     e.contadores = contadores;
-                    // Auto: o medido (quadros na tela por real). Fixo: o pedido, que outros lugares leem como escolha.
+                    // Auto: o medido (imagens na tela por real). Fixo: o pedido (com o teto da guarda), que outros
+                    // lugares leem como escolha; o `cabe_atual` da agenda antiga dizia 1× num 2× gerando 1,8.
                     e.multiplicador = if config.automatico {
                         ultimo_do_automatico
+                    } else if pelo_monitor {
+                        multiplicador.min(teto_da_guarda)
                     } else {
                         cabe_atual
                     };
@@ -2090,6 +2106,7 @@ fn sessao(
                     }
                     ReacaoAPerda::BaixarPara(novo) => {
                         teto_da_guarda = novo;
+                        TETO_DA_GUARDA.store(novo, Ordering::Relaxed);
                         cabe_atual = cabe_atual.min(novo);
                         guarda = guarda::Guarda::nova_leve(segundos(inicio));
                         crate::utils::Logger::warn(&format!(
@@ -2397,6 +2414,7 @@ fn sessao(
                     sobreposicao.apresentar(&gpu, Some(t), cronometro.as_mut());
                     contadores.gerados += 1;
                     exibicao.exibidos += 1;
+                    imagens_no_monitor += 1;
                     mostrados_deste_real = mostrados_deste_real.saturating_add(1);
                 }
                 // Nada de novo: sem `Present`, a tela segue com o último quadro e a placa fica com o jogo.
@@ -2404,6 +2422,7 @@ fn sessao(
                 ritmo::NaAtualizacao::Real => {
                     if !real_ja_mostrado {
                         exibicao.exibidos += 1;
+                        imagens_no_monitor += 1;
                     }
                     sobreposicao.apresentar(&gpu, None, cronometro.as_mut());
                     real_ja_mostrado = true;

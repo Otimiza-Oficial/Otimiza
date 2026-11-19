@@ -33,7 +33,6 @@ const FRACAO_DA_ALTURA: f64 = 0.75;
 const LARGURA_MINIMA: f64 = 900.0;
 const ALTURA_MINIMA: f64 = 640.0;
 
-/// O mínimo entra DEPOIS da fração e ANTES do teto da tela: numa tela menor que o mínimo, a janela é a tela.
 /// Alguma prova A-B está rodando (plano de energia alternado, prova do Turbo, teste da travada). Os vigias que mexem
 /// no FPS (modo jogo/governador, energia de jogo, afinidade) não escrevem nada enquanto isso: um lado da prova com o
 /// ajuste e o outro sem deixava o resultado contaminado (auditoria do Plano 2.0).
@@ -44,6 +43,7 @@ fn prova_em_curso() -> bool {
         || modules::windows::investigacao::em_andamento()
 }
 
+/// O mínimo entra DEPOIS da fração e ANTES do teto da tela: numa tela menor que o mínimo, a janela é a tela.
 fn tamanho_que_cabe(largura_util: f64, altura_util: f64) -> (f64, f64) {
     let largura = (largura_util * FRACAO_DA_LARGURA)
         .max(LARGURA_MINIMA)

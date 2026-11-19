@@ -41,6 +41,9 @@ pub async fn turbo_ligar(
     {
         use crate::plataforma::{historico, sessao, turbo};
         let app_da_prova = app.clone();
+        // A trava do histórico presa desde já: a receita pode ligar o Smooth Motion ou o AFMF, que gravam no histórico do
+        // disco, e um vigia gravando a memória no meio apagava o registro (revisão final da 1.0.9). Relida no fim.
+        let mut log = state.changes.lock().await;
         let (id, aplicada) = tokio::task::spawn_blocking(move || -> Result<(String, turbo::Receita), String> {
             let jogo = sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
             let (id, _) = historico::id_do_jogo(&jogo.executavel);
@@ -94,8 +97,9 @@ pub async fn turbo_ligar(
             Ok((id, aplicada))
         })
         .await
-        .map_err(|e| e.to_string())??;
-        let mut log = state.changes.lock().await;
+        .map_err(|e| e.to_string())
+        .and_then(|r| r)
+        .inspect_err(|_| log.recarregar())?;
         // O Frame Boost (Smooth Motion, AFMF) grava no histórico do disco: relido antes de gravar por cima dele.
         log.recarregar();
         let trava = sessao_do_turbo().map(|exe| (crate::modules::windows::nvdriver::id_do_limite(&exe), exe));

@@ -763,10 +763,16 @@ fn marca_da_base() -> PathBuf {
 #[cfg(target_os = "windows")]
 pub fn marcar_base(executavel: Option<&str>) {
     let m = marca_da_base();
-    let _ = match executavel {
+    let r = match executavel {
         Some(e) => crate::utils::arquivo::escrever_atomico(&m, e.as_bytes()),
-        None => std::fs::remove_file(&m).map_err(|e| e.to_string()),
+        None => std::fs::remove_file(&m).or_else(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err(e.to_string()),
+        }),
     };
+    if let Err(e) = r {
+        crate::utils::Logger::warn(&format!("turbo: a marca da base não gravou ({}); o teto da base pode ficar sem dono", e));
+    }
 }
 
 #[cfg(target_os = "windows")]

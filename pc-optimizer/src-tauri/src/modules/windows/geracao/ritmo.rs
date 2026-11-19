@@ -168,10 +168,12 @@ impl Exibicao {
     }
 }
 
-/// No ritmo do monitor: quantos quadros a tela recebeu por quadro real do jogo, para a tela e o log (o Auto não tem
-/// multiplicador fixo; antes a tela dizia "agora 1×" enquanto gerava). `None` sem quadro real na janela.
-pub fn multiplicador_medido(reais: u64, apresentados: u64) -> Option<f64> {
-    (reais > 0).then(|| apresentados.max(reais) as f64 / reais as f64)
+/// No ritmo do monitor: quantas imagens novas a tela recebeu por quadro real do jogo, para a tela, o log e a guarda
+/// (o Auto não tem multiplicador fixo; antes a tela dizia "agora 1×" enquanto gerava). `imagens`: as que foram para a
+/// tela (geradas e o real na primeira vez). A imagem de t≈0 já É o real: somar os reais de novo dava 1 a mais (revisão
+/// final da 1.0.9). `None` sem quadro real na janela.
+pub fn multiplicador_medido(reais: u64, imagens: u64) -> Option<f64> {
+    (reais > 0).then(|| imagens.max(reais) as f64 / reais as f64)
 }
 
 /// No ritmo do monitor, o que esta atualização da tela recebe.
@@ -261,7 +263,8 @@ pub fn proximo_prazo(prazo: f64, agora: f64, periodo: f64) -> f64 {
 /// imagens por real: baixar para 3× não aliviaria nada.
 pub fn teto_efetivo(teto: u8, medido: Option<f64>) -> u8 {
     match medido {
-        Some(m) if m.is_finite() && m >= 1.0 => teto.min(m.ceil() as u8),
+        // 2,03 medido é 2 com ruído: subir para 3 daria um degrau que não alivia nada.
+        Some(m) if m.is_finite() && m >= 1.0 => teto.min((m - 0.1).ceil().max(1.0) as u8),
         _ => teto,
     }
 }
@@ -945,11 +948,12 @@ mod tests {
         assert_eq!(teto_efetivo(6, Some(2.4)), 3);
         assert_eq!(teto_efetivo(2, Some(2.4)), 2);
         assert_eq!(teto_efetivo(4, None), 4);
+        assert_eq!(teto_efetivo(4, Some(2.03)), 2, "ruído não sobe um degrau");
     }
 
     #[test]
     fn o_auto_diz_quantos_quadros_por_real_chegaram() {
-        // O log do sócio (GTX 1650, 144 Hz, FiveM): 61 reais/s e 83 gerados/s = 2,4× (a tela dizia 1×).
+        // GTX 1650, 144 Hz, FiveM a 61: 144 imagens novas por segundo (uma por atualização) = 2,4× (a tela dizia 1×).
         assert!((multiplicador_medido(61, 144).unwrap() - 2.36).abs() < 0.01);
         assert_eq!(multiplicador_medido(0, 144), None);
         assert_eq!(multiplicador_medido(60, 30), Some(1.0), "nunca menos que 1×");
