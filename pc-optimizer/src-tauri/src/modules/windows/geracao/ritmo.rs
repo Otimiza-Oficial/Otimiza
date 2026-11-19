@@ -168,6 +168,52 @@ impl Exibicao {
     }
 }
 
+/// No ritmo do monitor: quantos quadros a tela recebeu por quadro real do jogo, para a tela e o log (o Auto não tem
+/// multiplicador fixo; antes a tela dizia "agora 1×" enquanto gerava). `None` sem quadro real na janela.
+pub fn multiplicador_medido(reais: u64, apresentados: u64) -> Option<f64> {
+    (reais > 0).then(|| apresentados.max(reais) as f64 / reais as f64)
+}
+
+/// No ritmo do monitor, o que esta atualização da tela recebe.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NaAtualizacao {
+    /// Um quadro gerado no instante `t` entre os dois reais.
+    Gerado(f32),
+    /// O real mais novo, pela primeira vez.
+    Real,
+    /// Nada de novo: a tela repete o que já mostra, sem gastar placa com outro `Present`.
+    Repetir,
+}
+
+/// Pura: o que mostrar nesta atualização. `t`: o de `t_no_tempo`. `ja_mostrados`: quadros deste real que já foram
+/// gerados deste real que já foram para a tela. `teto`: o multiplicador fixo (2×, 3×, 4×) ou `None` no Auto. `redesenhar`:
+/// repetir o real precisa de outro `Present` (escala com o cursor ampliado andando).
+pub fn na_atualizacao(
+    t: Option<f32>,
+    real_ja_mostrado: bool,
+    ja_mostrados: u8,
+    teto: Option<u8>,
+    redesenhar: bool,
+) -> NaAtualizacao {
+    // 2× = um gerado por real (e o real), 3× = dois…
+    let cabe = teto.is_none_or(|m| ja_mostrados < m.max(1) - 1);
+    match t {
+        Some(t) if cabe => NaAtualizacao::Gerado(t),
+        Some(_) => NaAtualizacao::Repetir,
+        None if !real_ja_mostrado || redesenhar => NaAtualizacao::Real,
+        None => NaAtualizacao::Repetir,
+    }
+}
+
+/// No ritmo do monitor, sem a espera do monitor (`WaitForVBlank` recusado): quanto falta, em ms, para a próxima
+/// atualização desde o último quadro mostrado. Nunca mais de um quadro por atualização.
+pub fn espera_ate_a_atualizacao_ms(desde_o_ultimo: f64, periodo: f64) -> u64 {
+    if periodo <= 0.0 {
+        return 0;
+    }
+    ((periodo - desde_o_ultimo) * 1000.0).floor().max(0.0) as u64
+}
+
 /// No ritmo do monitor: o `t` do quadro que mostra o instante `no_jogo` entre os reais que apareceram em `a` e `b`.
 /// `None`: `b` já passou, é a vez do próprio real (e, se o próximo atrasou, ele fica mais uma atualização).
 pub fn t_no_tempo(no_jogo: f64, a: f64, b: f64) -> Option<f32> {
@@ -732,6 +778,39 @@ mod tests {
         assert!(!quadro_aprovado(Some(0.25)));
         assert!(!quadro_aprovado(None));
         assert!(!quadro_aprovado(Some(f32::NAN)));
+    }
+
+    #[test]
+    fn no_ritmo_do_monitor_o_fixo_tem_teto_e_nada_se_redesenha_a_toa() {
+        use NaAtualizacao::*;
+        // Auto: gera em toda atualização em que o real ainda não chegou.
+        assert_eq!(na_atualizacao(Some(0.4), false, 5, None, false), Gerado(0.4));
+        // 2× fixo: um gerado por real; o segundo vira repetição (a tela mostra o gerado mais uma atualização).
+        assert_eq!(na_atualizacao(Some(0.3), false, 0, Some(2), false), Gerado(0.3));
+        assert_eq!(na_atualizacao(Some(0.7), false, 1, Some(2), false), Repetir);
+        assert_eq!(na_atualizacao(Some(0.7), false, 1, Some(3), false), Gerado(0.7), "3×: dois gerados por real");
+        // O real aparece uma vez; nas atualizações seguintes, sem quadro novo do jogo, não se redesenha.
+        assert_eq!(na_atualizacao(None, false, 1, Some(2), false), Real);
+        assert_eq!(na_atualizacao(None, true, 2, None, false), Repetir);
+        // Escala com o cursor ampliado: redesenha para o cursor andar.
+        assert_eq!(na_atualizacao(None, true, 2, None, true), Real);
+    }
+
+    #[test]
+    fn o_auto_diz_quantos_quadros_por_real_chegaram() {
+        // O log do sócio (GTX 1650, 144 Hz, FiveM): 61 reais/s e 83 gerados/s = 2,4× (a tela dizia 1×).
+        assert!((multiplicador_medido(61, 144).unwrap() - 2.36).abs() < 0.01);
+        assert_eq!(multiplicador_medido(0, 144), None);
+        assert_eq!(multiplicador_medido(60, 30), Some(1.0), "nunca menos que 1×");
+    }
+
+    #[test]
+    fn sem_a_espera_do_monitor_nunca_dois_quadros_na_mesma_atualizacao() {
+        let p = 1.0 / 144.0;
+        assert_eq!(espera_ate_a_atualizacao_ms(0.0, p), 6);
+        assert_eq!(espera_ate_a_atualizacao_ms(0.003, p), 3);
+        assert_eq!(espera_ate_a_atualizacao_ms(0.010, p), 0, "atrasado: segue sem esperar");
+        assert_eq!(espera_ate_a_atualizacao_ms(0.0, 0.0), 0);
     }
 
     #[test]

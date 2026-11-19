@@ -1592,7 +1592,10 @@ fn sessao(
     // O Auto dentro dos Hz anda no ritmo do monitor: um quadro por atualização da tela, cada um feito para o instante em
     // que aparece. Pelo cronômetro (o 2×/3×/4× e o "passar do limite"), às vezes caíam dois quadros na mesma
     // atualização e nenhum na seguinte: o micro-tranco.
-    let pelo_monitor = config.automatico && multiplicador > 1 && !config.sem_limite && hz > 0;
+    // Desde a 1.0.9 os fixos (2×, 3×, 4×) também: pela agenda, no log do sócio, o 2× mostrava de 80 a 90 quadros
+    // novos por segundo de 120 esperados (40% das atualizações repetidas), e com o jogo acima de Hz/2 nem gerava
+    // (só somava atraso). No ritmo do monitor o fixo é um teto de quadros por real.
+    let pelo_monitor = multiplicador > 1 && !config.sem_limite && hz > 0;
     crate::utils::Logger::info(&format!(
         "gerador: modo {}{}{}{}{}",
         if config.automatico {
@@ -1600,7 +1603,7 @@ fn sessao(
         } else {
             format!("{}× fixo", multiplicador)
         },
-        if pelo_monitor { ", no ritmo do monitor" } else { ", pela agenda (fila de 1 quadro)" },
+        if pelo_monitor { ", no ritmo do monitor" } else { ", pela agenda (passando do limite)" },
         if config.sem_limite { ", passando do limite" } else { "" },
         if config.leve || estado().leve { ", leve" } else { "" },
         config
@@ -1668,6 +1671,8 @@ fn sessao(
     let mut carimbo_suave = ritmo::CarimboSuave::default();
     let mut atraso_da_exibicao = ritmo::AtrasoDaExibicao::default();
     let mut real_ja_mostrado = true;
+    // No ritmo do monitor: gerados que este real já levou à tela (o teto dos modos fixos).
+    let mut mostrados_deste_real = 0u8;
 
     publicar(|e| {
         e.situacao = Situacao::Gerando;
@@ -1698,6 +1703,8 @@ fn sessao(
     // Automático: a fração de quadro que sobra de um real para o outro, e quantos coube no último.
     let mut acumulado_do_automatico = 0.0;
     let mut ultimo_do_automatico = 1u8;
+    // No ritmo do monitor: quadros na tela por real, medido na última janela (para o log).
+    let mut multiplicador_no_monitor: Option<f64> = None;
     let mut pedidos_de_troca = 0u32;
     let mut ultimo_real = Instant::now();
 
@@ -1752,6 +1759,9 @@ fn sessao(
     let mut quadros_na_tela = guarda::LinhaDoTempo::default();
     // Da chamada do `Present` até a tela (ms), pelo PresentMon: a da sobreposição e a do próprio jogo.
     let mut fila_da_sobreposicao: Option<f64> = None;
+    // No ritmo do monitor: a espera pela atualização (`WaitForVBlank`) e, se o Windows a recusar, o relógio.
+    let mut espera_do_monitor_recusada = false;
+    let mut ultimo_quadro = Instant::now();
     // Gerados que perderam a vez na fila de 1 quadro (modos fixos), para o log de 10 s.
     let mut sem_vez = 0u64;
     while !parar.load(Ordering::Relaxed) {
@@ -1890,7 +1900,10 @@ fn sessao(
                 escondida_por[0].as_secs_f64(),
                 escondida_por[1].as_secs_f64(),
                 escondida_por[2].as_secs_f64(),
-                cabe_atual,
+                match multiplicador_no_monitor {
+                    Some(m) => format!("{:.1}", m),
+                    None => cabe_atual.to_string(),
+                },
                 contadores.custo_ms,
                 placa_no_log,
                 exibicao.exibidos as f64 / segs,
@@ -1959,6 +1972,12 @@ fn sessao(
                     }
                 }
                 let apresentados = (contadores.reais + contadores.gerados) - janela_de_contagem.2;
+                if pelo_monitor {
+                    if let Some(m) = ritmo::multiplicador_medido(reais, apresentados) {
+                        multiplicador_no_monitor = Some(m);
+                        ultimo_do_automatico = m.round().clamp(1.0, 8.0) as u8;
+                    }
+                }
                 // Os 2 s que o PresentMon já entregou (ele entrega de 3 a 4 s depois).
                 let exibidos = na_tela_vivo.as_ref().and_then(|_| {
                     let ate = agora - guarda::ATRASO_DA_CONTAGEM;
@@ -1990,7 +2009,8 @@ fn sessao(
                     }
                     e.comparacoes = comparacoes;
                     e.contadores = contadores;
-                    e.multiplicador = if config.automatico {
+                    // No ritmo do monitor (Auto e fixos), o medido: quadros na tela por real.
+                    e.multiplicador = if config.automatico || pelo_monitor {
                         ultimo_do_automatico
                     } else {
                         cabe_atual
@@ -2225,6 +2245,7 @@ fn sessao(
         if pelo_monitor {
             par_no_monitor = None;
             real_ja_mostrado = false;
+            mostrados_deste_real = 0;
             // Sem carimbo (raro), vale a chegada.
             let carimbo = carimbo_suave
                 .suavizar(composto_do_real.filter(|c| *c > 0.0).unwrap_or(chegada));
@@ -2292,7 +2313,21 @@ fn sessao(
                 std::thread::sleep(Duration::from_millis(4));
                 continue;
             }
-            // A vez da tela: um quadro por atualização do monitor.
+            // UM QUADRO POR ATUALIZAÇÃO DO MONITOR. A vez da fila sozinha não segurava: no log do sócio (GTX 1650,
+            // 144 Hz) o Auto apresentava de 180 a 274 quadros por segundo, a tela mostrava de 104 a 128 novos, e o
+            // gerador ocupava de 75% a 82% da placa desenhando quadros que nunca apareciam. Espera a atualização do
+            // monitor do jogo; se o Windows recusar, espera pelo relógio.
+            if !espera_do_monitor_recusada && unsafe { saida.saida.WaitForVBlank() }.is_err() {
+                espera_do_monitor_recusada = true;
+                crate::utils::Logger::warn("gerador: a espera do monitor foi recusada; o ritmo segue pelo relógio");
+            }
+            if espera_do_monitor_recusada {
+                let falta = ritmo::espera_ate_a_atualizacao_ms(ultimo_quadro.elapsed().as_secs_f64(), periodo_da_tela);
+                if falta > 0 {
+                    std::thread::sleep(Duration::from_millis(falta));
+                }
+            }
+            ultimo_quadro = Instant::now();
             sobreposicao.esperar_a_vez(50, true);
             let agora = segundos(inicio);
             // O instante do jogo que esta atualização mostra: a hora em que ela aparece, menos o atraso.
@@ -2300,14 +2335,19 @@ fn sessao(
             let t = par_no_monitor
                 .filter(|_| !guarda.pausada())
                 .map(|(a, b)| ritmo::t_no_tempo(no_jogo, a, b));
-            match t {
-                Some(Some(t)) => {
+            let teto_fixo = (!config.automatico).then(|| multiplicador.min(teto_da_guarda));
+            // Com escala e o cursor ampliado, a tela é a do Otimiza: o real se redesenha para o cursor andar.
+            let redesenhar = cursor_ampliado;
+            match ritmo::na_atualizacao(t.flatten(), real_ja_mostrado, mostrados_deste_real, teto_fixo, redesenhar) {
+                ritmo::NaAtualizacao::Gerado(t) => {
                     sobreposicao.apresentar(&gpu, Some(t), cronometro.as_mut());
                     contadores.gerados += 1;
                     exibicao.exibidos += 1;
+                    mostrados_deste_real = mostrados_deste_real.saturating_add(1);
                 }
-                _ => {
-                    // Já mostrado: o próximo real do jogo ainda não chegou, e o mesmo quadro fica mais uma atualização.
+                // Nada de novo: sem `Present`, a tela segue com o último quadro e a placa fica com o jogo.
+                ritmo::NaAtualizacao::Repetir => {}
+                ritmo::NaAtualizacao::Real => {
                     if !real_ja_mostrado {
                         exibicao.exibidos += 1;
                     }
@@ -2627,6 +2667,27 @@ mod teste_do_monitor {
                 "{} principal={} {}x{} {}Hz",
                 m.dispositivo, m.principal, m.largura, m.altura, m.hz_atual
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod espera_do_monitor {
+    /// Mede a espera do monitor nesta máquina: 120 `WaitForVBlank` seguidos têm de levar 120 atualizações.
+    #[test]
+    #[ignore = "lê esta máquina"]
+    fn wait_for_vblank_segue_o_monitor() {
+        use windows::Win32::Graphics::Dxgi::*;
+        unsafe {
+            let f: IDXGIFactory1 = CreateDXGIFactory1().unwrap();
+            let a = f.EnumAdapters1(0).unwrap();
+            let o = a.EnumOutputs(0).unwrap();
+            let inicio = std::time::Instant::now();
+            for _ in 0..120 {
+                o.WaitForVBlank().unwrap();
+            }
+            let ms = inicio.elapsed().as_secs_f64() * 1000.0 / 120.0;
+            println!("WaitForVBlank: {:.2} ms por atualização ({:.0} Hz)", ms, 1000.0 / ms);
         }
     }
 }
