@@ -503,6 +503,8 @@ mod janela {
             let mut ultima_subida = std::time::Instant::now() - std::time::Duration::from_secs(5);
             let mut ultima_leitura = std::time::Instant::now() - std::time::Duration::from_secs(1);
             let mut suavizador = Suavizador::default();
+            let mut escolhas = (config(), crate::plataforma::contador_fivem::estado().ligado);
+            let mut lido_em: Option<std::time::Instant> = Some(std::time::Instant::now());
             while !parar.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 let Some(w) = app.get_webview_window(ROTULO) else {
@@ -545,12 +547,14 @@ mod janela {
                 };
                 sem_janela = 0;
 
-                let c = config();
-                let modo = modo_efetivo(
-                    c.modo,
-                    pelo_frame_boost,
-                    crate::plataforma::contador_fivem::estado().ligado,
-                );
+                // As escolhas da pessoa (dois arquivos JSON) relidas uma vez por segundo, e não a cada 100 ms: eram 20
+                // leituras de disco por segundo com o jogo aberto. Uma troca na tela vale em até 1 s.
+                if lido_em.is_none_or(|t| t.elapsed() >= std::time::Duration::from_secs(1)) {
+                    escolhas = (config(), crate::plataforma::contador_fivem::estado().ligado);
+                    lido_em = Some(std::time::Instant::now());
+                }
+                let c = escolhas.0.clone();
+                let modo = modo_efetivo(c.modo, pelo_frame_boost, escolhas.1);
                 if modo == Modo::Desligado || (pelo_frame_boost && !c.com_frame_boost) {
                     break;
                 }

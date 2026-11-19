@@ -28,7 +28,10 @@
 
   onMount(() => {
     void ler();
-    relogio = setInterval(ler, 3000);
+    // Com a janela escondida (o jogo na frente) não pergunta nada.
+    relogio = setInterval(() => {
+      if (!document.hidden) void ler();
+    }, 3000);
   });
   onDestroy(() => clearInterval(relogio));
 
