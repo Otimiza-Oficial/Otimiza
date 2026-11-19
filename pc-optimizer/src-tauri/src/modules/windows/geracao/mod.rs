@@ -447,11 +447,12 @@ pub fn presentmon_mudo(pausada: bool, quadros_do_jogo: u64, quadros_capturados: 
 /// Desde a 1.0.9 o Auto também tem degrau: no ritmo do monitor, o teto vale para ele (`ritmo::na_atualizacao`), e
 /// baixar para 2× (um gerado por real) tira boa parte do trabalho da placa antes de desistir. O Equilíbrio (Auto já
 /// leve) desligava direto, depois de 3 comparações, num FiveM que perdia de 5% a 35%.
-pub fn reacao_a_perda(ja_leve: bool, teto: u8, automatico: bool) -> ReacaoAPerda {
+/// `teto`: o efetivo (`ritmo::teto_efetivo`, pelo que o gerador faz de verdade), igual para Auto e fixos.
+pub fn reacao_a_perda(ja_leve: bool, teto: u8) -> ReacaoAPerda {
     if !ja_leve {
         ReacaoAPerda::FicarLeve
     } else if teto > 2 {
-        ReacaoAPerda::BaixarPara(if automatico { 2 } else { teto - 1 })
+        ReacaoAPerda::BaixarPara(teto - 1)
     } else {
         ReacaoAPerda::Desligar
     }
@@ -1762,9 +1763,13 @@ fn sessao(
     let mut quadros_na_tela = guarda::LinhaDoTempo::default();
     // Da chamada do `Present` até a tela (ms), pelo PresentMon: a da sobreposição e a do próprio jogo.
     let mut fila_da_sobreposicao: Option<f64> = None;
-    // No ritmo do monitor: a espera pela atualização (`WaitForVBlank`) e, se o Windows a recusar, o relógio.
+    // No ritmo do monitor: a espera pela atualização (`WaitForVBlank`) e, se o Windows a recusar ou ela voltar sem
+    // esperar, o relógio com prazo absoluto.
     let mut espera_do_monitor_recusada = false;
-    let mut ultimo_quadro = Instant::now();
+    let mut espera_do_monitor = ritmo::EsperaDoMonitor::default();
+    let mut ultima_espera = Instant::now();
+    let mut prazo_do_relogio: Option<f64> = None;
+    let mut vrr_avisado = false;
     // Gerados que perderam a vez na fila de 1 quadro (modos fixos), para o log de 10 s.
     let mut sem_vez = 0u64;
     while !parar.load(Ordering::Relaxed) {
@@ -1917,6 +1922,16 @@ fn sessao(
                 ms(fila_da_sobreposicao)
             ));
             sem_vez = 0;
+            if pelo_monitor {
+                crate::utils::Logger::info(&format!(
+                    "gerador: espera do monitor {}",
+                    match (espera_do_monitor_recusada, espera_do_monitor.intervalo) {
+                        (true, _) => "pelo relógio".to_string(),
+                        (false, Some(i)) => format!("a {:.0} Hz", 1.0 / i),
+                        (false, None) => "sem medida".to_string(),
+                    }
+                ));
+            }
             // O que a tela mostrou de fato, pelo instante em que cada quadro apareceu (o PresentMon entrega com atraso:
             // vale a janela de 10 s que terminou `ATRASO_DA_CONTAGEM` atrás).
             if na_tela_vivo.is_some() {
@@ -2012,8 +2027,8 @@ fn sessao(
                     }
                     e.comparacoes = comparacoes;
                     e.contadores = contadores;
-                    // No ritmo do monitor (Auto e fixos), o medido: quadros na tela por real.
-                    e.multiplicador = if config.automatico || pelo_monitor {
+                    // Auto: o medido (quadros na tela por real). Fixo: o pedido, que outros lugares leem como escolha.
+                    e.multiplicador = if config.automatico {
                         ultimo_do_automatico
                     } else {
                         cabe_atual
@@ -2055,7 +2070,8 @@ fn sessao(
         match acao {
             guarda::Acao::Desligar => {
                 let razao = guarda.razao_media();
-                match reacao_a_perda(gpu.leve(), teto_da_guarda, config.automatico) {
+                let efetivo = ritmo::teto_efetivo(teto_da_guarda, multiplicador_no_monitor.filter(|_| pelo_monitor));
+                match reacao_a_perda(gpu.leve(), efetivo) {
                     // No FiveM do dono a guarda desligou o gerador 7 vezes (o jogo perdendo de 5% a 35%): antes de
                     // desistir, alivia a placa e confere de novo do zero (a média de antes condenaria o modo leve),
                     // com a régua do modo leve (`RAZAO_MINIMA_LEVE`): perder pouco não tira o Frame Boost inteiro.
@@ -2253,7 +2269,11 @@ fn sessao(
             let carimbo = carimbo_suave
                 .suavizar(composto_do_real.filter(|c| *c > 0.0).unwrap_or(chegada));
             let anterior = ultimo_carimbo.replace(carimbo);
-            if gpu.tem_par() && intervalo.pode_gerar() && !guarda.pausada() {
+            if gpu.tem_par()
+                && intervalo.pode_gerar()
+                && !guarda.pausada()
+                && ritmo::vale_gerar(hz, intervalo.estimado)
+            {
                 match cronometro.as_mut() {
                     Some(c) => c.medir(&gpu, || gpu.estimar()),
                     None => gpu.estimar(),
@@ -2320,18 +2340,34 @@ fn sessao(
             // 144 Hz) o Auto apresentava de 180 a 274 quadros por segundo, a tela mostrava de 104 a 128 novos, e o
             // gerador ocupava de 75% a 82% da placa desenhando quadros que nunca apareciam. Espera a atualização do
             // monitor do jogo; se o Windows recusar, espera pelo relógio.
-            if !espera_do_monitor_recusada && unsafe { saida.saida.WaitForVBlank() }.is_err() {
-                espera_do_monitor_recusada = true;
-                crate::utils::Logger::warn("gerador: a espera do monitor foi recusada; o ritmo segue pelo relógio");
-            }
-            if espera_do_monitor_recusada {
-                let falta = ritmo::espera_ate_a_atualizacao_ms(ultimo_quadro.elapsed().as_secs_f64(), periodo_da_tela);
-                if falta > 0 {
-                    std::thread::sleep(Duration::from_millis(falta));
+            if !espera_do_monitor_recusada {
+                if unsafe { saida.saida.WaitForVBlank() }.is_err() {
+                    espera_do_monitor_recusada = true;
+                    crate::utils::Logger::warn("gerador: a espera do monitor foi recusada; o ritmo segue pelo relógio");
+                } else if espera_do_monitor.registrar(ultima_espera.elapsed().as_secs_f64(), periodo_da_tela) {
+                    espera_do_monitor_recusada = true;
+                    crate::utils::Logger::warn("gerador: a espera do monitor volta sem esperar; o ritmo segue pelo relógio");
+                }
+                ultima_espera = Instant::now();
+                // VRR na janela: a espera segue o jogo, não os Hz, e o atraso calculado fica errado. Só avisa no log.
+                if let Some(i) = espera_do_monitor.intervalo.filter(|i| !vrr_avisado && *i > periodo_da_tela * 1.25) {
+                    vrr_avisado = true;
+                    crate::utils::Logger::warn(&format!(
+                        "gerador: o monitor atualiza a {:.0} Hz e não a {} Hz (VRR seguindo o jogo?)",
+                        1.0 / i,
+                        hz
+                    ));
                 }
             }
-            ultimo_quadro = Instant::now();
-            sobreposicao.esperar_a_vez(50, true);
+            if espera_do_monitor_recusada {
+                let agora = segundos(inicio);
+                let prazo = ritmo::proximo_prazo(prazo_do_relogio.unwrap_or(agora), agora, periodo_da_tela);
+                prazo_do_relogio = Some(prazo);
+                let falta = prazo - agora;
+                if falta > 0.0 {
+                    std::thread::sleep(Duration::from_secs_f64(falta));
+                }
+            }
             let agora = segundos(inicio);
             // O instante do jogo que esta atualização mostra: a hora em que ela aparece, menos o atraso.
             let no_jogo = agora + periodo_da_tela - atraso_da_exibicao.segundos();
@@ -2346,7 +2382,17 @@ fn sessao(
             };
             // Com escala e o cursor ampliado, a tela é a do Otimiza: o real se redesenha para o cursor andar.
             let redesenhar = cursor_ampliado;
-            match ritmo::na_atualizacao(t.flatten(), real_ja_mostrado, mostrados_deste_real, teto_fixo, redesenhar) {
+            let meio_passo = par_no_monitor
+                .map(|(a, b)| (periodo_da_tela / (2.0 * (b - a))) as f32)
+                .unwrap_or(0.0);
+            let decisao =
+                ritmo::na_atualizacao(t.flatten(), real_ja_mostrado, mostrados_deste_real, teto_fixo, meio_passo, redesenhar);
+            // A vez da fila SÓ quando vai haver `Present`: esperar numa repetição gastava a vaga sem devolver, e a volta
+            // seguinte ficava 50 ms parada (revisão da 1.0.9). Na repetição, a espera do monitor já segura o ritmo.
+            if decisao != ritmo::NaAtualizacao::Repetir {
+                sobreposicao.esperar_a_vez(50, true);
+            }
+            match decisao {
                 ritmo::NaAtualizacao::Gerado(t) => {
                     sobreposicao.apresentar(&gpu, Some(t), cronometro.as_mut());
                     contadores.gerados += 1;
@@ -2510,14 +2556,13 @@ mod tests_da_guarda_leve {
 
     #[test]
     fn a_primeira_perda_alivia_e_a_segunda_desliga() {
-        assert_eq!(reacao_a_perda(false, 4, false), ReacaoAPerda::FicarLeve);
-        assert_eq!(reacao_a_perda(true, 4, false), ReacaoAPerda::BaixarPara(3), "leve no 4×: um a menos, não desliga");
-        assert_eq!(reacao_a_perda(true, 3, false), ReacaoAPerda::BaixarPara(2));
-        assert_eq!(reacao_a_perda(true, 2, false), ReacaoAPerda::Desligar, "só no fim da escada");
-        // Auto (144 Hz, base 72, leve e ainda perdendo): um gerado por real antes de desistir; só então desliga.
-        assert_eq!(reacao_a_perda(false, 6, true), ReacaoAPerda::FicarLeve);
-        assert_eq!(reacao_a_perda(true, 6, true), ReacaoAPerda::BaixarPara(2));
-        assert_eq!(reacao_a_perda(true, 2, true), ReacaoAPerda::Desligar);
+        assert_eq!(reacao_a_perda(false, 4), ReacaoAPerda::FicarLeve);
+        assert_eq!(reacao_a_perda(true, 4), ReacaoAPerda::BaixarPara(3), "leve no 4×: um a menos, não desliga");
+        assert_eq!(reacao_a_perda(true, 3), ReacaoAPerda::BaixarPara(2));
+        assert_eq!(reacao_a_perda(true, 2), ReacaoAPerda::Desligar, "só no fim da escada");
+        // Auto até 6× fazendo 2,4 por real (144 Hz, base 60): desce de 3 (o efetivo), não de 6.
+        let efetivo = ritmo::teto_efetivo(6, Some(2.4));
+        assert_eq!(reacao_a_perda(true, efetivo), ReacaoAPerda::BaixarPara(2));
         assert!(degrau_em_palavras(Some(0.82), Some(3)).starts_with("Aliviado para 3×: o jogo perdia 18% do FPS real"));
         assert!(degrau_em_palavras(None, None).starts_with("Modo leve: o jogo perdia FPS real"));
     }
