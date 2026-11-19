@@ -28,9 +28,19 @@
 
   onMount(() => {
     void ler();
-    relogio = setInterval(ler, 3000);
+    // Com a janela escondida (o jogo na frente) não pergunta nada.
+    relogio = setInterval(() => {
+      if (!document.hidden) void ler();
+    }, 3000);
+    document.addEventListener("visibilitychange", aoVoltar);
   });
-  onDestroy(() => clearInterval(relogio));
+  function aoVoltar() {
+    if (!document.hidden) void ler();
+  }
+  onDestroy(() => {
+    clearInterval(relogio);
+    document.removeEventListener("visibilitychange", aoVoltar);
+  });
 
   async function alternar() {
     if (!painel) return;

@@ -309,7 +309,7 @@ fn garantir_backup(nosso: Option<&str>) -> Result<Backup, String> {
     std::fs::create_dir_all(pasta())
         .map_err(|e| format!("Não foi possível criar a pasta do backup: {}", e))?;
     let texto = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
-    std::fs::write(pasta().join("backup.json"), texto)
+    crate::utils::arquivo::escrever_atomico(&pasta().join("backup.json"), texto.as_bytes())
         .map_err(|e| format!("Não foi possível gravar o backup: {}", e))?;
     Ok(backup)
 }

@@ -8,13 +8,47 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.8_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.8_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.9_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.9_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.9: Correções de bugs no Frame Boost: a geração que se vê, sem pesar na placa
+
+Atualização da 1.0 (número interno 4.0.9). Feita a partir do registro de um testador com GTX 1650 e monitor de 144 Hz
+jogando FiveM.
+
+## Correções
+
+- **Frame Boost gastando a placa à toa:** no Auto (o modo Equilíbrio), o Otimiza desenhava bem mais quadros do que o
+  monitor consegue mostrar, e a placa ficava quase toda ocupada com quadros que nunca apareciam. Agora sai no máximo
+  um quadro por atualização do monitor, e a placa fica livre para o jogo.
+- **2×, 3× e 4× mostrando menos do que prometiam:** os modos fixos passam a acompanhar o monitor, como o Auto. O 2×
+  deixa de virar quase 1× na tela. Com o jogo já perto dos Hz do monitor, o Frame Boost não gera quadros que não
+  caberiam (antes só somava atraso).
+- **"Auto (agora 1×)" com o Frame Boost gerando:** a tela agora mostra quantos quadros chegam à tela para cada quadro
+  do jogo.
+- **Frame Boost desligando cedo no Equilíbrio:** antes de desligar, ele agora alivia a placa em degraus (modo leve,
+  depois um quadro gerado por quadro do jogo). Ele também não aceita mais, calado, o jogo perdendo mais de 5% do FPS
+  real: alivia ou desliga e diz por quê.
+- **Prioridade fixada do jogo:** passa de "alta" para "acima do normal". A alta podia picotar o som e pesar o mouse no
+  carregamento. Quem já tinha fixado é ajustado sozinho na próxima abertura do Otimiza (com administrador), e o
+  Histórico continua desfazendo para o que havia antes.
+- **Otimiza pesando durante a partida:** a tela do Frame Boost não fica mais perguntando ao Otimiza com a janela
+  escondida, e o contador de FPS por cima do jogo lê as suas escolhas uma vez por segundo, não dez.
+- **Provas que comparavam coisas diferentes:** durante uma prova (plano de energia, Turbo, teste da travada), o modo
+  jogo, a energia de jogo e a afinidade não mexem mais em nada. O resultado compara só o que está sendo provado.
+- **Desfazer que podia sumir:** ao ligar o Frame Boost pelo "Jogar", o registro do Smooth Motion e do AFMF podia ser
+  apagado por outra parte do Otimiza gravando ao mesmo tempo. E sete arquivos de estado agora são gravados inteiros ou
+  não são trocados, mesmo se a energia cair no meio.
+
+Se o Frame Boost ainda parecer pouco diferente, mande o registro por **Ajustes → Registro do Otimiza → Salvar em
+Downloads**.
 
 ---
 

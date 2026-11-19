@@ -319,7 +319,7 @@ fn guardar_na_memoria_em(arquivo: &std::path::Path, r: Registro) -> Result<Optio
         let _ = std::fs::create_dir_all(p);
     }
     let json = serde_json::to_string_pretty(&lista).map_err(|e| e.to_string())?;
-    std::fs::write(arquivo, json).map_err(|e| format!("não gravei a memória dos testes: {}", e))?;
+    crate::utils::arquivo::escrever_atomico(arquivo.as_ref(), json.as_bytes()).map_err(|e| format!("não gravei a memória dos testes: {}", e))?;
     Ok(aviso)
 }
 

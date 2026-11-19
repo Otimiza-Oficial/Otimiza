@@ -65,6 +65,41 @@ de fórum ou Reddit é pista, não prova. Conferido em 19/11/2026; antes de cita
   qualidade que o multiplicador fixo. Abaixo de 10 FPS base, desliga a geração.
 - Pede base estável: o cálculo espera um ritmo regular. É o mesmo motivo do teto de FPS do jogo no Otimiza.
 
+## 6. AMD AFMF 2 / 2.1 e NVIDIA Smooth Motion (geração pelo driver)
+- AFMF 2 com Anti-Lag: 28% menos atraso que o AFMF 1, números da AMD
+  ([Tom's Hardware](https://www.tomshardware.com/pc-components/gpus/amd-fluid-motion-frames-2-lowers-latency-by-28-percent)).
+- **Search Mode:** em movimento rápido, desliga a geração em vez de mostrar quadro ruim; o 2.1 testa "Repeat
+  Frame" e "Blended Frame" ([notas da prévia](https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-AFMF2-TECH-Preview.html),
+  [igor'sLAB](https://www.igorslab.de/en/amd-expands-afmf-2-1-with-fast-motion-response-finally-an-answer-to-fast-game-scenes/)).
+  É o modelo do "recuo em movimento rápido" do Plano 2.0.
+- Base mínima recomendada: 55 FPS em 1080p, 70 em 1440p ou mais (AFMF 1,
+  [notas](https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-23-30-AFMF-TECH-PREVIEW.html));
+  FSR 3 pede 60 e, com VSync, teto em metade dos Hz ([GPUOpen](https://gpuopen.com/fsr3-in-games-technical-details/)).
+- Smooth Motion: modelo de IA no driver, só RTX 40/50
+  ([NVIDIA](https://www.nvidia.com/en-us/geforce/news/nvidia-app-global-dlss-overrides-rtx-40-series-smooth-motion/));
+  não serve para a GTX 1650.
+
+## 7. Escala do fluxo (Lossless Scaling)
+- O movimento é estimado numa imagem reduzida e o quadro sai em resolução cheia; mais alto custa bem mais placa,
+  mais baixo dá mais artefato. Comuns: 80–100% em 1080p, ≈75% em 1440p, 40–50% em 4K (comunidade:
+  [guia](https://sageinfinity.github.io/docs/Guides/LS%20settings%20Info)). LSFG 3: ≈40% menos carga que o 2 no
+  X2 ([anúncio](https://losslessscaling.com/announcing-lsfg-3/)).
+
+## 8. Limitadores de FPS, fila e o que é placebo
+- LDAT no Overwatch: limitador do jogo ≈16 ms, Reflex ≈16 ms, RTSS e "Max Frame Rate" da NVIDIA ≈18 ms, sem teto
+  ≈24 ms ([Blur Busters](https://forums.blurbusters.com/viewtopic.php?f=5&p=86590&t=9151),
+  [G-SYNC 101](https://www.blurbusters.com/gsync/gsync101-input-lag-tests-and-settings/11/)). O do driver não
+  injeta nada (seguro com anticheat); o RTSS intercepta o `Present` (arriscado).
+- Reflex exige o kit dentro do jogo; de fora, o que dá é o "Low Latency Mode" do perfil do driver
+  ([NVIDIA](https://www.nvidia.com/en-us/geforce/news/reflex-low-latency-platform/)).
+- `ALLOW_TEARING` dá menos atraso que só o objeto de espera, mesmo em janela, com MPO
+  ([Microsoft](https://devblogs.microsoft.com/directx/dxgi-flip-model/)).
+- HAGS: a Microsoft diz que "os usuários não devem notar mudanças significativas"
+  ([DevBlog](https://devblogs.microsoft.com/directx/hardware-accelerated-gpu-scheduling/)); testes mistos
+  ([Tom's](https://www.tomshardware.com/uk/news/gpu-hardware-scheduling-tested)). Não vender como ganho.
+- "Game boosters": ≈5% no melhor caso medido ([GameStar](https://www.gamestar.de/artikel/game-booster-test,3383476.html));
+  números de Hone/ExitLag são da própria empresa.
+
 ## Como usar no código
 | Pergunta | Onde olhar no Otimiza | Fonte |
 |---|---|---|

@@ -168,6 +168,107 @@ impl Exibicao {
     }
 }
 
+/// No ritmo do monitor: quantas imagens novas a tela recebeu por quadro real do jogo, para a tela, o log e a guarda
+/// (o Auto não tem multiplicador fixo; antes a tela dizia "agora 1×" enquanto gerava). `imagens`: as que foram para a
+/// tela (geradas e o real na primeira vez). A imagem de t≈0 já É o real: somar os reais de novo dava 1 a mais (revisão
+/// final da 1.0.9). `None` sem quadro real na janela.
+pub fn multiplicador_medido(reais: u64, imagens: u64) -> Option<f64> {
+    (reais > 0).then(|| imagens.max(reais) as f64 / reais as f64)
+}
+
+/// No ritmo do monitor, o que esta atualização da tela recebe.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NaAtualizacao {
+    /// Um quadro gerado no instante `t` entre os dois reais.
+    Gerado(f32),
+    /// O real mais novo, pela primeira vez.
+    Real,
+    /// Nada de novo: a tela repete o que já mostra, sem gastar placa com outro `Present`.
+    Repetir,
+}
+
+/// Pura: o que mostrar nesta atualização. `t`: o de `t_no_tempo`. `ja_mostrados`: imagens deste intervalo entre
+/// reais que já foram para a tela. `teto`: o multiplicador fixo (2×, 3×, 4×) ou `None` no Auto. `meio_passo`: meia
+/// atualização da tela em unidades de `t` (período ÷ 2 ÷ intervalo do jogo). `redesenhar`: repetir precisa de outro
+/// `Present` (escala com o cursor ampliado).
+///
+/// No ritmo do monitor o real quase nunca sai sozinho: a imagem de `t` perto de 0 é ele (o quadro `a` do par). Por
+/// isso o fixo conta TODAS as imagens do intervalo (2× = duas por real) e põe a k-ésima na atualização mais perto de
+/// `t = k/m`. Gastar o gerado na primeira atualização deixava o 2× com uma imagem por real (revisão da 1.0.9).
+pub fn na_atualizacao(
+    t: Option<f32>,
+    real_ja_mostrado: bool,
+    ja_mostrados: u8,
+    teto: Option<u8>,
+    meio_passo: f32,
+    redesenhar: bool,
+) -> NaAtualizacao {
+    match t {
+        Some(t) => {
+            let cabe = teto.is_none_or(|m| {
+                let m = m.max(1);
+                ja_mostrados < m && t + meio_passo >= ja_mostrados as f32 / m as f32
+            });
+            if cabe || redesenhar {
+                NaAtualizacao::Gerado(t)
+            } else {
+                NaAtualizacao::Repetir
+            }
+        }
+        None if !real_ja_mostrado || redesenhar => NaAtualizacao::Real,
+        None => NaAtualizacao::Repetir,
+    }
+}
+
+/// Pura: só vale gerar se cabe pelo menos um quadro a mais entre dois reais. Com o jogo nos Hz ou acima (FiveM a 150
+/// num monitor de 144), gerar só custava placa e somava um intervalo de atraso, sem nenhuma imagem a mais.
+pub fn vale_gerar(hz: u32, intervalo_do_jogo: Option<f64>) -> bool {
+    intervalo_do_jogo.is_some_and(|i| hz as f64 * i > 1.1)
+}
+
+/// O `WaitForVBlank` que volta sem esperar (relatado em notebook híbrido e área de trabalho remota) devolve `S_OK` e
+/// deixaria o laço solto de novo. Dez esperas seguidas abaixo de meia atualização: não confia mais nela.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EsperaDoMonitor {
+    curtas_seguidas: u32,
+    /// Média do intervalo entre esperas (s): com VRR na janela, segue o jogo e não os Hz.
+    pub intervalo: Option<f64>,
+}
+
+impl EsperaDoMonitor {
+    pub const CURTAS_PARA_DESCONFIAR: u32 = 10;
+
+    /// Registra o intervalo desde a espera anterior. `true`: a espera não está segurando o ritmo.
+    pub fn registrar(&mut self, desde_a_anterior: f64, periodo: f64) -> bool {
+        if (0.0..0.25).contains(&desde_a_anterior) {
+            self.intervalo = Some(self.intervalo.map_or(desde_a_anterior, |m| m * 0.95 + desde_a_anterior * 0.05));
+        }
+        if periodo > 0.0 && desde_a_anterior < periodo * 0.5 {
+            self.curtas_seguidas += 1;
+        } else {
+            self.curtas_seguidas = 0;
+        }
+        self.curtas_seguidas >= Self::CURTAS_PARA_DESCONFIAR
+    }
+}
+
+/// Pura: o prazo da próxima atualização pelo relógio, preso a um prazo absoluto (contar a partir de "agora" e arredondar
+/// para baixo escorregava). Atrasado mais de uma atualização, recomeça a partir de agora.
+pub fn proximo_prazo(prazo: f64, agora: f64, periodo: f64) -> f64 {
+    let p = prazo + periodo;
+    if p < agora { agora + periodo } else { p }
+}
+
+/// Pura: o teto de onde a guarda desce, pelo que o gerador faz de verdade. Um 4× com base 60 em 144 Hz já faz ~2,4
+/// imagens por real: baixar para 3× não aliviaria nada.
+pub fn teto_efetivo(teto: u8, medido: Option<f64>) -> u8 {
+    match medido {
+        // 2,03 medido é 2 com ruído: subir para 3 daria um degrau que não alivia nada.
+        Some(m) if m.is_finite() && m >= 1.0 => teto.min((m - 0.1).ceil().max(1.0) as u8),
+        _ => teto,
+    }
+}
+
 /// No ritmo do monitor: o `t` do quadro que mostra o instante `no_jogo` entre os reais que apareceram em `a` e `b`.
 /// `None`: `b` já passou, é a vez do próprio real (e, se o próximo atrasou, ele fica mais uma atualização).
 pub fn t_no_tempo(no_jogo: f64, a: f64, b: f64) -> Option<f32> {
@@ -732,6 +833,130 @@ mod tests {
         assert!(!quadro_aprovado(Some(0.25)));
         assert!(!quadro_aprovado(None));
         assert!(!quadro_aprovado(Some(f32::NAN)));
+    }
+
+    /// Simulação do ritmo do monitor como o laço faz: reais chegando a cada intervalo, uma decisão por atualização,
+    /// `no_jogo` atrás do agora pelo atraso da exibição (intervalo + preparo + folga). Devolve imagens novas por
+    /// segundo.
+    fn novos_por_segundo_no_ritmo(hz: f64, base: f64, teto: Option<u8>) -> f64 {
+        let (p, i) = (1.0 / hz, 1.0 / base);
+        let atraso = i + 0.005 + AtrasoDaExibicao::FOLGA;
+        let (mut a, mut b): (Option<f64>, Option<f64>) = (None, None);
+        let (mut proximo_real, mut ja, mut real_ja, mut novos) = (0.0013, 0u8, true, 0u32);
+        let segundos = 10.0;
+        for k in 0..(hz * segundos) as u32 {
+            let agora = k as f64 * p + 0.0004;
+            while proximo_real <= agora {
+                a = b;
+                b = Some(proximo_real);
+                proximo_real += i;
+                ja = 0;
+                real_ja = false;
+            }
+            let par = if vale_gerar(hz as u32, Some(i)) { a.zip(b) } else { None };
+            let t = par.and_then(|(a, b)| t_no_tempo(agora + p - atraso, a, b));
+            match na_atualizacao(t, real_ja, ja, teto, (p / (2.0 * i)) as f32, false) {
+                NaAtualizacao::Gerado(_) => {
+                    novos += 1;
+                    ja += 1;
+                }
+                NaAtualizacao::Real => {
+                    if !real_ja {
+                        novos += 1;
+                    }
+                    real_ja = true;
+                }
+                NaAtualizacao::Repetir => {}
+            }
+        }
+        novos as f64 / segundos
+    }
+
+    #[test]
+    fn no_ritmo_do_monitor_o_2x_entrega_o_dobro_e_o_auto_enche_a_tela() {
+        // O log do sócio (1.0.8, pela agenda): 2× com base 60-72 em 144 Hz mostrava 80-90 novos/s.
+        let n = novos_por_segundo_no_ritmo(144.0, 60.0, Some(2));
+        assert!((110.0..=125.0).contains(&n), "2× base 60: {n}");
+        let n = novos_por_segundo_no_ritmo(144.0, 72.0, Some(2));
+        assert!(n >= 130.0, "2× base 72: {n}");
+        let n = novos_por_segundo_no_ritmo(144.0, 60.0, None);
+        assert!(n >= 135.0, "Auto base 60: {n}");
+        let n = novos_por_segundo_no_ritmo(144.0, 40.0, Some(3));
+        assert!((110.0..=125.0).contains(&n), "3× base 40: {n}");
+        // Jogo acima dos Hz: não gera nada, e a tela mostra os reais.
+        let n = novos_por_segundo_no_ritmo(144.0, 150.0, Some(2));
+        assert!(n >= 130.0, "base 150: {n}");
+    }
+
+    #[test]
+    fn no_ritmo_do_monitor_o_fixo_tem_teto_e_nada_se_redesenha_a_toa() {
+        use NaAtualizacao::*;
+        let meio = 0.2;
+        // Auto: gera em toda atualização em que o real ainda não chegou.
+        assert_eq!(na_atualizacao(Some(0.4), false, 5, None, meio, false), Gerado(0.4));
+        // 2× fixo: a 1ª imagem logo, a 2ª perto de t = 0,5, e a 3ª não cabe.
+        assert_eq!(na_atualizacao(Some(0.03), false, 0, Some(2), meio, false), Gerado(0.03));
+        assert_eq!(na_atualizacao(Some(0.2), false, 1, Some(2), meio, false), Repetir, "cedo demais para a 2ª");
+        assert_eq!(na_atualizacao(Some(0.45), false, 1, Some(2), meio, false), Gerado(0.45));
+        assert_eq!(na_atualizacao(Some(0.86), false, 2, Some(2), meio, false), Repetir);
+        // O real aparece uma vez; nas atualizações seguintes, sem quadro novo do jogo, não se redesenha.
+        assert_eq!(na_atualizacao(None, false, 1, Some(2), meio, false), Real);
+        assert_eq!(na_atualizacao(None, true, 2, None, meio, false), Repetir);
+        // Escala com o cursor ampliado: redesenha para o cursor andar, mesmo com o teto batendo.
+        assert_eq!(na_atualizacao(None, true, 2, None, meio, true), Real);
+        assert_eq!(na_atualizacao(Some(0.86), false, 2, Some(2), meio, true), Gerado(0.86));
+    }
+
+    #[test]
+    fn so_gera_com_folga_entre_dois_reais() {
+        assert!(vale_gerar(144, Some(1.0 / 72.0)));
+        assert!(!vale_gerar(144, Some(1.0 / 150.0)), "acima dos Hz");
+        assert!(!vale_gerar(144, Some(1.0 / 140.0)), "perto dos Hz: não cabe um quadro a mais");
+        assert!(!vale_gerar(60, Some(1.0 / 60.0)));
+        assert!(!vale_gerar(144, None));
+    }
+
+    #[test]
+    fn a_espera_do_monitor_que_volta_na_hora_e_desacreditada() {
+        let p = 1.0 / 144.0;
+        let mut e = EsperaDoMonitor::default();
+        for _ in 0..50 {
+            assert!(!e.registrar(p, p));
+        }
+        assert!((e.intervalo.unwrap() - p).abs() < 1e-4);
+        let mut desconfia = false;
+        for _ in 0..EsperaDoMonitor::CURTAS_PARA_DESCONFIAR {
+            desconfia = e.registrar(0.0002, p);
+        }
+        assert!(desconfia);
+        // Uma curta sozinha (a primeira espera, um vblank logo ali) não derruba.
+        let mut e = EsperaDoMonitor::default();
+        assert!(!e.registrar(0.0002, p));
+        assert!(!e.registrar(p, p));
+    }
+
+    #[test]
+    fn o_relogio_da_reserva_nao_escorrega() {
+        let p = 0.01;
+        assert!((proximo_prazo(1.0, 1.003, p) - 1.01).abs() < 1e-12);
+        assert!((proximo_prazo(1.0, 1.05, p) - 1.06).abs() < 1e-12, "atrasado: recomeça de agora");
+    }
+
+    #[test]
+    fn a_guarda_desce_do_que_o_gerador_faz_de_verdade() {
+        assert_eq!(teto_efetivo(4, Some(2.4)), 3);
+        assert_eq!(teto_efetivo(6, Some(2.4)), 3);
+        assert_eq!(teto_efetivo(2, Some(2.4)), 2);
+        assert_eq!(teto_efetivo(4, None), 4);
+        assert_eq!(teto_efetivo(4, Some(2.03)), 2, "ruído não sobe um degrau");
+    }
+
+    #[test]
+    fn o_auto_diz_quantos_quadros_por_real_chegaram() {
+        // GTX 1650, 144 Hz, FiveM a 61: 144 imagens novas por segundo (uma por atualização) = 2,4× (a tela dizia 1×).
+        assert!((multiplicador_medido(61, 144).unwrap() - 2.36).abs() < 0.01);
+        assert_eq!(multiplicador_medido(0, 144), None);
+        assert_eq!(multiplicador_medido(60, 30), Some(1.0), "nunca menos que 1×");
     }
 
     #[test]

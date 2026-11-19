@@ -504,7 +504,42 @@ const IFEO: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Exe
 
 /// NUNCA 4, que é tempo real (escala do IFEO: 1 baixa, 2 normal, 3 alta, 4 tempo real, 5 abaixo, 6 acima): acima
 /// do próprio sistema, trava som, mouse e teclado.
-const PRIORIDADE_ALTA: u32 = 3;
+/// 1.0.9: "acima do normal" (6) no lugar de "alta" (3), decisão do dono (Plano 2.0, pergunta 2). A alta deixava o jogo
+/// na frente do áudio e da entrada do sistema o tempo todo: som picotando e mouse pesando no carregamento.
+const PRIORIDADE_DO_JOGO: u32 = 6;
+const PRIORIDADE_ALTA_ANTIGA: u32 = 3;
+
+/// Pura: o valor que está no registro foi escrito pela versão antiga (alta) e deve virar o de hoje.
+pub fn precisa_rebaixar(atual: &crate::modules::changelog::PreviousValue) -> bool {
+    matches!(atual, crate::modules::changelog::PreviousValue::Dword(v) if *v == PRIORIDADE_ALTA_ANTIGA)
+}
+
+/// Na abertura (com administrador): quem fixou a prioridade antes da 1.0.9 fica com a alta até desfazer. O valor que o
+/// PRÓPRIO Otimiza escreveu (só os registros `prioridade:` do Histórico) passa para acima do normal. O valor anterior
+/// guardado no Histórico não muda: desfazer continua devolvendo o que havia antes. Devolve quantos mudou.
+pub fn rebaixar_prioridade_alta_antiga() -> usize {
+    if !super::registry::is_elevated() {
+        return 0;
+    }
+    let log = ChangeLog::load();
+    let mut mudados = 0;
+    for aplicado in log.applied().iter().filter(|a| a.optimization_id.starts_with("prioridade:")) {
+        for mudanca in &aplicado.changes {
+            if let ChangeRecord::RegistryValue { hive, path, name, .. } = mudanca {
+                if hive != "HKLM" || name != "CpuPriorityClass" || !path.starts_with(IFEO) {
+                    continue;
+                }
+                let alta = super::registry::read(hive, path, name)
+                    .map(|v| precisa_rebaixar(&v))
+                    .unwrap_or(false);
+                if alta && super::registry::set_dword(hive, path, name, PRIORIDADE_DO_JOGO).is_ok() {
+                    mudados += 1;
+                }
+            }
+        }
+    }
+    mudados
+}
 
 /// Vale em toda abertura: o Windows lê ao criar o processo. A mesma chave aceita `Debugger`, que faz o Windows
 /// abrir OUTRO programa (sequestro de execução): só `CpuPriorityClass`, só em `PerfOptions`, e o nome vindo por IPC
@@ -556,7 +591,7 @@ pub fn definir_prioridade_persistente(
     let anterior = super::registry::read("HKLM", &caminho, "CpuPriorityClass")?;
 
     if ativar {
-        super::registry::set_dword("HKLM", &caminho, "CpuPriorityClass", PRIORIDADE_ALTA)?;
+        super::registry::set_dword("HKLM", &caminho, "CpuPriorityClass", PRIORIDADE_DO_JOGO)?;
     } else {
         super::registry::restore("HKLM", &caminho, "CpuPriorityClass", &anterior)?;
     }
@@ -837,14 +872,25 @@ mod tests {
     }
 
     #[test]
+    fn so_a_alta_da_versao_antiga_e_rebaixada() {
+        use crate::modules::changelog::PreviousValue;
+        assert!(precisa_rebaixar(&PreviousValue::Dword(3)));
+        // A pessoa mudou à mão para outra coisa, ou já está no valor novo: não mexe.
+        assert!(!precisa_rebaixar(&PreviousValue::Dword(6)));
+        assert!(!precisa_rebaixar(&PreviousValue::Dword(2)));
+        assert!(!precisa_rebaixar(&PreviousValue::Absent));
+    }
+
+    #[test]
     fn nunca_escreve_tempo_real_nem_depurador() {
         let producao = include_str!("gamemode.rs")
             .split("#[cfg(test)]")
             .next()
             .unwrap();
 
-        assert_eq!(PRIORIDADE_ALTA, 3);
-        assert!(!producao.contains("PRIORIDADE_ALTA: u32 = 4"));
+        assert_eq!(PRIORIDADE_DO_JOGO, 6, "acima do normal, nunca alta nem tempo real");
+        assert!(!producao.contains("PRIORIDADE_DO_JOGO: u32 = 4"));
+        assert!(!producao.contains("PRIORIDADE_DO_JOGO: u32 = 3"));
         assert!(
             !producao.contains("\"Debugger\""),
             "escrita de Debugger no IFEO nunca pode entrar aqui"

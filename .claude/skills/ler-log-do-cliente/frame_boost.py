@@ -142,7 +142,9 @@ def veredito(s):
         out.append(
             f"[INFO] Atraso acrescentado: {total:.1f} ms (até o Present {ate:.1f} + fila até a tela {fmt(fila)})"
             + (f" = {total / periodo:.1f} atualizações do monitor." if periodo else ".")
-            + (" Fila acima de 2 atualizações: a fila de 1 não está valendo." if fila and periodo and fila > 2 * periodo else "")
+            # A composição do Windows (a sobreposição não é independent flip) põe ~2,5 atualizações entre o Present e a
+            # tela: no log do sócio (GTX 1650, 144 Hz) a fila ficou em 17-20 ms. Acima de 3,5 é fila acumulando.
+            + (" Fila acima de 3,5 atualizações: quadros acumulando na fila." if fila and periodo and fila > 3.5 * periodo else "")
         )
     razoes = [r for r in s.razoes if r is not None]
     if razoes:

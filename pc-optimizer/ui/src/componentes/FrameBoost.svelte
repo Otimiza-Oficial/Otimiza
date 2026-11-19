@@ -88,11 +88,20 @@
     void ferramentas.escalaNitidez(nitidez).catch(() => {});
     void ferramentas.escalaPermitida().then((v) => (escalaPermitida = v)).catch(() => {});
     // Ligado pelo gerador do Otimiza o número muda a cada segundo; desligado, basta olhar de vez em quando.
+    // Com a janela escondida (o jogo na frente, o Otimiza na bandeja) não pergunta nada: cada pergunta abria a sessão
+    // do driver, varria os processos e lia o histórico, a partida inteira. Ao voltar, relê na hora.
     relogio = setInterval(() => {
-      if (!ocupado) void carregar();
+      if (!ocupado && !document.hidden) void carregar();
     }, 1500);
+    document.addEventListener("visibilitychange", aoVoltar);
   });
-  onDestroy(() => clearInterval(relogio));
+  function aoVoltar() {
+    if (!document.hidden && !ocupado) void carregar();
+  }
+  onDestroy(() => {
+    clearInterval(relogio);
+    document.removeEventListener("visibilitychange", aoVoltar);
+  });
 
   const a = $derived(p?.ativo ?? null);
   const rec = $derived(p?.recomendado ?? null);
