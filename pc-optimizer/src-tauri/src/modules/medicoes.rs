@@ -377,7 +377,7 @@ pub fn registrar_em(caminho: &Path, medicao: MedicaoAutomatica) -> Result<(), St
     let bruto = serde_json::to_string(&todas)
         .map_err(|e| format!("não consegui preparar o histórico de medições: {}", e))?;
 
-    fs::write(caminho, bruto)
+    crate::utils::arquivo::escrever_atomico(caminho.as_ref(), bruto.as_ref())
         .map_err(|e| format!("não consegui gravar o histórico de medições: {}", e))
 }
 

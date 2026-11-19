@@ -214,7 +214,7 @@ pub fn gravar_em(a: &Path, lista: &[Acalmado]) -> Result<(), String> {
         }
         serde_json::to_string(lista)
             .map_err(|e| e.to_string())
-            .and_then(|json| std::fs::write(a, json).map_err(|e| e.to_string()))
+            .and_then(|json| crate::utils::arquivo::escrever_atomico(a.as_ref(), json.as_bytes()))
     };
     if let Err(e) = &resultado {
         crate::utils::Logger::warn(&format!(

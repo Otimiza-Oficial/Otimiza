@@ -405,7 +405,7 @@ fn gravar_em(c: &Path, p: &Perfis) -> Result<(), String> {
         fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     let texto = serde_json::to_string_pretty(p).map_err(|e| e.to_string())?;
-    fs::write(c, texto).map_err(|e| e.to_string())
+    crate::utils::arquivo::escrever_atomico(c.as_ref(), texto.as_bytes())
 }
 
 pub fn perfil(id_do_jogo: &str) -> Option<Perfil> {
@@ -667,7 +667,7 @@ pub fn pedir_perfil_do_jogo(perfil: Option<&str>) -> Result<(), String> {
             if let Some(d) = m.parent() {
                 fs::create_dir_all(d).map_err(|e| e.to_string())?;
             }
-            fs::write(&m, p).map_err(|e| e.to_string())
+            crate::utils::arquivo::escrever_atomico(&m, p.as_ref())
         }
         Some(outro) => Err(format!("perfil desconhecido: {}", outro)),
         None => match fs::remove_file(&m) {
@@ -764,11 +764,8 @@ fn marca_da_base() -> PathBuf {
 pub fn marcar_base(executavel: Option<&str>) {
     let m = marca_da_base();
     let _ = match executavel {
-        Some(e) => {
-            m.parent().map(std::fs::create_dir_all);
-            std::fs::write(&m, e)
-        }
-        None => std::fs::remove_file(&m),
+        Some(e) => crate::utils::arquivo::escrever_atomico(&m, e.as_bytes()),
+        None => std::fs::remove_file(&m).map_err(|e| e.to_string()),
     };
 }
 
@@ -1016,7 +1013,7 @@ pub fn prova_guardada() -> Option<crate::modules::provaalternada::Resultado> {
 fn guardar_prova(r: &crate::modules::provaalternada::Resultado) -> Result<(), String> {
     let texto = serde_json::to_string_pretty(r).map_err(|e| e.to_string())?;
     fs::create_dir_all(pasta()).map_err(|e| e.to_string())?;
-    fs::write(pasta().join("turbo_prova.json"), texto).map_err(|e| e.to_string())
+    crate::utils::arquivo::escrever_atomico(&pasta().join("turbo_prova.json"), texto.as_bytes())
 }
 
 #[cfg(target_os = "windows")]
