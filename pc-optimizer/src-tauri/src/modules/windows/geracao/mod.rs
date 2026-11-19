@@ -1330,6 +1330,23 @@ fn jogo_na_frente(pid: u32) -> bool {
 /// Ctrl+Alt+G desliga o gerador de qualquer lugar, inclusive de dentro do jogo.
 const ATALHO: i32 = 0x4F47;
 
+/// A última atualização da tela e o período, no relógio do gerador (s), pelo compositor do Windows. `None` se ele não
+/// disser (aí o ritmo segue pelo relógio).
+fn tempo_do_windows(qpc_frequencia: f64, qpc_inicio: f64) -> Option<(f64, f64)> {
+    use windows::Win32::Graphics::Dwm::{DwmGetCompositionTimingInfo, DWM_TIMING_INFO};
+    let mut t = DWM_TIMING_INFO {
+        cbSize: std::mem::size_of::<DWM_TIMING_INFO>() as u32,
+        ..Default::default()
+    };
+    unsafe { DwmGetCompositionTimingInfo(HWND::default(), &mut t) }.ok()?;
+    (t.qpcRefreshPeriod > 0 && t.qpcVBlank > 0).then(|| {
+        (
+            t.qpcVBlank as f64 / qpc_frequencia - qpc_inicio,
+            t.qpcRefreshPeriod as f64 / qpc_frequencia,
+        )
+    })
+}
+
 /// Para o log: "12.3 ms" ou "?".
 fn ms(v: Option<f64>) -> String {
     v.map_or_else(|| "?".to_string(), |v| format!("{:.1} ms", v))
@@ -1774,8 +1791,11 @@ fn sessao(
     let mut quadros_na_tela = guarda::LinhaDoTempo::default();
     // Da chamada do `Present` até a tela (ms), pelo PresentMon: a da sobreposição e a do próprio jogo.
     let mut fila_da_sobreposicao: Option<f64> = None;
-    // No ritmo do monitor: quando saiu a última imagem (o relógio do intervalo mínimo).
-    let mut ultima_imagem = Instant::now();
+    // No ritmo do monitor: a atualização da tela já servida (no relógio do gerador) e, sem o tempo do Windows, o prazo
+    // absoluto da reserva.
+    let mut atualizacao_servida: Option<f64> = None;
+    let mut prazo_da_reserva: Option<f64> = None;
+    let mut tempo_do_windows_avisado = false;
     // Gerados que perderam a vez na fila de 1 quadro (modos fixos), para o log de 10 s.
     let mut sem_vez = 0u64;
     while !parar.load(Ordering::Relaxed) {
@@ -2339,16 +2359,36 @@ fn sessao(
                 std::thread::sleep(Duration::from_millis(4));
                 continue;
             }
-            // Uma imagem a cada 3/4 de atualização, no máximo, pelo relógio (`ritmo::INTERVALO_MINIMO_ENTRE_IMAGENS`):
-            // toda atualização recebe imagem nova e a placa não desenha o dobro à toa. Sem esperar a atualização do monitor
-            // (a 1.0.9 esperava, e os engasgos dobraram no FiveM com a placa ocupada).
-            let espera = ritmo::espera_ate_a_proxima_imagem(ultima_imagem.elapsed().as_secs_f64(), periodo_da_tela);
-            if espera > 0.0 {
-                std::thread::sleep(Duration::from_secs_f64(espera));
-            }
+            // Uma imagem por atualização, feita para a próxima atualização da tela e começada um pouco antes dela
+            // (`ritmo::MARGEM_ANTES_DA_ATUALIZACAO`), sem nunca bloquear esperando a tela.
             let agora = segundos(inicio);
-            // O instante do jogo que esta atualização mostra: a hora em que ela aparece, menos o atraso.
-            let no_jogo = agora + periodo_da_tela - atraso_da_exibicao.segundos();
+            let tempo = tempo_do_windows(qpc_frequencia, qpc_inicio)
+                .filter(|(_, p)| (p - periodo_da_tela).abs() < periodo_da_tela * 0.2);
+            if tempo.is_none() && !tempo_do_windows_avisado {
+                tempo_do_windows_avisado = true;
+                crate::utils::Logger::warn("gerador: sem o tempo da tela do Windows; o ritmo segue pelo relógio");
+            }
+            let (alvo, na_tela) = match tempo {
+                Some((ultima, p)) => {
+                    let mut proxima = ritmo::proxima_atualizacao(ultima, p, agora);
+                    // Já servida (a imagem anterior saiu depois da margem): a seguinte.
+                    if atualizacao_servida.is_some_and(|s| (s - proxima).abs() < p * 0.5) {
+                        proxima += p;
+                    }
+                    (proxima - ritmo::MARGEM_ANTES_DA_ATUALIZACAO, proxima)
+                }
+                None => {
+                    let prazo = ritmo::proximo_prazo(prazo_da_reserva.unwrap_or(agora), agora, periodo_da_tela * 0.75);
+                    prazo_da_reserva = Some(prazo);
+                    (prazo, prazo + periodo_da_tela)
+                }
+            };
+            if alvo > agora {
+                std::thread::sleep(Duration::from_secs_f64(alvo - agora));
+            }
+            atualizacao_servida = Some(na_tela);
+            // O instante do jogo que esta imagem mostra: a hora em que ela aparece, menos o atraso.
+            let no_jogo = na_tela - atraso_da_exibicao.segundos();
             let t = par_no_monitor
                 .filter(|_| !guarda.pausada())
                 .map(|(a, b)| ritmo::t_no_tempo(no_jogo, a, b));
@@ -2366,13 +2406,10 @@ fn sessao(
             let decisao =
                 ritmo::na_atualizacao(t.flatten(), real_ja_mostrado, mostrados_deste_real, teto_fixo, meio_passo, redesenhar);
             // A vez da fila SÓ quando vai haver `Present`: esperar numa repetição gastava a vaga sem devolver, e a volta
-            // seguinte ficava 50 ms parada (revisão da 1.0.9). Na repetição, a espera do monitor já segura o ritmo.
+            // seguinte ficava 50 ms parada (revisão da 1.0.9). Na repetição, a espera pela próxima atualização segura o
+            // ritmo.
             if decisao != ritmo::NaAtualizacao::Repetir {
                 sobreposicao.esperar_a_vez(50, true);
-                ultima_imagem = Instant::now();
-            } else {
-                // Nada novo: um respiro curto antes de olhar a captura de novo, sem girar o processador.
-                std::thread::sleep(Duration::from_millis(1));
             }
             match decisao {
                 ritmo::NaAtualizacao::Gerado(t) => {
@@ -2710,23 +2747,53 @@ mod teste_do_monitor {
 }
 
 #[cfg(test)]
-mod espera_do_monitor {
-    /// Mede a espera do monitor nesta máquina: 120 `WaitForVBlank` seguidos têm de levar 120 atualizações.
+mod tempo_da_tela {
+    /// Nesta máquina: o tempo da tela do Windows e o laço do ritmo do monitor (sem jogo). 2 s de laço têm de servir
+    /// uma atualização por vez, sem pular nem repetir, e acordar antes de cada uma.
     #[test]
     #[ignore = "lê esta máquina"]
-    fn wait_for_vblank_segue_o_monitor() {
-        use windows::Win32::Graphics::Dxgi::*;
+    fn o_laco_serve_uma_imagem_por_atualizacao() {
+        use super::ritmo;
+        let mut f = 0i64;
+        let mut c = 0i64;
         unsafe {
-            let f: IDXGIFactory1 = CreateDXGIFactory1().unwrap();
-            let a = f.EnumAdapters1(0).unwrap();
-            let o = a.EnumOutputs(0).unwrap();
-            let inicio = std::time::Instant::now();
-            for _ in 0..120 {
-                o.WaitForVBlank().unwrap();
-            }
-            let ms = inicio.elapsed().as_secs_f64() * 1000.0 / 120.0;
-            println!("WaitForVBlank: {:.2} ms por atualização ({:.0} Hz)", ms, 1000.0 / ms);
+            let _ = windows::Win32::System::Performance::QueryPerformanceFrequency(&mut f);
+            let _ = windows::Win32::System::Performance::QueryPerformanceCounter(&mut c);
         }
+        let inicio = std::time::Instant::now();
+        let segundos = || inicio.elapsed().as_secs_f64();
+        let (freq, qpc_inicio) = (f as f64, c as f64 / f as f64);
+        let (ultima, p) = super::tempo_do_windows(freq, qpc_inicio).expect("o Windows não deu o tempo da tela");
+        println!("tempo da tela: {:.2} ms ({:.1} Hz), última atualização {:.2} ms atrás", p * 1000.0, 1.0 / p, (segundos() - ultima) * 1000.0);
+        let (mut servida, mut servidas, mut folgas) = (None::<f64>, Vec::new(), Vec::new());
+        while segundos() < 2.0 {
+            let agora = segundos();
+            let (ultima, p) = super::tempo_do_windows(freq, qpc_inicio).unwrap();
+            let mut proxima = ritmo::proxima_atualizacao(ultima, p, agora);
+            if servida.is_some_and(|s: f64| (s - proxima).abs() < p * 0.5) {
+                proxima += p;
+            }
+            let alvo = proxima - ritmo::MARGEM_ANTES_DA_ATUALIZACAO;
+            if alvo > agora {
+                std::thread::sleep(std::time::Duration::from_secs_f64(alvo - agora));
+            }
+            folgas.push((proxima - segundos()) * 1000.0);
+            servida = Some(proxima);
+            servidas.push(proxima);
+            std::thread::sleep(std::time::Duration::from_micros(800)); // o compor
+        }
+        let passos: Vec<f64> = servidas.windows(2).map(|w| ((w[1] - w[0]) / p).round()).collect();
+        let pulos = passos.iter().filter(|n| **n != 1.0).count();
+        folgas.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        println!(
+            "{} atualizações servidas em 2 s ({:.0}/s), {} fora do passo de 1; folga antes da tela: mín {:.2} ms, mediana {:.2} ms",
+            servidas.len(),
+            servidas.len() as f64 / 2.0,
+            pulos,
+            folgas[0],
+            folgas[folgas.len() / 2]
+        );
+        assert!(pulos * 50 <= servidas.len(), "mais de 2% das atualizações puladas ou repetidas");
     }
 }
 

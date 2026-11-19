@@ -226,19 +226,34 @@ pub fn vale_gerar(hz: u32, intervalo_do_jogo: Option<f64>) -> bool {
     intervalo_do_jogo.is_some_and(|i| hz as f64 * i > 1.1)
 }
 
-/// O intervalo mínimo entre duas imagens no ritmo do monitor, em frações da atualização da tela. Menor que 1: toda
-/// atualização recebe pelo menos uma imagem nova (o Windows mostra a mais nova). Maior que 1/2: nunca mais de duas por
-/// atualização (a 1.0.8 apresentava 180-274 por segundo num monitor de 144 Hz e ocupava 75-82% da placa).
+/// UMA IMAGEM POR ATUALIZAÇÃO, ANCORADA NA ATUALIZAÇÃO DO MONITOR SEM BLOQUEAR NELA.
 ///
-/// 1.0.9 esperava a atualização do monitor (`WaitForVBlank`) antes de cada imagem: no log do testador (GTX 1650, 144 Hz,
-/// FiveM a 72-83) a placa caiu para 40%, mas os engasgos (3+ atualizações sem imagem nova) foram de ~2/s para 4-10/s.
-/// Com a placa ocupada pelo jogo, a imagem que perdia uma atualização ainda esperava a seguinte inteira: duas perdas
-/// somadas. Pelo relógio, o laço nunca para esperando a tela.
-pub const INTERVALO_MINIMO_ENTRE_IMAGENS: f64 = 0.75;
+/// - 1.0.8: o laço só esperava a vez da fila, que voltava rápido: 180-274 imagens/s num monitor de 144 Hz e a placa a
+///   70-80% desenhando o que nunca aparecia.
+/// - 1.0.9: `WaitForVBlank` antes de cada imagem: placa a 40%, mas os engasgos foram de ~2/s para 4-10/s no FiveM. A
+///   imagem que perdia o prazo ainda esperava a atualização seguinte inteira (duas perdas somadas).
+/// - 1.0.10: o Windows diz quando foi a última atualização e o período (`DwmGetCompositionTimingInfo`); a imagem é
+///   feita para a próxima, começando `MARGEM_ANTES_DA_ATUALIZACAO` antes dela, e o laço nunca dorme além disso. Quem
+///   perde o prazo sai na hora (cai na seguinte) em vez de esperar mais uma.
+pub const MARGEM_ANTES_DA_ATUALIZACAO: f64 = 0.003;
 
-/// Pura: quanto esperar (s) antes da próxima imagem, desde a última que foi para a tela.
-pub fn espera_ate_a_proxima_imagem(desde_a_ultima: f64, periodo: f64) -> f64 {
-    (periodo * INTERVALO_MINIMO_ENTRE_IMAGENS - desde_a_ultima).max(0.0)
+/// Pura: a próxima atualização da tela que ainda dá tempo de pegar: a primeira `ultima + k·período` depois de
+/// `agora + margem/2` (`k` pode ser 0 ou negativo: medido nesta máquina, o Windows às vezes dá a atualização que AINDA
+/// vai acontecer). Mais perto que meia margem, não dá para compor a tempo: fica a seguinte.
+pub fn proxima_atualizacao(ultima: f64, periodo: f64, agora: f64) -> f64 {
+    if periodo <= 0.0 {
+        return agora;
+    }
+    let limite = agora + MARGEM_ANTES_DA_ATUALIZACAO * 0.5;
+    let k = ((limite - ultima) / periodo).floor() + 1.0;
+    ultima + k * periodo
+}
+
+/// Pura: a reserva sem o tempo do Windows. Prazo ABSOLUTO a cada 3/4 de atualização (contar a partir de "agora"
+/// escorregava para perto do período e batia de frente com a atualização). Atrasado, recomeça de agora.
+pub fn proximo_prazo(prazo: f64, agora: f64, intervalo: f64) -> f64 {
+    let p = prazo + intervalo;
+    if p < agora { agora + intervalo } else { p }
 }
 
 /// Pura: o teto de onde a guarda desce, pelo que o gerador faz de verdade. Um 4× com base 60 em 144 Hz já faz ~2,4
@@ -899,17 +914,26 @@ mod tests {
     }
 
     #[test]
-    fn pelo_relogio_toda_atualizacao_tem_imagem_e_nunca_mais_de_duas() {
+    fn a_proxima_atualizacao_vem_do_windows_e_nunca_fica_para_tras() {
         let p = 1.0 / 144.0;
-        assert!((espera_ate_a_proxima_imagem(0.0, p) - p * 0.75).abs() < 1e-12);
-        assert_eq!(espera_ate_a_proxima_imagem(p, p), 0.0, "atrasado: segue sem esperar");
-        // Imagens a cada 3/4 de atualização: cada atualização recebe 1 ou 2, nunca 0.
-        let (mut t, mut por_atualizacao) = (0.0f64, [0u32; 400]);
-        while t < 300.0 * p {
-            por_atualizacao[(t / p) as usize] += 1;
-            t += p * INTERVALO_MINIMO_ENTRE_IMAGENS + espera_ate_a_proxima_imagem(p * 0.75, p);
-        }
-        assert!(por_atualizacao[..299].iter().all(|n| (1..=2).contains(n)));
+        // Última atualização em 10,000 s; agora 10,002: a próxima é 10,000 + p.
+        assert!((proxima_atualizacao(10.0, p, 10.002) - (10.0 + p)).abs() < 1e-12);
+        // O tempo do Windows atrasado (agora já passou duas atualizações): pula para a que vem.
+        assert!((proxima_atualizacao(10.0, p, 10.0 + 2.5 * p) - (10.0 + 3.0 * p)).abs() < 1e-9);
+        // Exatamente numa atualização: a próxima, não a mesma.
+        assert!((proxima_atualizacao(10.0, p, 10.0) - (10.0 + p)).abs() < 1e-12);
+        // O Windows deu a atualização que ainda vai acontecer, com folga: é ela (antes pulava uma, um período de atraso).
+        assert!((proxima_atualizacao(10.0, p, 9.996) - 10.0).abs() < 1e-12);
+        // Perto demais para compor a tempo: a seguinte.
+        assert!((proxima_atualizacao(10.0, p, 9.9995) - (10.0 + p)).abs() < 1e-12);
+        assert_eq!(proxima_atualizacao(10.0, 0.0, 11.0), 11.0);
+    }
+
+    #[test]
+    fn a_reserva_pelo_relogio_nao_escorrega() {
+        let i = 0.75 / 144.0;
+        assert!((proximo_prazo(1.0, 1.001, i) - (1.0 + i)).abs() < 1e-12);
+        assert!((proximo_prazo(1.0, 1.05, i) - (1.05 + i)).abs() < 1e-12, "atrasado: recomeça de agora");
     }
 
     #[test]
