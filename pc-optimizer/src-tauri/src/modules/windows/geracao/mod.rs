@@ -444,11 +444,14 @@ pub fn presentmon_mudo(pausada: bool, quadros_do_jogo: u64, quadros_capturados: 
 /// `teto`: o multiplicador máximo que vale agora (o pedido, ou o que a guarda já baixou). No Auto o gerador enche pelo
 /// monitor e o teto não muda o trabalho da placa: depois do leve, desliga (um degrau que não alivia nada deixaria o jogo
 /// perdendo FPS por minutos dizendo "aliviado").
+/// Desde a 1.0.9 o Auto também tem degrau: no ritmo do monitor, o teto vale para ele (`ritmo::na_atualizacao`), e
+/// baixar para 2× (um gerado por real) tira boa parte do trabalho da placa antes de desistir. O Equilíbrio (Auto já
+/// leve) desligava direto, depois de 3 comparações, num FiveM que perdia de 5% a 35%.
 pub fn reacao_a_perda(ja_leve: bool, teto: u8, automatico: bool) -> ReacaoAPerda {
     if !ja_leve {
         ReacaoAPerda::FicarLeve
-    } else if teto > 2 && !automatico {
-        ReacaoAPerda::BaixarPara(teto - 1)
+    } else if teto > 2 {
+        ReacaoAPerda::BaixarPara(if automatico { 2 } else { teto - 1 })
     } else {
         ReacaoAPerda::Desligar
     }
@@ -2335,7 +2338,12 @@ fn sessao(
             let t = par_no_monitor
                 .filter(|_| !guarda.pausada())
                 .map(|(a, b)| ritmo::t_no_tempo(no_jogo, a, b));
-            let teto_fixo = (!config.automatico).then(|| multiplicador.min(teto_da_guarda));
+            // O fixo é sempre teto; o Auto só depois que a guarda o baixou.
+            let teto_fixo = if config.automatico {
+                (teto_da_guarda < multiplicador).then_some(teto_da_guarda)
+            } else {
+                Some(multiplicador.min(teto_da_guarda))
+            };
             // Com escala e o cursor ampliado, a tela é a do Otimiza: o real se redesenha para o cursor andar.
             let redesenhar = cursor_ampliado;
             match ritmo::na_atualizacao(t.flatten(), real_ja_mostrado, mostrados_deste_real, teto_fixo, redesenhar) {
@@ -2506,9 +2514,10 @@ mod tests_da_guarda_leve {
         assert_eq!(reacao_a_perda(true, 4, false), ReacaoAPerda::BaixarPara(3), "leve no 4×: um a menos, não desliga");
         assert_eq!(reacao_a_perda(true, 3, false), ReacaoAPerda::BaixarPara(2));
         assert_eq!(reacao_a_perda(true, 2, false), ReacaoAPerda::Desligar, "só no fim da escada");
-        // Auto (144 Hz, base 72, leve perdendo 30%): não há degrau que alivie; desliga em vez de fingir.
+        // Auto (144 Hz, base 72, leve e ainda perdendo): um gerado por real antes de desistir; só então desliga.
         assert_eq!(reacao_a_perda(false, 6, true), ReacaoAPerda::FicarLeve);
-        assert_eq!(reacao_a_perda(true, 6, true), ReacaoAPerda::Desligar);
+        assert_eq!(reacao_a_perda(true, 6, true), ReacaoAPerda::BaixarPara(2));
+        assert_eq!(reacao_a_perda(true, 2, true), ReacaoAPerda::Desligar);
         assert!(degrau_em_palavras(Some(0.82), Some(3)).starts_with("Aliviado para 3×: o jogo perdia 18% do FPS real"));
         assert!(degrau_em_palavras(None, None).starts_with("Modo leve: o jogo perdia FPS real"));
     }

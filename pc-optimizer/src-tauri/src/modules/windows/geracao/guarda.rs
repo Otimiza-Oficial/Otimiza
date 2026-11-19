@@ -35,7 +35,11 @@ pub const RAZAO_MINIMA: f64 = 0.96;
 /// jogo mantendo 95,5% do FPS: a tela perdia o 2× inteiro (uns 80% de quadros a mais) por 4,5% do jogo. Com 0,90, um
 /// cliente com a placa no limite via o Frame Boost sumir minutos depois de ligar e o jogo "voltar ao normal": com 2×,
 /// 80% do jogo ainda é 1,6× na tela. Só abaixo de 75% (a tela perde metade do ganho e o mouse pesa) desliga.
-pub const RAZAO_MINIMA_LEVE: f64 = 0.75;
+///
+/// 1.0.9: o dono decidiu o orçamento do Equilíbrio, "até 5% do FPS real" (Plano 2.0, pergunta 1). Com o degrau no Auto
+/// (`reacao_a_perda`: leve → 2× → desliga) e o gerador gastando menos placa (um quadro por atualização), a régua do
+/// modo leve passa de 0,75 para 0,95: perder até 25% do FPS do jogo não é mais aceito em silêncio.
+pub const RAZAO_MINIMA_LEVE: f64 = 0.95;
 /// Medido nesta máquina (PresentMon 2.6.0 no dwm, `presentmon::tests::vivo_conta_o_dwm`): os quadros chegam de 3,1 a
 /// 3,9 s depois de apresentados (lote do ETW mais o que o PresentMon segura para calcular as métricas). Cinco dão folga.
 pub const ATRASO_DA_CONTAGEM: f64 = 5.0;
@@ -251,17 +255,17 @@ mod tests {
     }
 
     #[test]
-    fn no_modo_leve_perder_pouco_nao_desliga_mas_perder_muito_sim() {
-        // 92% do FPS: antes desligava (o log do dono mostrou até com 95,5%); no modo leve, o gerador fica.
-        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 64.4, 70.0, 120.0, 0.0);
+    fn no_modo_leve_o_orcamento_e_de_5_por_cento() {
+        // O orçamento do dono (1.0.9): até 5% do FPS real. 96%: o gerador fica, no modo leve.
+        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 67.2, 70.0, 120.0, 0.0);
         assert!(!acoes.contains(&Acao::Desligar), "{:?}", acoes);
-        // Fora do modo leve, a mesma perda ainda pede o modo leve primeiro.
+        // Fora do modo leve, uma perda maior pede o modo leve primeiro (a sessão alivia antes de desistir).
         let (_, acoes) = simular(64.4, 70.0, 120.0, 0.0);
         assert!(acoes.contains(&Acao::Desligar));
-        // 82% do FPS (placa no limite): com 2× a tela ainda ganha 1,6×; no modo leve, o gerador fica.
-        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 57.4, 70.0, 600.0, 0.0);
-        assert!(!acoes.contains(&Acao::Desligar), "{:?}", acoes);
-        // 65% do FPS: o jogo sente de verdade; no modo leve, desliga.
+        // 92% do FPS: até a 1.0.8 o modo leve aceitava (régua de 0,75); agora passa do orçamento e a guarda age.
+        let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 64.4, 70.0, 120.0, 0.0);
+        assert!(acoes.contains(&Acao::Desligar), "{:?}", acoes);
+        // 65% do FPS: o jogo sente de verdade; desliga.
         let (_, acoes) = simular_com(Guarda::nova_leve(0.0), 45.5, 70.0, 120.0, 0.0);
         assert!(acoes.contains(&Acao::Desligar));
     }
