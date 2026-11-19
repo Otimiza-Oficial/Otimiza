@@ -1,1 +1,1 @@
-Otimiza 1.0.9 Frame Boost que se vê, mais leve na placa e no PC (4.0.9)
+Otimiza 1.0.10 Correção urgente: Frame Boost sem travadas (4.0.10)
