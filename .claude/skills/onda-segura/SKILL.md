@@ -28,7 +28,10 @@ npm run nova:build && npm run fumaca:nova
 ```
 Teste que lê a máquina leva `#[ignore = "lê esta máquina"]`. Decisão nova leva teste puro com os números do caso real.
 
-## 3. Revisão (agentes do projeto, só leitura)
+## 3. Revisão (agentes do projeto)
+Tarefa grande ou ambígua: comece pelo `lider-tecnico` (plano em ondas e quem chamar). Retorno de cliente: pelo
+`gerente-de-produto`. Frame Boost: a skill `referencias-frame-boost` antes de propor.
+
 | Área mexida | Agente |
 |---|---|
 | FPS: Frame Boost, Turbo, Jogo liso, teto, energia de jogo, governador | `guardiao-do-fps` |
@@ -39,6 +42,16 @@ Teste que lê a máquina leva `#[ignore = "lê esta máquina"]`. Decisão nova l
 | Laços e custo com o jogo aberto | `custo-do-otimiza` |
 | Ajuste do Windows no catálogo | `auditor-de-ajuste` |
 | Tela | `designer-otimiza` (skill `tela-otimiza`) |
+| Técnica nova do gerador, comparação com concorrente | `pesquisador-de-geracao` (implementa: `engenheiro-de-shaders`) |
+| Turbo, afinidade, CPU sets, prioridade | `especialista-processador` |
+| Perfil do driver, NVML, ReBAR, placa híbrida | `especialista-placa-e-driver` |
+| Hz, VRR, HDR, tela cheia | `especialista-tela` |
+| Trancos, DPC, travamentos, temperatura | `especialista-diagnostico` |
+| FiveM | `especialista-fivem` |
+| Oti (IA) | `especialista-oti` |
+| Número novo na tela, prova A-B | `cientista-de-medicao` |
+| Testes e regressão | `engenheiro-de-qa` |
+| Site (`web/`) | `especialista-site` |
 | Qualquer commit | `revisor-otimiza` |
 
 Fora da pasta `Otimiza-novo` os agentes do projeto não carregam: chame um agente geral que leia o `.md` do agente.
