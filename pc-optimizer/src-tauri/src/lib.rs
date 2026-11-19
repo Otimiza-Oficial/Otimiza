@@ -735,6 +735,19 @@ pub fn run() {
                 }
             });
 
+            // 1.0.9: a prioridade fixada antes como "alta" vira "acima do normal" (o Histórico segue desfazendo).
+            #[cfg(windows)]
+            tauri::async_runtime::spawn(async {
+                if let Ok(n) = tokio::task::spawn_blocking(modules::windows::gamemode::rebaixar_prioridade_alta_antiga).await {
+                    if n > 0 {
+                        utils::Logger::info(&format!(
+                            "prioridade: {} jogo(s) passaram de alta para acima do normal (1.0.9)",
+                            n
+                        ));
+                    }
+                }
+            });
+
             // O Otimiza fechou com jogo aberto e programas em modo econômico: devolve antes de tudo.
             #[cfg(windows)]
             tauri::async_runtime::spawn(async {

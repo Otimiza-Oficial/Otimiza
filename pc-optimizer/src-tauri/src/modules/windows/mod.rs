@@ -847,7 +847,7 @@ impl WindowsOptimizer {
 
         log.record(AppliedOptimization {
             optimization_id: id.clone(),
-            name: format!("{} em prioridade alta permanente", executable),
+            name: format!("{} em prioridade acima do normal permanente", executable),
             timestamp: now_timestamp(),
             changes: vec![change],
         })?;
@@ -858,7 +858,7 @@ impl WindowsOptimizer {
             success: true,
             applied: true,
             message: format!(
-                "`{}` passa a abrir sempre em prioridade alta. Atenção: quando o jogo atualizar, o nome do executável muda e este ajuste precisa ser aplicado de novo — o Otimiza avisa quando isso acontecer.",
+                "`{}` passa a abrir sempre em prioridade acima do normal. Atenção: quando o jogo atualizar, o nome do executável muda e este ajuste precisa ser aplicado de novo — o Otimiza avisa quando isso acontecer.",
                 executable
             ),
             requires_restart: false,
