@@ -34,6 +34,16 @@ const LARGURA_MINIMA: f64 = 900.0;
 const ALTURA_MINIMA: f64 = 640.0;
 
 /// O mínimo entra DEPOIS da fração e ANTES do teto da tela: numa tela menor que o mínimo, a janela é a tela.
+/// Alguma prova A-B está rodando (plano de energia alternado, prova do Turbo, teste da travada). Os vigias que mexem
+/// no FPS (modo jogo/governador, energia de jogo, afinidade) não escrevem nada enquanto isso: um lado da prova com o
+/// ajuste e o outro sem deixava o resultado contaminado (auditoria do Plano 2.0).
+#[cfg(target_os = "windows")]
+fn prova_em_curso() -> bool {
+    modules::provaalternada::em_andamento()
+        || crate::plataforma::turbo::em_prova()
+        || modules::windows::investigacao::em_andamento()
+}
+
 fn tamanho_que_cabe(largura_util: f64, altura_util: f64) -> (f64, f64) {
     let largura = (largura_util * FRACAO_DA_LARGURA)
         .max(LARGURA_MINIMA)
@@ -704,6 +714,9 @@ pub fn run() {
                         if !modules::preferences::Preferences::load().auto_game_mode && !do_turbo {
                             continue;
                         }
+                        if prova_em_curso() {
+                            continue;
+                        }
 
                         let estado = handle.state::<commands::AppState>();
                         let mut log = estado.changes.lock().await;
@@ -852,6 +865,10 @@ pub fn run() {
                 let mut visto: Option<String> = None;
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                    // Durante uma prova, nada muda: o jogo visto fica para a próxima olhada.
+                    if prova_em_curso() {
+                        continue;
+                    }
                     let jogo = crate::plataforma::sessao::atual().map(|j| j.nome);
                     sem_jogo = if jogo.is_some() { 0 } else { sem_jogo + 1 };
                     if (jogo.is_none() && sem_jogo < 2) || jogo == visto {
@@ -913,7 +930,7 @@ pub fn run() {
                 let mut ja = std::collections::HashSet::new();
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    if utils::diagnostico::modo_seguro() {
+                    if utils::diagnostico::modo_seguro() || prova_em_curso() {
                         continue;
                     }
                     let (volta, aplicados) = tokio::task::spawn_blocking(move || {
