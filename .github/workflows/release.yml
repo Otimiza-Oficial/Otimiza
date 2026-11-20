@@ -21,30 +21,28 @@ on:
   push:
     tags:
       - "v*"
+    # 1.0.12 (2.6): a mesma bateria de testes roda em todo PR e em cada push na main. Antes ela só rodava na tag, e
+    # uma regressão chegava ao instalador do cliente antes de alguém vê-la. Fora da tag só o job `testes` roda: nada
+    # é compilado para publicar e nada é escrito no repositório.
+    branches:
+      - main
+  pull_request:
   # Permite disparar manualmente pela aba Actions, para testar sem criar tag.
   workflow_dispatch:
 
+# Só leitura por padrão: o PR roda código de quem abriu. Só o job que publica recebe escrita, e só na tag.
 permissions:
-  contents: write
+  contents: read
+
+# Um push novo no mesmo PR cancela a rodada antiga. Tag e main nunca são canceladas no meio.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  compilar:
-    name: Compilar em ${{ matrix.plataforma }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-latest
-            plataforma: Windows
-            alvo: ""
-
-          # Prontas para uso, aguardando motor de otimização próprio:
-          #
-          # nao_publicadas:
-          #   - runner: macos-latest    → precisa de assinatura e notarização da Apple
-          #   - runner: ubuntu-22.04    → precisa de libwebkit2gtk-4.1-dev e patchelf
-
-    runs-on: ${{ matrix.runner }}
+  testes:
+    name: Testes no Windows
+    runs-on: windows-latest
 
     steps:
       - name: Baixar o código
@@ -72,6 +70,7 @@ jobs:
       # tenta julgar se o texto está bom — isso é trabalho de quem escreve.
       # ---------------------------------------------------------------------
       - name: Conferir se as notas falam desta versão
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         shell: bash
         run: |
           set -euo pipefail
@@ -116,6 +115,7 @@ jobs:
       # eles concordam com a TAG, que e a parte que nenhum teste ve.
       # ---------------------------------------------------------------------
       - name: Conferir se a tag bate com a versao do binario
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         shell: bash
         run: |
           set -euo pipefail
@@ -236,6 +236,52 @@ jobs:
       - name: Testes — motor de otimização
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::tests::"
+
+  compilar:
+    name: Compilar em ${{ matrix.plataforma }}
+    # Versão que não passa nos testes não vira instalador.
+    needs: testes
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            plataforma: Windows
+            alvo: ""
+
+          # Prontas para uso, aguardando motor de otimização próprio:
+          #
+          # nao_publicadas:
+          #   - runner: macos-latest    → precisa de assinatura e notarização da Apple
+          #   - runner: ubuntu-22.04    → precisa de libwebkit2gtk-4.1-dev e patchelf
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: pc-optimizer/package-lock.json
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Reaproveitar compilações anteriores
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pc-optimizer/src-tauri
+
+      - name: Instalar dependências do frontend
+        working-directory: pc-optimizer
+        run: npm ci
 
       # A descrição vive num arquivo versionado, não escondida no YAML: assim ela
       # passa por revisão como qualquer outro texto do produto.
