@@ -662,14 +662,23 @@ pub fn ligar(
             // 0 = automático: enche o monitor, quantos quadros couberem.
             // 1 com escala: só escala, sem gerar quadros.
             let so_escala = escala.is_some() && multiplicador == 1;
-            let automatico = multiplicador == AUTOMATICO;
-            let m = if so_escala {
+            let mut automatico = multiplicador == AUTOMATICO;
+            let mut m = if so_escala {
                 1
             } else if automatico {
                 geracao::MAXIMO_DO_AUTOMATICO
             } else {
                 multiplicador_valido(multiplicador, &cabem).unwrap_or(2)
             };
+            // O PORTÃO DA BASE (1.0.11): gerar quadros só com o FPS do jogo travado numa fração dos Hz. Solto, o ritmo
+            // fica irregular (1,1 a 1,3 quadro por real no log do testador, FiveM a 106-119 em 144 Hz: "o Auto trava",
+            // "o 2× deixa igual"). Travado, o multiplicador é exato (72 em 144 Hz = 2×) e cada atualização recebe uma
+            // imagem no mesmo espaçamento. Sem conseguir travar, não liga e diz por quê, em vez de ligar pela metade.
+            if !so_escala && !sem_limite {
+                let base = portao_da_base(&jogo.executavel, jogo.pid, hz.unwrap_or(0))?;
+                m = base.multiplicador.max(2);
+                automatico = false;
+            }
 
             // A janela do gerador fica por cima do jogo: com anticheat que caça sobreposição aberto, nem liga.
             use crate::modules::windows::anticheat;
@@ -705,6 +714,77 @@ pub fn ligar(
         }
         _ => Err("Este gerador não liga pelo Otimiza.".to_string()),
     }
+}
+
+/// Pura: o que o portão da base responde. `travada`: a base gravada e se está valendo nesta partida (o jogo abriu
+/// depois do teto). `nota`: o que o `travar` disse quando não travou.
+pub fn decisao_do_portao(
+    administrador: bool,
+    nvidia: bool,
+    travada: Option<&super::base_do_jogo::BaseTravada>,
+    nota: Option<&str>,
+) -> Result<super::base_do_jogo::BaseTravada, String> {
+    if !administrador {
+        return Err(PRECISA_DE_ADMINISTRADOR.to_string());
+    }
+    if !nvidia {
+        return Err(SO_NVIDIA.to_string());
+    }
+    match travada {
+        Some(b) if b.valendo => Ok(b.clone()),
+        Some(b) => Err(format!(
+            "FPS base travado em {} para o Frame Boost. O limite do driver só vale com o jogo reaberto: feche o jogo, \
+             abra de novo e ligue o Frame Boost.",
+            b.fps
+        )),
+        None => Err(nota
+            .filter(|n| !n.is_empty())
+            .unwrap_or("Não consegui travar o FPS base deste jogo.")
+            .to_string()),
+    }
+}
+
+pub const PRECISA_DE_ADMINISTRADOR: &str = "Para ficar liso, o Frame Boost trava o FPS do jogo numa fração do monitor \
+    (72 num monitor de 144 Hz) e completa o resto. Travar exige o Otimiza aberto como administrador: feche o Otimiza e \
+    abra com o botão direito → Executar como administrador.";
+
+pub const SO_NVIDIA: &str = "Para ficar liso, o Frame Boost trava o FPS do jogo numa fração do monitor, e o Otimiza só \
+    consegue travar pelo driver da NVIDIA. Nesta placa, use o gerador do próprio driver ou do jogo, se houver.";
+
+/// O portão: a base valendo, ou trava agora (medindo o jogo 15 s se não houver medida recente). Grava no histórico do
+/// disco: quem chama segura a trava do histórico e relê no fim (o comando, o "Jogar" e o Turbo já fazem).
+#[cfg(target_os = "windows")]
+fn portao_da_base(executavel: &str, pid: u32, hz: u32) -> Result<super::base_do_jogo::BaseTravada, String> {
+    use super::base_do_jogo;
+    let administrador = crate::modules::windows::registry::is_elevated();
+    let nvidia = crate::modules::windows::nvdriver::estado() == crate::modules::windows::nvdriver::Nvapi::Disponivel;
+    if !administrador || !nvidia || hz == 0 {
+        if hz == 0 && administrador && nvidia {
+            return Err("Não consegui ler os Hz do monitor do jogo para travar o FPS base.".to_string());
+        }
+        return decisao_do_portao(administrador, nvidia, None, None);
+    }
+    let mut nota = None;
+    if base_do_jogo::travada(pid, executavel, hz).is_none() {
+        // Sem medida recente, mede agora: a base sai da mediana real do jogo.
+        let medida = base_do_jogo::ler(executavel).filter(|b| base_do_jogo::recente(b, crate::modules::changelog::now_timestamp()));
+        if medida.is_none() {
+            crate::utils::Logger::info(&format!("frame boost: medindo {} por 15 s para travar o FPS base", executavel));
+            super::jogo_liso::medir(executavel, 15)?;
+        }
+        let mut log = crate::modules::changelog::ChangeLog::load();
+        nota = Some(base_do_jogo::travar(executavel, hz, &mut log)?);
+    }
+    let travada = base_do_jogo::travada(pid, executavel, hz);
+    let r = decisao_do_portao(true, true, travada.as_ref(), nota.as_deref());
+    match &r {
+        Ok(b) => crate::utils::Logger::info(&format!(
+            "frame boost: base de {} em {} fps valendo, {}× fixo ({} Hz)",
+            executavel, b.fps, b.multiplicador, hz
+        )),
+        Err(m) => crate::utils::Logger::warn(&format!("frame boost: não ligou em {}: {}", executavel, m)),
+    }
+    r
 }
 
 fn compat_motivo(r: &RecursoAvaliado) -> Option<String> {
@@ -756,6 +836,27 @@ pub fn medir() -> Result<Painel, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn o_frame_boost_so_liga_com_a_base_travada_valendo() {
+        use super::super::base_do_jogo::BaseTravada;
+        let valendo = BaseTravada { fps: 72, multiplicador: 2, valendo: true };
+        let antes_de_reabrir = BaseTravada { valendo: false, ..valendo.clone() };
+        // O testador da 1.0.10: sem administrador. Não liga, e diz como resolver.
+        let e = decisao_do_portao(false, true, Some(&valendo), None).unwrap_err();
+        assert!(e.contains("administrador"), "{e}");
+        // Placa que não é NVIDIA: o Otimiza não trava a base; diz por quê.
+        assert!(decisao_do_portao(true, false, None, None).unwrap_err().contains("NVIDIA"));
+        // Travada mas o jogo abriu antes do teto: reabrir.
+        let e = decisao_do_portao(true, true, Some(&antes_de_reabrir), None).unwrap_err();
+        assert!(e.contains("72") && e.contains("reaberto"), "{e}");
+        // Não travou (jogo perto dos Hz, medida curta…): a frase do `travar` vai para a tela.
+        let nota = "FPS base não travado: o jogo entrega 130 fps, já perto dos 144 Hz.";
+        assert_eq!(decisao_do_portao(true, true, None, Some(nota)).unwrap_err(), nota);
+        assert!(!decisao_do_portao(true, true, None, Some("")).unwrap_err().is_empty());
+        // Valendo: liga no multiplicador exato.
+        assert_eq!(decisao_do_portao(true, true, Some(&valendo), None), Ok(valendo));
+    }
+
     use super::*;
 
     #[test]
