@@ -842,6 +842,7 @@ impl WindowsOptimizer {
             return Err("Este jogo já está com prioridade fixada.".to_string());
         }
 
+        // Retirado (1.0.12, A4): nenhum caminho fixa prioridade nova; o `definir_prioridade_persistente` recusa.
         let change = gamemode::definir_prioridade_persistente(executable, true)?;
         let described = change.describe();
 
