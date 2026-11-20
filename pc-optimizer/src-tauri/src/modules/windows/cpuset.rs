@@ -73,12 +73,9 @@ pub fn ler() -> BTreeMap<String, ResultadoCpuSet> {
 }
 
 fn gravar(todos: &BTreeMap<String, ResultadoCpuSet>) -> Result<(), String> {
-    let caminho = arquivo();
-    if let Some(p) = caminho.parent() {
-        let _ = std::fs::create_dir_all(p);
-    }
     let texto = serde_json::to_string_pretty(todos).map_err(|e| e.to_string())?;
-    std::fs::write(&caminho, texto).map_err(|e| format!("não consegui guardar o resultado: {e}"))
+    crate::utils::arquivo::escrever_atomico(&arquivo(), texto.as_bytes())
+        .map_err(|e| format!("não consegui guardar o resultado: {e}"))
 }
 
 pub fn esquecer(executavel: &str) -> Result<(), String> {

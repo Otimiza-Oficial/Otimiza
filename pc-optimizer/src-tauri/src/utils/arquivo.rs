@@ -73,6 +73,34 @@ mod tests {
         let _ = std::fs::remove_dir_all(&pasta);
     }
 
+    /// 1.0.12 (A2): o estado que a abertura seguinte lê para devolver o PC (marcas de teste em andamento, energia de
+    /// jogo, Wi-Fi, banda, FOV, motor de energia, preferências, provas) só passa por aqui. Um `fs::write` direto
+    /// voltando a um destes arquivos quebra este teste.
+    #[test]
+    fn o_estado_da_recuperacao_so_grava_atomico() {
+        let fontes = [
+            ("provaalternada.rs", include_str!("../modules/provaalternada.rs")),
+            ("prova.rs", include_str!("../modules/prova.rs")),
+            ("preferences.rs", include_str!("../modules/preferences.rs")),
+            ("motorenergia_maquina.rs", include_str!("../modules/windows/motorenergia_maquina.rs")),
+            ("cpuset.rs", include_str!("../modules/windows/cpuset.rs")),
+            ("pressao.rs", include_str!("../modules/windows/pressao.rs")),
+            ("energia_jogo.rs", include_str!("../plataforma/energia_jogo.rs")),
+            ("banda.rs", include_str!("../plataforma/banda.rs")),
+            ("wifi_varredura.rs", include_str!("../plataforma/wifi_varredura.rs")),
+            ("fov_fivem.rs", include_str!("../plataforma/fov_fivem.rs")),
+            ("fb_por_jogo.rs", include_str!("../plataforma/fb_por_jogo.rs")),
+            ("turbo.rs", include_str!("../plataforma/turbo.rs")),
+        ];
+        for (nome, fonte) in fontes {
+            let producao = fonte.split("#[cfg(test)]").next().unwrap_or(fonte);
+            assert!(
+                !producao.contains("fs::write("),
+                "{nome} voltou a gravar estado com `fs::write` (use `utils::arquivo::escrever_atomico`)"
+            );
+        }
+    }
+
     #[test]
     fn falha_diz_o_arquivo_e_mantem_o_antigo() {
         let pasta = pasta_de_teste("falha");

@@ -788,12 +788,18 @@ fn ligou_a_energia() -> bool {
 #[cfg(target_os = "windows")]
 fn marcar_energia(ligou: bool) {
     let m = marca_da_energia();
-    let _ = if ligou {
-        m.parent().map(std::fs::create_dir_all);
-        std::fs::write(&m, b"")
+    // A marca diz à prova e ao desligar se foi o Turbo que ligou a energia de jogo: atômica e com rastro (1.0.12).
+    let r = if ligou {
+        crate::utils::arquivo::escrever_atomico(&m, b"")
     } else {
-        std::fs::remove_file(&m)
+        match std::fs::remove_file(&m) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("não tirei {}: {}", m.display(), e)),
+            _ => Ok(()),
+        }
     };
+    if let Err(e) = r {
+        crate::utils::Logger::warn(&format!("turbo: marca da energia de jogo: {}", e));
+    }
 }
 #[cfg(target_os = "windows")]
 static LIGADO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

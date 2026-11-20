@@ -264,7 +264,8 @@ pub fn guardar(r: &Resultado) -> Result<(), String> {
     }
     let bruto =
         serde_json::to_string_pretty(r).map_err(|e| format!("não consegui serializar: {}", e))?;
-    std::fs::write(destino, bruto).map_err(|e| format!("não consegui gravar a prova: {}", e))
+    crate::utils::arquivo::escrever_atomico(&destino, bruto.as_bytes())
+        .map_err(|e| format!("não consegui gravar a prova: {}", e))
 }
 
 pub fn guardada() -> Option<Resultado> {
@@ -528,9 +529,8 @@ mod maquina {
         }
         let _vez = Vez;
 
-        std::fs::create_dir_all(pasta())
-            .map_err(|e| format!("não consegui criar a pasta: {}", e))?;
-        std::fs::write(marcador(), &planos.com)
+        // Atômica (1.0.12): é esta marca que a abertura seguinte lê para devolver o plano depois de uma queda.
+        crate::utils::arquivo::escrever_atomico(&marcador(), planos.com.as_bytes())
             .map_err(|e| format!("não consegui marcar o teste: {}", e))?;
 
         let segundos = segundos_por_rodada.clamp(SEGUNDOS_POR_RODADA_MIN, SEGUNDOS_POR_RODADA_MAX);
