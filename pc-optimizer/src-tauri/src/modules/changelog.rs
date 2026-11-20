@@ -385,6 +385,39 @@ pub enum LeituraDoHistorico {
     },
 }
 
+/// Por que o histórico não foi gravado (1.0.12, A8): erro com tipo em vez de texto solto, para quem chama distinguir o
+/// caso e a tela receber a frase em português. Vira `String` sozinho no `?` dos comandos (`From`).
+#[derive(Debug)]
+pub enum ErroDoHistorico {
+    /// A pasta de dados (`%APPDATA%\pc-optimizer`) não pôde ser criada.
+    Pasta(std::io::Error),
+    /// O histórico em memória não virou JSON (não deveria acontecer: os tipos são todos serializáveis).
+    Serializar(serde_json::Error),
+    /// O temporário não foi escrito nem forçado ao disco (disco cheio, antivírus, permissão).
+    Gravar(std::io::Error),
+    /// O temporário não substituiu o arquivo (outro programa com o arquivo aberto).
+    Trocar(std::io::Error),
+}
+
+impl std::fmt::Display for ErroDoHistorico {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErroDoHistorico::Pasta(e) => write!(f, "não consegui criar a pasta do histórico de mudanças: {}", e),
+            ErroDoHistorico::Serializar(e) => write!(f, "não consegui montar o histórico de mudanças: {}", e),
+            ErroDoHistorico::Gravar(e) => write!(f, "não consegui gravar o histórico de mudanças: {}", e),
+            ErroDoHistorico::Trocar(e) => write!(f, "não consegui substituir o histórico de mudanças: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for ErroDoHistorico {}
+
+impl From<ErroDoHistorico> for String {
+    fn from(e: ErroDoHistorico) -> String {
+        e.to_string()
+    }
+}
+
 /// Nome fixo não serve: duas gravações simultâneas disputavam o temporário e a segunda falhava com "não
 /// encontrado". PID mais nanossegundos separa.
 pub(crate) fn caminho_temporario(destino: &Path) -> PathBuf {
@@ -600,19 +633,18 @@ impl ChangeLog {
         base.join("pc-optimizer").join("changes.json")
     }
 
-    fn persist(&self) -> Result<(), String> {
+    fn persist(&self) -> Result<(), ErroDoHistorico> {
         Self::gravar(&self.path, &self.entries)
     }
 
     /// ATÔMICA: um JSON truncado por queda de energia era lido como vazio, e "Desfazer tudo" dizia que não havia
     /// nada com as mudanças ainda aplicadas.
-    fn gravar(path: &Path, entries: &[AppliedOptimization]) -> Result<(), String> {
+    fn gravar(path: &Path, entries: &[AppliedOptimization]) -> Result<(), ErroDoHistorico> {
         if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir).map_err(|e| format!("Failed to create data dir: {}", e))?;
+            fs::create_dir_all(dir).map_err(ErroDoHistorico::Pasta)?;
         }
 
-        let raw = serde_json::to_string_pretty(entries)
-            .map_err(|e| format!("Failed to serialize change log: {}", e))?;
+        let raw = serde_json::to_string_pretty(entries).map_err(ErroDoHistorico::Serializar)?;
 
         let temporario = caminho_temporario(path);
 
@@ -621,19 +653,21 @@ impl ChangeLog {
         {
             use std::io::Write;
 
-            let mut arquivo = fs::File::create(&temporario)
-                .map_err(|e| format!("Failed to write change log: {}", e))?;
-
-            arquivo
-                .write_all(raw.as_bytes())
-                .map_err(|e| format!("Failed to write change log: {}", e))?;
-
-            arquivo
-                .sync_all()
-                .map_err(|e| format!("Failed to flush change log: {}", e))?;
+            let escrever = || -> std::io::Result<()> {
+                let mut arquivo = fs::File::create(&temporario)?;
+                arquivo.write_all(raw.as_bytes())?;
+                arquivo.sync_all()
+            };
+            if let Err(e) = escrever() {
+                let _ = fs::remove_file(&temporario);
+                return Err(ErroDoHistorico::Gravar(e));
+            }
         }
 
-        fs::rename(&temporario, path).map_err(|e| format!("Failed to replace change log: {}", e))
+        fs::rename(&temporario, path).map_err(|e| {
+            let _ = fs::remove_file(&temporario);
+            ErroDoHistorico::Trocar(e)
+        })
     }
 
     /// Muda dois registros em memória e grava UMA vez: sem estado intermediário no disco. `false` se um dos dois falta.
@@ -642,7 +676,7 @@ impl ChangeLog {
         a: &str,
         b: &str,
         f: impl FnOnce(&mut AppliedOptimization, &mut AppliedOptimization),
-    ) -> Result<bool, String> {
+    ) -> Result<bool, ErroDoHistorico> {
         let (Some(i), Some(j)) = (
             self.entries.iter().position(|e| e.optimization_id == a),
             self.entries.iter().position(|e| e.optimization_id == b),
@@ -666,7 +700,7 @@ impl ChangeLog {
 
     /// Substitui o registro anterior da mesma otimização, para guardar o estado original mais antigo ainda não
     /// revertido.
-    pub fn record(&mut self, entry: AppliedOptimization) -> Result<(), String> {
+    pub fn record(&mut self, entry: AppliedOptimization) -> Result<(), ErroDoHistorico> {
         if !self
             .entries
             .iter()
@@ -678,7 +712,7 @@ impl ChangeLog {
         Ok(())
     }
 
-    pub fn take(&mut self, optimization_id: &str) -> Result<Option<AppliedOptimization>, String> {
+    pub fn take(&mut self, optimization_id: &str) -> Result<Option<AppliedOptimization>, ErroDoHistorico> {
         match self
             .entries
             .iter()

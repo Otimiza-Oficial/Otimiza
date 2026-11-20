@@ -955,4 +955,41 @@ mod tests {
             "analyze_rbar fora do generate_handler!"
         );
     }
+
+    /// 1.0.12 (2.5, A8): comando Tauri e histórico de mudanças não derrubam o programa. Um `unwrap` ali vira pânico
+    /// no lugar da frase que a tela mostra; o erro sobe com tipo (`ErroDoHistorico`) ou como `String`. Conta só a
+    /// produção: o que vem depois do primeiro módulo de teste de cada arquivo fica de fora.
+    #[test]
+    fn comandos_e_historico_sem_unwrap_fora_de_teste() {
+        let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut arquivos: Vec<std::path::PathBuf> = std::fs::read_dir(raiz.join("commands"))
+            .expect("pasta commands")
+            .flatten()
+            .map(|e| e.path())
+            .filter(|c| c.extension().and_then(|e| e.to_str()) == Some("rs"))
+            .collect();
+        arquivos.push(raiz.join("modules").join("changelog.rs"));
+        assert!(arquivos.len() > 10, "não achei os arquivos dos comandos");
+
+        let mut achados = Vec::new();
+        for arquivo in &arquivos {
+            let fonte = std::fs::read_to_string(arquivo).expect("ler o arquivo");
+            let limpo = remover_comentarios(&fonte);
+            let mut linhas = limpo.lines().enumerate().peekable();
+            while let Some((i, linha)) = linhas.next() {
+                if linha.trim() == "#[cfg(test)]"
+                    && linhas.peek().is_some_and(|(_, l)| {
+                        let l = l.trim_start();
+                        l.starts_with("mod ") || l.starts_with("pub mod ")
+                    })
+                {
+                    break;
+                }
+                if linha.contains(".unwrap()") || linha.contains(".expect(") {
+                    achados.push(format!("{}:{}", arquivo.display(), i + 1));
+                }
+            }
+        }
+        assert!(achados.is_empty(), "unwrap/expect fora de teste: {:?}", achados);
+    }
 }

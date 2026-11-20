@@ -981,7 +981,7 @@ impl WindowsOptimizer {
                     falhas.join("; ")
                 ));
             }
-            return Err(erro);
+            return Err(erro.into());
         }
 
         Ok(OptimizationOutcome {
@@ -1046,7 +1046,7 @@ impl WindowsOptimizer {
                     falhas.join("; ")
                 ));
             }
-            return Err(erro);
+            return Err(erro.into());
         }
 
         Ok(OptimizationOutcome {
@@ -1108,7 +1108,7 @@ impl WindowsOptimizer {
                     falhas.join("; ")
                 ));
             }
-            return Err(erro);
+            return Err(erro.into());
         }
 
         Ok(OptimizationOutcome {
@@ -1149,7 +1149,7 @@ impl WindowsOptimizer {
             if let Err(falhas) = revert_changes(&[change]) {
                 return Err(format!("{} E não consegui devolver a fila: {}", erro, falhas.join("; ")));
             }
-            return Err(erro);
+            return Err(erro.into());
         }
         crate::utils::Logger::info(&format!("fila do driver NVIDIA em 1 quadro: {}", executavel));
         Ok(true)
@@ -1199,7 +1199,7 @@ impl WindowsOptimizer {
                     falhas.join("; ")
                 ));
             }
-            return Err(erro);
+            return Err(erro.into());
         }
         Ok(OptimizationOutcome {
             id,
@@ -1257,7 +1257,7 @@ impl WindowsOptimizer {
                     falhas.join("; ")
                 ));
             }
-            return Err(erro);
+            return Err(erro.into());
         }
 
         Ok(OptimizationOutcome {
