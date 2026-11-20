@@ -834,6 +834,56 @@ pub fn medir() -> Result<Painel, String> {
     Ok(painel())
 }
 
+/// A bancada no jogo de verdade (só na máquina com o jogo aberto, como administrador). `OTIMIZA_FG_PROCESSO=FiveM`.
+#[cfg(all(test, target_os = "windows"))]
+mod bancada_no_jogo {
+    fn jogo() -> (u32, String) {
+        let processo = std::env::var("OTIMIZA_FG_PROCESSO").unwrap_or_else(|_| "FiveM".into());
+        crate::modules::windows::frames::encontrar_processo(&processo).expect("o jogo não está aberto")
+    }
+
+    /// O portão da base como o app faz: mede (se preciso), trava no driver e diz se está valendo.
+    #[test]
+    #[ignore = "lê esta máquina"]
+    fn portao_no_jogo_aberto() {
+        let (pid, exe) = jogo();
+        let hz = super::hz_do_jogo(pid).unwrap_or(0);
+        println!("jogo {} (pid {}), {} Hz", exe, pid, hz);
+        match super::portao_da_base(&exe, pid, hz) {
+            Ok(b) => println!("PORTÃO: base {} fps valendo, {}× fixo", b.fps, b.multiplicador),
+            Err(m) => println!("PORTÃO: não liga: {}", m),
+        }
+    }
+
+    /// O jogo medido pelo PresentMon (OTIMIZA_SEGUNDOS, padrão 60).
+    #[test]
+    #[ignore = "lê esta máquina"]
+    fn medir_o_jogo() {
+        use crate::modules::windows::presentmon;
+        let (pid, exe) = jogo();
+        let segundos: u32 = std::env::var("OTIMIZA_SEGUNDOS").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
+        let quadros = presentmon::capturar(pid, segundos).expect("PresentMon");
+        let r = presentmon::resumir(&quadros).expect("resumo");
+        println!(
+            "MEDIDA {} {} s: FPS médio {:.1}, mediana {:.1}, 1% pior {:?}, 0,1% pior {:?}, p99 {:.1} ms, desvio {:.2} ms, \
+             engasgos/min {:.1}, exibido {:.1}/s, modo {}, gargalo {:?}, até a tela {:?} ms",
+            exe,
+            segundos,
+            r.fps_do_jogo_medio,
+            r.fps_do_jogo_mediana,
+            r.low_1pct.map(|v| (v * 10.0).round() / 10.0),
+            r.low_01pct.map(|v| (v * 10.0).round() / 10.0),
+            r.quadro_p99_ms,
+            r.quadro_desvio_ms,
+            r.engasgos_por_minuto,
+            r.fps_exibido,
+            r.modo_de_apresentacao,
+            r.gargalo,
+            r.ate_a_tela_media_ms.map(|v| (v * 10.0).round() / 10.0)
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
