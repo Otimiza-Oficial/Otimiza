@@ -1796,6 +1796,7 @@ fn sessao(
     let mut atualizacao_servida: Option<f64> = None;
     let mut prazo_da_reserva: Option<f64> = None;
     let mut tempo_do_windows_avisado = false;
+    let no_monitor_principal = saida.monitor.x == 0 && saida.monitor.y == 0;
     // Gerados que perderam a vez na fila de 1 quadro (modos fixos), para o log de 10 s.
     let mut sem_vez = 0u64;
     while !parar.load(Ordering::Relaxed) {
@@ -2362,7 +2363,10 @@ fn sessao(
             // Uma imagem por atualização, feita para a próxima atualização da tela e começada um pouco antes dela
             // (`ritmo::MARGEM_ANTES_DA_ATUALIZACAO`), sem nunca bloquear esperando a tela.
             let agora = segundos(inicio);
+            // O tempo do Windows (sem janela) é o do monitor PRINCIPAL: com o jogo em outro monitor, cada um tem o
+            // próprio relógio e a fase escorregaria. Aí vale a reserva pelo relógio.
             let tempo = tempo_do_windows(qpc_frequencia, qpc_inicio)
+                .filter(|_| no_monitor_principal)
                 .filter(|(_, p)| (p - periodo_da_tela).abs() < periodo_da_tela * 0.2);
             if tempo.is_none() && !tempo_do_windows_avisado {
                 tempo_do_windows_avisado = true;
@@ -2378,11 +2382,21 @@ fn sessao(
                     (proxima - ritmo::MARGEM_ANTES_DA_ATUALIZACAO, proxima)
                 }
                 None => {
-                    let prazo = ritmo::proximo_prazo(prazo_da_reserva.unwrap_or(agora), agora, periodo_da_tela * 0.75);
+                    // O prazo ainda não servido continua o mesmo (o laço volta ao começo durante a espera).
+                    let prazo = match prazo_da_reserva {
+                        Some(p) if atualizacao_servida != Some(p + periodo_da_tela) => p,
+                        anterior => ritmo::proximo_prazo(anterior.unwrap_or(agora), agora, periodo_da_tela * 0.75),
+                    };
                     prazo_da_reserva = Some(prazo);
                     (prazo, prazo + periodo_da_tela)
                 }
             };
+            // Dorme no máximo 2 ms por vez e volta ao começo do laço: um real que chega no meio da espera é capturado
+            // na hora, e não uma atualização depois (revisão da 1.0.10).
+            if alvo - agora > 0.002 {
+                std::thread::sleep(Duration::from_millis(2));
+                continue;
+            }
             if alvo > agora {
                 std::thread::sleep(Duration::from_secs_f64(alvo - agora));
             }
