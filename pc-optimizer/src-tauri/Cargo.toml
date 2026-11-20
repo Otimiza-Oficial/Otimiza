@@ -1,6 +1,6 @@
 [package]
 name = "pc-optimizer"
-version = "4.0.9"
+version = "4.0.10"
 description = "Console de desempenho para Windows"
 authors = ["Otimiza"]
 edition = "2021"
@@ -124,6 +124,7 @@ windows = { version = "0.61", features = [
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_LibraryLoader",

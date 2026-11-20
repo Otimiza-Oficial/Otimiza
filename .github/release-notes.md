@@ -8,13 +8,30 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.9_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.9_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.10_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.10_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.10: Correção urgente: Frame Boost travando na 1.0.9
+
+Atualização da 1.0 (número interno 4.0.10).
+
+## Correções
+
+- **Frame Boost travando desde a 1.0.9:** com o FPS alto na tela, o jogo parecia rodar a 30 e a imagem falhava ao
+  virar a câmera. A 1.0.9 esperava cada atualização do monitor antes de mandar a imagem: quando a placa estava ocupada
+  com o jogo, uma imagem atrasada perdia duas atualizações em vez de uma. Agora o Otimiza pergunta ao Windows quando é
+  a próxima atualização e prepara a imagem para ela, sem nunca ficar parado esperando. A economia de placa da 1.0.9
+  continua.
+
+Se você usa o Frame Boost e ficou com a 1.0.9, atualize. Se ainda notar travada ou falha na imagem, mande o registro
+por **Ajustes → Registro do Otimiza → Salvar em Downloads**.
 
 ---
 
