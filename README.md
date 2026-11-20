@@ -103,7 +103,9 @@ existe no código mas nunca foi executada aparece como pendente.
 
 ## Licença
 
-Código aberto à leitura, não ao uso. Veja [`LICENSE`](LICENSE).
+Código aberto à leitura, não ao uso: licença proprietária, veja [`LICENCE`](LICENCE). Quem instala o programa
+aceita o contrato de uso (EULA) que o instalador mostra, em
+[`pc-optimizer/src-tauri/EULA.txt`](pc-optimizer/src-tauri/EULA.txt).
 
 O código está público porque um programa que altera configurações do seu sistema
 deveria poder ser auditado por quem instala. Isso não é o mesmo que licença de

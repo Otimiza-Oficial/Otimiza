@@ -1,21 +1,28 @@
-MIT License
+Licença proprietária do Otimiza
 
-Copyright (c) 2026 Eduardo Maciel Wanka
+RASCUNHO de 20 de novembro de 2026, ainda não revisado por advogado.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Copyright (c) 2026 Eduardo Maciel Wanka. Todos os direitos reservados.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+O código deste repositório é público para leitura, para que quem instala o
+Otimiza consiga auditar o que o programa faz no PC. Ler o código não dá licença
+de uso.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Sem autorização por escrito do titular, não é permitido:
+
+- copiar, modificar, compilar ou distribuir este código, no todo ou em parte;
+- publicar, vender ou repassar o programa compilado a partir dele;
+- usar este código, ou partes dele, em outro produto, comercial ou não;
+- remover ou contornar a conferência de licença do programa.
+
+Para usar o programa vale o Contrato de Licença de Uso (EULA) que o instalador
+mostra antes de instalar: pc-optimizer/src-tauri/EULA.txt.
+
+Componentes de terceiros seguem as licenças deles, listadas em
+pc-optimizer/LICENCAS-DE-TERCEIROS.md e nos arquivos de licença de cada pacote.
+
+As cópias do código publicadas até a versão 1.0.11 sob a licença MIT continuam
+sob a licença MIT, apenas naquela versão. Esta licença vale para o código a
+partir da versão 1.0.12.
+
+Contato: otimizasupport@gmail.com
