@@ -406,12 +406,99 @@ pub struct ChangeLog {
     leitura: LeituraDoHistorico,
 }
 
+/// O DONO ÚNICO do histórico (1.0.12, A1). Antes, quem quisesse gravar relia o `changes.json` do disco por conta
+/// própria (`ChangeLog::load()` no Frame Boost, na prova da placa de rede, no Turbo) e gravava a cópia dele por cima
+/// da do app: um vigia que gravasse no meio perdia o registro de um dos dois, e com ele o desfazer. Agora existe UMA
+/// instância, atrás desta trava; só quem segura a trava recebe `&mut ChangeLog`, e só com ele se grava.
+///
+/// Nos testes começa vazio num arquivo temporário (`caminho_do_dono`): o real está em `%APPDATA%`, o perfil de quem
+/// roda a esteira.
+static HISTORICO: std::sync::LazyLock<std::sync::Arc<tokio::sync::Mutex<ChangeLog>>> =
+    std::sync::LazyLock::new(|| {
+        #[cfg(test)]
+        let _ = fs::remove_file(ChangeLog::caminho_do_dono());
+        std::sync::Arc::new(tokio::sync::Mutex::new(ChangeLog::carregar_do_disco()))
+    });
+
+/// A trava do histórico. No código assíncrono: `historico().lock().await` (ou `lock_owned()` para levar a guarda a um
+/// `spawn_blocking`).
+pub fn historico() -> std::sync::Arc<tokio::sync::Mutex<ChangeLog>> {
+    HISTORICO.clone()
+}
+
+/// Para código SÍNCRONO fora do runtime (`spawn_blocking`, threads próprias, o desinstalador): espera a trava e empresta
+/// o histórico. Não chame de dentro de uma função `async` (o tokio entra em pânico) nem com a trava já presa no mesmo
+/// caminho (esperaria por ela para sempre): nesses casos, quem segura a trava passa o `&mut ChangeLog` adiante.
+pub fn com_historico<T>(f: impl FnOnce(&mut ChangeLog) -> T) -> T {
+    let trava = historico();
+    let mut log = trava.blocking_lock();
+    f(&mut log)
+}
+
+/// Uma cópia SÓ DE LEITURA do histórico, para quem só consulta (o painel do Frame Boost, o teto gravado, o relatório
+/// de suporte). Não grava: `Deref` dá só `&ChangeLog`, e gravar pede `&mut`. Com a trava livre, a cópia vem da memória;
+/// presa (alguém gravando agora, ou o próprio chamador segurando a trava mais acima), vem da última versão confirmada
+/// no disco, que toda gravação deixa inteira (temporário + `rename`). Nunca espera a trava, então serve de qualquer
+/// lugar, até de dentro de quem a segura.
+pub struct FotoDoHistorico(ChangeLog);
+
+impl std::ops::Deref for FotoDoHistorico {
+    type Target = ChangeLog;
+    fn deref(&self) -> &ChangeLog {
+        &self.0
+    }
+}
+
+pub fn foto() -> FotoDoHistorico {
+    let trava = historico();
+    let copia = match trava.try_lock() {
+        Ok(log) => log.copia(),
+        Err(_) => {
+            // Sem `guardar_ilegivel`: quem só lê não move o arquivo do dono.
+            let path = ChangeLog::caminho_do_dono();
+            let (entries, leitura) = ChangeLog::ler_sem_mexer(&path);
+            ChangeLog {
+                path,
+                entries,
+                leitura,
+            }
+        }
+    };
+    FotoDoHistorico(copia)
+}
+
 impl ChangeLog {
-    /// Não devolve erro, para não travar o app, mas não finge que ilegível é vazio (ver `LeituraDoHistorico`).
-    pub fn load() -> Self {
-        let path = Self::storage_path();
+    fn copia(&self) -> ChangeLog {
+        ChangeLog {
+            path: self.path.clone(),
+            entries: self.entries.clone(),
+            leitura: self.leitura.clone(),
+        }
+    }
+
+    /// Não devolve erro, para não travar o app, mas não finge que ilegível é vazio (ver `LeituraDoHistorico`). Privado:
+    /// só o dono (`HISTORICO`) e a cópia de leitura (`foto`) carregam do disco, e a cópia não grava.
+    fn carregar_do_disco() -> Self {
+        let path = Self::caminho_do_dono();
         let (entries, leitura) = Self::ler(&path);
 
+        ChangeLog {
+            path,
+            entries,
+            leitura,
+        }
+    }
+
+    /// O `changes.json` DE VERDADE desta máquina, fora do dono: só para os testes `#[ignore]` que mexem no PC de quem
+    /// roda e precisam desfazer o que o app gravou. Com o Otimiza fechado.
+    #[cfg(test)]
+    pub(crate) fn do_disco_real() -> Self {
+        let base = std::env::var("APPDATA")
+            .or_else(|_| std::env::var("HOME"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."));
+        let path = base.join("pc-optimizer").join("changes.json");
+        let (entries, leitura) = Self::ler(&path);
         ChangeLog {
             path,
             entries,
@@ -436,24 +523,22 @@ impl ChangeLog {
         }
     }
 
-    /// Relê do disco depois de um trabalho que gravou no histórico do disco (o Frame Boost, a prova da placa). Só troca a
-    /// memória se a leitura deu certo: um arquivo preso por um instante (antivírus) viraria um histórico vazio, e a
-    /// próxima gravação apagaria todo o desfazer.
-    pub fn recarregar(&mut self) {
-        let novo = Self::load();
-        if matches!(novo.leitura, LeituraDoHistorico::Ok) {
-            *self = novo;
-        } else {
-            crate::utils::Logger::warn("histórico: não consegui reler do disco; fica o da memória");
-        }
-    }
-
     pub fn leitura(&self) -> &LeituraDoHistorico {
         &self.leitura
     }
 
     /// Caminho por parâmetro: o real está em `%APPDATA%`, e o teste escreveria no perfil de quem roda a esteira.
     fn ler(path: &Path) -> (Vec<AppliedOptimization>, LeituraDoHistorico) {
+        Self::ler_e_guardar(path, true)
+    }
+
+    /// A leitura da cópia de leitura (`foto`): ilegível é dito, mas o arquivo fica onde está (só o dono o tira do
+    /// caminho, antes de gravar por cima).
+    fn ler_sem_mexer(path: &Path) -> (Vec<AppliedOptimization>, LeituraDoHistorico) {
+        Self::ler_e_guardar(path, false)
+    }
+
+    fn ler_e_guardar(path: &Path, guardar: bool) -> (Vec<AppliedOptimization>, LeituraDoHistorico) {
         let bruto = match fs::read_to_string(path) {
             Ok(bruto) => bruto,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -473,7 +558,7 @@ impl ChangeLog {
         match serde_json::from_str(&bruto) {
             Ok(entries) => (entries, LeituraDoHistorico::Ok),
             Err(e) => {
-                let guardado = Self::guardar_ilegivel(path);
+                let guardado = if guardar { Self::guardar_ilegivel(path) } else { None };
 
                 (
                     Vec::new(),
@@ -500,7 +585,13 @@ impl ChangeLog {
             .map(|_| destino.to_string_lossy().to_string())
     }
 
-    fn storage_path() -> PathBuf {
+    #[cfg(test)]
+    fn caminho_do_dono() -> PathBuf {
+        std::env::temp_dir().join(format!("pc-optimizer-teste-dono-{}.json", std::process::id()))
+    }
+
+    #[cfg(not(test))]
+    fn caminho_do_dono() -> PathBuf {
         let base = std::env::var("APPDATA")
             .or_else(|_| std::env::var("HOME"))
             .map(PathBuf::from)
@@ -677,6 +768,19 @@ mod tests_1_8 {
         }
     }
 
+    /// A cópia de leitura diz que está ilegível, mas não move o arquivo: só o dono tira do caminho.
+    #[test]
+    fn quem_so_le_nao_move_o_arquivo_ilegivel() {
+        let caminho = pasta("ilegivel-so-le").join("changes.json");
+        fs::write(&caminho, "{ truncado").unwrap();
+
+        let (entradas, leitura) = ChangeLog::ler_sem_mexer(&caminho);
+
+        assert!(entradas.is_empty());
+        assert!(matches!(leitura, LeituraDoHistorico::Ilegivel { guardado_em: None, .. }));
+        assert!(caminho.exists(), "a leitura moveu o arquivo do dono");
+    }
+
     #[test]
     fn arquivo_valido_e_lido_inteiro() {
         let caminho = pasta("valido").join("changes.json");
@@ -727,6 +831,114 @@ mod tests_1_8 {
                 previous_guid: "abc".to_string(),
             }],
         }
+    }
+}
+
+/// O dono único (1.0.12, A1): duas gravações ao mesmo tempo não apagam uma à outra, e quem só lê nunca grava.
+#[cfg(test)]
+mod testes_do_dono {
+    use super::*;
+
+    fn registro(id: &str) -> AppliedOptimization {
+        AppliedOptimization {
+            optimization_id: id.to_string(),
+            name: "Teste do dono".to_string(),
+            timestamp: 0,
+            changes: vec![ChangeRecord::PowerPlan {
+                previous_guid: id.to_string(),
+            }],
+        }
+    }
+
+    /// O caso da 1.0.9: o Frame Boost gravava (Smooth Motion) numa cópia lida do disco enquanto um vigia gravava a
+    /// memória do app; o último a gravar apagava o registro do outro. Pelo dono, as duas threads esperam a vez e as
+    /// duas mudanças ficam, na memória E no disco.
+    #[test]
+    fn duas_escritas_ao_mesmo_tempo_nao_se_apagam() {
+        let ids: Vec<String> = (0..16).map(|i| format!("dono-concorrente-{}", i)).collect();
+        let largada = std::sync::Arc::new(std::sync::Barrier::new(ids.len()));
+        let threads: Vec<_> = ids
+            .iter()
+            .cloned()
+            .map(|id| {
+                let largada = largada.clone();
+                std::thread::spawn(move || {
+                    largada.wait();
+                    com_historico(|log| log.record(registro(&id))).expect("gravar pelo dono");
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().expect("a thread de gravação caiu");
+        }
+
+        com_historico(|log| {
+            for id in &ids {
+                assert!(log.is_applied(id), "{} sumiu da memória", id);
+            }
+        });
+        let (no_disco, leitura) = ChangeLog::ler(&ChangeLog::caminho_do_dono());
+        assert_eq!(leitura, LeituraDoHistorico::Ok);
+        for id in &ids {
+            assert!(
+                no_disco.iter().any(|e| &e.optimization_id == id),
+                "{} sumiu do disco: a gravação de outra thread passou por cima",
+                id
+            );
+        }
+        com_historico(|log| {
+            for id in &ids {
+                log.take(id).expect("desfazer pelo dono");
+            }
+        });
+    }
+
+    /// O mesmo, com o lado assíncrono (um comando segurando a trava e levando a guarda para um `spawn_blocking`) e um
+    /// vigia síncrono querendo gravar no meio: o vigia espera, e nenhum registro se perde.
+    #[test]
+    fn o_comando_com_a_trava_e_o_vigia_esperam_a_vez() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("runtime de teste");
+        rt.block_on(async {
+            let guarda = historico().lock_owned().await;
+            let vigia = std::thread::spawn(|| {
+                com_historico(|log| log.record(registro("dono-vigia"))).expect("o vigia grava pelo dono");
+            });
+            let comando = tokio::task::spawn_blocking(move || {
+                let mut log = guarda;
+                // Enquanto o comando segura a trava, o vigia não consegue gravar.
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                assert!(!log.is_applied("dono-vigia"), "o vigia gravou sem a trava");
+                log.record(registro("dono-comando")).expect("o comando grava pelo dono");
+            });
+            comando.await.expect("o comando caiu");
+            tokio::task::spawn_blocking(move || vigia.join().expect("o vigia caiu"))
+                .await
+                .expect("esperar o vigia");
+        });
+        com_historico(|log| {
+            assert!(log.is_applied("dono-comando"));
+            assert!(log.is_applied("dono-vigia"));
+            log.take("dono-comando").expect("desfazer");
+            log.take("dono-vigia").expect("desfazer");
+        });
+    }
+
+    /// Quem só lê (o painel do Frame Boost, chamado de dentro de quem segura a trava) não espera a trava: lê a última
+    /// versão gravada no disco, e não trava para sempre.
+    #[test]
+    fn a_foto_nao_espera_a_trava_e_ve_o_que_foi_gravado() {
+        com_historico(|log| log.record(registro("dono-foto"))).expect("gravar");
+        let trava = historico();
+        let presa = trava.blocking_lock();
+        let foto = foto();
+        assert!(foto.is_applied("dono-foto"), "com a trava presa, a foto vem do disco");
+        drop(presa);
+        assert!(super::foto().is_applied("dono-foto"), "com a trava livre, a foto vem da memória");
+        com_historico(|log| log.take("dono-foto")).expect("desfazer");
     }
 }
 

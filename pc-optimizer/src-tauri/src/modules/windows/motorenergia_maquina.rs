@@ -370,7 +370,7 @@ pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     if !registry::is_elevated() {
         return None;
     }
-    let otimiza = crate::modules::changelog::ChangeLog::load().is_applied("plano_otimiza");
+    let otimiza = crate::modules::changelog::foto().is_applied("plano_otimiza");
     let backup = ler_backup();
     let existe = backup.as_ref().and_then(|b| power::plano_existe(&b.plano_anterior));
     let r = match decidir_recuperacao(otimiza, backup.is_some(), existe) {

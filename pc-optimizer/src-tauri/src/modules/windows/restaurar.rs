@@ -426,8 +426,8 @@ fn restaurar_pela_linha_de_comando(dados: &Option<std::path::PathBuf>) -> i32 {
         return 3;
     }
 
-    let mut log = ChangeLog::load();
-    let r = match restaurar_tudo(&mut log, |_| {}) {
+    // O desinstalador roda sem o runtime do app: pega a trava do dono do histórico do jeito síncrono.
+    let r = match crate::modules::changelog::com_historico(|log| restaurar_tudo(log, |_| {})) {
         Ok(r) => r,
         Err(motivo) => {
             avisar(&format!("O Otimiza não desfez nada. {}", motivo));

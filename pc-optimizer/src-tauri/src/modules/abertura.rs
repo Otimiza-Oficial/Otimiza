@@ -46,7 +46,7 @@ mod custo {
     #[ignore]
     fn custo_antes_da_janela() {
         let t = std::time::Instant::now();
-        let _ = crate::modules::changelog::ChangeLog::load();
+        let _ = crate::modules::changelog::ChangeLog::do_disco_real();
         println!("ChangeLog::load: {} ms", t.elapsed().as_millis());
         let t = std::time::Instant::now();
         let _ = crate::modules::PerformanceMonitor::new();

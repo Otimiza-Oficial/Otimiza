@@ -521,7 +521,7 @@ pub fn rebaixar_prioridade_alta_antiga() -> usize {
     if !super::registry::is_elevated() {
         return 0;
     }
-    let log = ChangeLog::load();
+    let log = crate::modules::changelog::foto();
     let mut mudados = 0;
     for aplicado in log.applied().iter().filter(|a| a.optimization_id.starts_with("prioridade:")) {
         for mudanca in &aplicado.changes {

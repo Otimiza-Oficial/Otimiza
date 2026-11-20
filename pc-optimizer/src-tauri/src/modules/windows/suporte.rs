@@ -300,7 +300,7 @@ pub fn gerar() -> Entrada {
     let ram_gb = memory::analyze().total_ram_gb.round().max(0.0) as u32;
     let monitores = display::monitores().len();
 
-    let historico = crate::modules::changelog::ChangeLog::load();
+    let historico = crate::modules::changelog::foto();
     let mudancas_aplicadas = historico.applied().len();
     let aplicadas: Vec<String> = historico
         .applied()

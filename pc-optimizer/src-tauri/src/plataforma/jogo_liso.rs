@@ -294,9 +294,9 @@ pub fn teto_no_driver(executavel: &str) -> Option<u32> {
 /// O teto que o histórico diz que o Otimiza gravou para este executável.
 #[cfg(target_os = "windows")]
 pub fn teto_gravado(executavel: &str) -> Option<u32> {
-    use crate::modules::changelog::{ChangeLog, ChangeRecord};
+    use crate::modules::changelog::ChangeRecord;
     let id = crate::modules::windows::nvdriver::id_do_limite(executavel);
-    ChangeLog::load()
+    crate::modules::changelog::foto()
         .applied()
         .iter()
         .filter(|e| e.optimization_id == id)

@@ -3221,7 +3221,7 @@ mod tests {
         use crate::modules::changelog::ChangeLog;
 
         let otimizador = WindowsOptimizer::new();
-        let mut log = ChangeLog::load();
+        let mut log = ChangeLog::do_disco_real();
         let id = "mouse_precision_off";
 
         let aplicar = otimizador.apply(id, &mut log);
@@ -3275,7 +3275,7 @@ mod tests {
         use crate::modules::changelog::ChangeLog;
 
         let otimizador = WindowsOptimizer::new();
-        let log = ChangeLog::load();
+        let log = ChangeLog::do_disco_real();
         let lista = otimizador.list(&log);
 
         let mut contagem = std::collections::BTreeMap::new();
@@ -3796,7 +3796,7 @@ mod tests {
     #[test]
     fn inspects_every_optimization_against_this_machine() {
         let optimizer = WindowsOptimizer::new();
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
 
         for info in optimizer.list(&log) {
             println!("{:<45} {:?} {:?}", info.name, info.state, info.detail);
@@ -3843,7 +3843,7 @@ mod tests {
     #[test]
     fn lote_nunca_inclui_operacao_sem_volta() {
         let optimizer = WindowsOptimizer::new();
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
 
         let batch: Vec<&str> = catalog::CATALOG
             .iter()
@@ -3865,7 +3865,7 @@ mod tests {
         }
 
         let optimizer = WindowsOptimizer::new();
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
 
         for id in ["remove_forced_hpet", "clear_boot_limits"] {
             let spec = catalog::find(id).expect("otimização deveria existir");
@@ -3893,7 +3893,7 @@ mod tests {
     #[test]
     fn lote_nunca_troca_seguranca_por_desempenho() {
         let optimizer = WindowsOptimizer::new();
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
 
         let batch: Vec<&str> = catalog::CATALOG
             .iter()
@@ -3938,7 +3938,7 @@ mod tests {
             r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
         let optimizer = WindowsOptimizer::new();
-        let mut log = ChangeLog::load();
+        let mut log = ChangeLog::do_disco_real();
 
         let entry = startup::entries()
             .expect("as chaves de inicialização desta máquina precisam ser legíveis")
@@ -3985,7 +3985,7 @@ mod tests {
         );
 
         let optimizer = WindowsOptimizer::new();
-        let mut log = ChangeLog::load();
+        let mut log = ChangeLog::do_disco_real();
 
         // `AlreadyOptimal` fica de fora: testá-la desconfiguraria a máquina de quem roda.
         let alvos: Vec<&OptimizationSpec> = catalog::CATALOG
@@ -4107,7 +4107,7 @@ mod tests {
         use crate::modules::benchmark::{compare, Benchmark};
 
         let optimizer = WindowsOptimizer::new();
-        let mut log = ChangeLog::load();
+        let mut log = ChangeLog::do_disco_real();
         let id = "mouse_precision_off";
 
         let before = Benchmark::new().run();
@@ -4143,7 +4143,7 @@ mod tests {
     #[ignore]
     fn real_apply_and_revert_cycle_restores_the_system() {
         let optimizer = WindowsOptimizer::new();
-        let mut log = ChangeLog::load();
+        let mut log = ChangeLog::do_disco_real();
         let id = "mouse_precision_off";
 
         let original =
@@ -4211,7 +4211,7 @@ mod custo_das_condicoes {
             println!("  chamada {k}: {:?} = {v:?}", u.elapsed());
         }
         let t = Instant::now();
-        let log = super::ChangeLog::load();
+        let log = super::ChangeLog::do_disco_real();
         let n = super::WindowsOptimizer::new().list(&log).len();
         println!("list() com {n} itens: {:?}", t.elapsed());
     }

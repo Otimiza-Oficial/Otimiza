@@ -73,17 +73,15 @@ pub async fn rede_provar_placa(
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
     {
-        // A trava do histórico fica presa o teste inteiro: nada mais grava no meio. O teste grava no do disco (o mesmo
-        // conteúdo), e a memória é relida no fim.
-        let mut log = state.changes.lock().await;
-        let r = tokio::task::spawn_blocking(|| {
-            let mut do_disco = crate::modules::changelog::ChangeLog::load();
-            crate::plataforma::placa_prova::provar(&mut do_disco)
+        // A trava do histórico fica presa o teste inteiro e vai junto para a thread: nada mais grava no meio, e o teste
+        // grava no histórico do dono, não numa cópia lida do disco (1.0.12, um dono só).
+        let guarda = state.changes.clone().lock_owned().await;
+        tokio::task::spawn_blocking(move || {
+            let mut log = guarda;
+            crate::plataforma::placa_prova::provar(&mut log)
         })
         .await
-        .map_err(|e| e.to_string())?;
-        *log = crate::modules::changelog::ChangeLog::load();
-        r
+        .map_err(|e| e.to_string())?
     }
     #[cfg(not(target_os = "windows"))]
     {

@@ -67,7 +67,9 @@ use tokio::sync::Mutex;
 // `tokio::sync::Mutex`: os guards atravessam `.await`, e um `std::sync::MutexGuard` não é Send.
 pub struct AppState {
     pub monitor: Mutex<PerformanceMonitor>,
-    pub changes: Mutex<ChangeLog>,
+    /// O histórico do dono único (`changelog::historico`): a mesma trava que o código síncrono pega com
+    /// `com_historico`. Em `Arc` para a guarda ir junto a um `spawn_blocking` (`lock_owned`).
+    pub changes: std::sync::Arc<Mutex<ChangeLog>>,
     /// Mantido: uso de CPU por processo só existe comparando duas leituras.
     #[cfg(target_os = "windows")]
     pub processes: Mutex<crate::modules::windows::processes::ProcessMonitor>,

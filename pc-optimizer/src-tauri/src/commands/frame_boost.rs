@@ -166,23 +166,24 @@ pub async fn frame_boost_ligar(
     let app = crate::aplicativo()?;
     #[cfg(target_os = "windows")]
     {
-        // A trava do histórico fica presa enquanto liga: o Smooth Motion e o AFMF gravam no histórico do disco, e a
-        // memória é relida no fim (o mesmo padrão de `rede_provar_placa`).
-        let mut log = state.changes.lock().await;
-        let ligado = tokio::task::spawn_blocking(move || {
-            crate::plataforma::frameboost::ligar(
+        // A trava do histórico fica presa enquanto liga e vai junto para a thread: o Smooth Motion, o AFMF e o portão da
+        // base gravam no histórico, e só quem segura a trava grava (1.0.12, um dono só).
+        let guarda = state.changes.clone().lock_owned().await;
+        let (mut log, ligado) = tokio::task::spawn_blocking(move || {
+            let mut log = guarda;
+            let r = crate::plataforma::frameboost::ligar(
                 &app,
                 multiplicador,
                 sem_limite.unwrap_or(false),
                 escala,
                 alvo,
                 leve.unwrap_or(false),
-            )
+                &mut log,
+            );
+            (log, r)
         })
         .await
-        .map_err(|e| e.to_string())
-        .and_then(|r| r);
-        log.recarregar();
+        .map_err(|e| e.to_string())?;
         ligado?;
         crate::plataforma::frameboost::travar_base(&mut log);
         drop(log);
@@ -309,8 +310,8 @@ pub async fn frame_boost_travar_base(
     }
 }
 
-/// `LIVRES`: desligar nunca depende de licença. O desligar desfaz o Smooth Motion e o AFMF no histórico do disco: a
-/// trava do histórico fica presa enquanto isso, e a memória é relida no fim.
+/// `LIVRES`: desligar nunca depende de licença. O desligar desfaz o Smooth Motion e o AFMF no histórico: a trava do
+/// histórico fica presa enquanto isso e vai junto para a thread.
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]
 pub async fn frame_boost_desligar(
@@ -318,13 +319,14 @@ pub async fn frame_boost_desligar(
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
     #[cfg(target_os = "windows")]
     {
-        let mut log = state.changes.lock().await;
-        let r = tokio::task::spawn_blocking(crate::plataforma::frameboost::desligar)
-            .await
-            .map_err(|e| e.to_string())
-            .and_then(|r| r);
-        log.recarregar();
-        return r;
+        let guarda = state.changes.clone().lock_owned().await;
+        return tokio::task::spawn_blocking(move || {
+            let mut log = guarda;
+            crate::plataforma::frameboost::desligar(&mut log)
+        })
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
     }
     #[cfg(not(target_os = "windows"))]
     {

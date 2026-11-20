@@ -440,8 +440,8 @@ export const commands = {
 	/**  Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença. */
 	frameBoostDestravarBase: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_destravar_base"),
 	/**
-	 *  `LIVRES`: desligar nunca depende de licença. O desligar desfaz o Smooth Motion e o AFMF no histórico do disco: a
-	 *  trava do histórico fica presa enquanto isso, e a memória é relida no fim.
+	 *  `LIVRES`: desligar nunca depende de licença. O desligar desfaz o Smooth Motion e o AFMF no histórico: a trava do
+	 *  histórico fica presa enquanto isso e vai junto para a thread.
 	 */
 	frameBoostDesligar: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_desligar"),
 	/**  Devolve o FOV de antes. `LIVRES`: desfazer nunca depende de licença. */

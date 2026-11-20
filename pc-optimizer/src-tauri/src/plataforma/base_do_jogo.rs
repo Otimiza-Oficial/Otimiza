@@ -208,7 +208,7 @@ pub(crate) fn gravado(log: &crate::modules::changelog::ChangeLog, executavel: &s
 /// O teto do FPS base deste jogo agora, se o Otimiza gravou um.
 #[cfg(target_os = "windows")]
 pub fn travada(pid: u32, executavel: &str, hz: u32) -> Option<BaseTravada> {
-    let log = crate::modules::changelog::ChangeLog::load();
+    let log = crate::modules::changelog::foto();
     let (fps, quando) = gravado(&log, executavel)?;
     Some(BaseTravada {
         fps,
@@ -347,7 +347,7 @@ mod tests {
         let exe = "FiveM_b3258_GTAProcess.exe";
         let caminho = std::env::var("LOCALAPPDATA").unwrap()
             + r"\FiveM\FiveM.app\data\cache\subprocess\FiveM_b3258_GTAProcess.exe";
-        let mut log = ChangeLog::load();
+        let mut log = ChangeLog::do_disco_real();
         let id = nvdriver::id_do_limite(exe);
         println!("teto gravado antes: {:?}", gravado(&log, exe));
         if log.is_applied(&id) {
@@ -357,7 +357,7 @@ mod tests {
             "otimização de janela desfeita: {:?}",
             WindowsOptimizer::new().desfazer_janela_do_jogo(&caminho, &mut log)
         );
-        println!("teto gravado depois: {:?}", gravado(&ChangeLog::load(), exe));
+        println!("teto gravado depois: {:?}", gravado(&ChangeLog::do_disco_real(), exe));
         println!("perfil que o driver usa: {:?}", nvdriver::perfil_em_uso(&caminho));
     }
 

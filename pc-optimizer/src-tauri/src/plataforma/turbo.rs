@@ -883,9 +883,15 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
 static RITMO: std::sync::Mutex<Option<(String, Ritmo)>> = std::sync::Mutex::new(None);
 
 /// Aplica a receita e devolve o que fez, passo a passo. Um passo que falha (anticheat, sem administrador) vira nota e
-/// os outros seguem: o Turbo nunca deixa de fazer o que pode por causa do que não pode.
+/// os outros seguem: o Turbo nunca deixa de fazer o que pode por causa do que não pode. O Frame Boost grava no histórico:
+/// quem chama segura a trava dele e passa o `log`.
 #[cfg(target_os = "windows")]
-pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> Vec<String> {
+pub fn aplicar(
+    app: &tauri::AppHandle,
+    r: &Receita,
+    fps_antes: Option<f64>,
+    log: &mut crate::modules::changelog::ChangeLog,
+) -> Vec<String> {
     use std::sync::atomic::Ordering;
     // A receita lembrada de antes da escala ser desligada também perde a escala; a de antes da 1.0.6, com o processador
     // no limite perto dos Hz, perde a geração (a mesma régua do `montar` de hoje).
@@ -923,7 +929,7 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> V
         }
     }
     if let Some(m) = r.multiplicador {
-        match super::frameboost::ligar(app, m, false, r.escala, None, false) {
+        match super::frameboost::ligar(app, m, false, r.escala, None, false, log) {
             Ok(_) => passos.push(match (r.escala, m) {
                 (Some(n), 1) => format!("Escala {:?}: ligada, sem geração.", n),
                 (Some(n), _) => format!("Escala {:?} e geração de quadros: ligadas.", n),
@@ -956,11 +962,12 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> V
     passos
 }
 
-/// Desfaz o que o Turbo ligou: o Frame Boost e, se foi ele que ligou, a energia de jogo.
+/// Desfaz o que o Turbo ligou: o Frame Boost e, se foi ele que ligou, a energia de jogo. Quem chama segura a trava do
+/// histórico e passa o `log`.
 #[cfg(target_os = "windows")]
-pub fn desligar() -> Result<(), String> {
+pub fn desligar(log: &mut crate::modules::changelog::ChangeLog) -> Result<(), String> {
     use std::sync::atomic::Ordering;
-    super::frameboost::desligar()?;
+    super::frameboost::desligar(log)?;
     // A sessão do gerador continua no estado depois de desligar (só zera ao ligar de novo).
     let aplicada = APLICADA.lock().ok().and_then(|mut a| a.take());
     if let Some((fps_antes, receita)) = aplicada.filter(|(_, r)| r.multiplicador.is_some()) {
@@ -1068,14 +1075,17 @@ pub fn recuperar_na_abertura() -> Option<String> {
     Some("nada a devolver".to_string())
 }
 
-/// Liga o lado "com o Turbo" da prova (sem geração: `receita_da_prova`).
+/// Liga o lado "com o Turbo" da prova (sem geração: `receita_da_prova`). A prova roda numa thread própria sem a trava do
+/// histórico (são minutos); cada troca de lado pega a trava só pelo tempo da troca.
 #[cfg(target_os = "windows")]
 fn ligar_o_lado(app: &tauri::AppHandle, r: &Receita) -> Result<(), String> {
     if r.energia && !super::energia_jogo::ler().ligado {
         super::energia_jogo::definir(true).map(|_| ())?;
     }
     if let Some(m) = r.multiplicador {
-        super::frameboost::ligar(app, m, false, r.escala, None, false).map(|_| ())?;
+        crate::modules::changelog::com_historico(|log| {
+            super::frameboost::ligar(app, m, false, r.escala, None, false, log).map(|_| ())
+        })?;
     }
     Ok(())
 }
@@ -1083,7 +1093,7 @@ fn ligar_o_lado(app: &tauri::AppHandle, r: &Receita) -> Result<(), String> {
 /// Volta ao lado "sem o Turbo": o Frame Boost desligado (a janela do jogo volta ao tamanho) e a energia como estava.
 #[cfg(target_os = "windows")]
 fn desligar_o_lado(energia_antes: bool) -> Result<(), String> {
-    super::frameboost::desligar()?;
+    crate::modules::changelog::com_historico(super::frameboost::desligar)?;
     if !energia_antes && super::energia_jogo::ler().ligado {
         super::energia_jogo::definir(false).map(|_| ())?;
     }
@@ -1141,7 +1151,7 @@ pub fn provar(
         energia_antes,
         armado: true,
     };
-    let _ = desligar();
+    let _ = crate::modules::changelog::com_historico(desligar);
     // A marca da prova, conferida (1.0.7): sem ela, uma queda no meio deixaria o lado "com" ligado sem a abertura
     // seguinte saber. Sem marca, a prova não começa (o `fim` devolve o lado "sem").
     crate::utils::arquivo::escrever_json(&marcador_da_prova(), &ProvaEmAndamento { energia_antes })
@@ -1209,7 +1219,7 @@ pub fn provar(
     r.leitura = leitura_da_prova(r.desfecho, &r.leitura);
     if r.desfecho != Desfecho::Piorou {
         // A receita inteira volta, com a geração se tiver.
-        aplicar(app, &perfil.receita, perfil.fps_antes);
+        crate::modules::changelog::com_historico(|log| aplicar(app, &perfil.receita, perfil.fps_antes, log));
     }
     perfil.prova = Some(r.desfecho);
     if let Err(e) = lembrar(&id, perfil) {
