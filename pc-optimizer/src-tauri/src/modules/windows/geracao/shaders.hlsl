@@ -44,6 +44,8 @@ Texture2D<float4> T1 : register(t1);
 Texture2D<float4> T2 : register(t2);
 Texture2D<float4> T3 : register(t3);
 Texture2D<float4> T4 : register(t4);
+Texture2D<float4> T5 : register(t5);
+Texture2D<float4> T6 : register(t6);
 SamplerState Linear : register(s0);
 
 struct Saida { float4 pos : SV_Position; };
@@ -935,13 +937,32 @@ float ErroNaCruz(float2 uv, float2 v)
 }
 
 // Parado nos dois reais naquele lugar: HUD, mira, placar (a máscara no tempo, T3, ou A igual a B ali mesmo).
-float ParadoEm(float2 uv)
+float ParadoCalculado(float2 uv)
 {
     float3 a = T0.SampleLevel(Linear, uv, 0).rgb;
     float3 b = T1.SampleLevel(Linear, uv, 0).rgb;
     float pelaMascara = T3.SampleLevel(Linear, uv, 0).r > 0.5 ? 1.0 : 0.0;
     float igual = dot(abs(a - b), float3(0.3333, 0.3333, 0.3333)) < 0.004 ? 1.0 : 0.0;
     return max(pelaMascara, igual);
+}
+
+// O "PARADO", UMA VEZ POR QUADRO REAL (Plano 2.0, Onda 3), em meia resolução: parado se QUALQUER um dos quatro pixels
+// do 2×2 está parado (a cruz da mira tem 3 px; pela média do 2×2 ela sumia: no WARP, volta da mira 5,54 contra 5,45 e
+// erro na HUD 4,481 contra 4,476). A cruz de erro consultava a conta 10 vezes por candidato (3 leituras cada); agora é
+// uma leitura da textura (T6): `estimar` 3,99 → 3,32 ms por real em 1080p numa GTX 1650.
+// T0 = anterior, T1 = atual, T3 = interface; texelDestino = 1 / tamanho da IMAGEM.
+float4 Parado(Saida e) : SV_Target
+{
+    float2 c = (floor(e.pos.xy) + 0.5) * 2.0 * texelDestino;
+    float2 o = 0.5 * texelDestino;
+    float p = max(max(ParadoCalculado(c + float2(-o.x, -o.y)), ParadoCalculado(c + float2(o.x, -o.y))),
+                  max(ParadoCalculado(c + float2(-o.x, o.y)), ParadoCalculado(c + float2(o.x, o.y))));
+    return float4(p, 0, 0, 1);
+}
+
+float ParadoEm(float2 uv)
+{
+    return T6.SampleLevel(Linear, uv, 0).r > 0.5 ? 1.0 : 0.0;
 }
 
 // O erro da cruz SEM os pontos que caem em pixel parado (1.0.7). Em volta da mira o fundo se mexe e a cruz não: um
@@ -1026,7 +1047,8 @@ float3 Mediana3(float3 a, float3 b, float3 c)
 }
 
 // COMPOSIÇÃO COM OCLUSÃO. T0 = anterior, T1 = atual, T2 = campo do meio (DIS simétrico), T3 = interface, T4 = a
-// consistência acima. Escolhe o vetor como a FinalDenso (o do pixel ou de um vizinho a 8 px, pela cruz de erro) e então:
+// consistência acima, T5 = a escolha do vetor (`EscolhaBidirecional`: o do pixel ou de um vizinho a 8 px, pela cruz de
+// erro, uma vez por real) e então:
 //   - só o lado que existe: o pedaço de A coberto em B sai só de A, o que aparece em B sai só de B;
 //   - os dois existem: a MEDIANA DINÂMICA (SVP, modo 13) entre A deslocado, B deslocado e a mistura parada — quando os
 //     dois deslocados concordam, é eles; quando um vetor erra e eles discordam, sai o valor do meio, em vez do pixel
@@ -1039,6 +1061,37 @@ float3 Mediana3(float3 a, float3 b, float3 c)
 static const float CORTE_TOTAL = 0.25;
 static const float CORTE_FAIXA = 0.15;
 
+// O deslocamento (em pixels da imagem) do candidato `k` da escolha: 0 = o vetor do próprio pixel, 1–4 = o de um
+// vizinho a 8 px, 5 = parado.
+float2 DesvioDoCandidato(int k)
+{
+    return k == 1 ? float2(8, 0) : k == 2 ? float2(-8, 0) : k == 3 ? float2(0, 8) : k == 4 ? float2(0, -8) : float2(0, 0);
+}
+
+// A ESCOLHA DO VETOR, UMA VEZ POR QUADRO REAL (Plano 2.0, Onda 3). Antes cada pixel de cada quadro gerado testava os 6
+// candidatos com a cruz de erro sem HUD (≈250 leituras por pixel, 3,3 ms por gerado em 1080p numa GTX 1650). Aqui a
+// escolha sai em meia resolução e em t = 0,5, e a `FinalBidirecional` só lê qual candidato venceu (0,83 ms por gerado).
+// Para t ≠ 0,5 a escolha e o erro (que decide o recuo para o real) são os de t = 0,5: aproximação aceita pelo plano.
+// T0 = anterior, T1 = atual, T2 = campo do meio, T3 = interface, T6 = parado (`Parado`); texelDestino = 1 / tamanho da
+// IMAGEM; t = 0,5.
+// Saída: x = o candidato (0–5, ver `DesvioDoCandidato`), y = o erro dele na cruz (já com a vantagem do próprio vetor).
+float4 EscolhaBidirecional(Saida e) : SV_Target
+{
+    float2 uv = (floor(e.pos.xy) + 0.5) * 2.0 * texelDestino;
+    float2 v = T2.SampleLevel(Linear, uv, 0).xy;
+    float melhor = ErroNaCruzSemHud(uv, v) - 0.005;
+    int escolhido = 0;
+    [loop] for (int k = 1; k <= 5; k++)
+    {
+        float2 outro = k == 5 ? float2(0, 0) : T2.SampleLevel(Linear, uv + DesvioDoCandidato(k) * texelDestino, 0).xy;
+        float erro = ErroNaCruzSemHud(uv, outro);
+        if (erro < melhor) { melhor = erro; escolhido = k; }
+    }
+    return float4(float(escolhido), melhor, 0, 1);
+}
+
+// T5 = a escolha acima (meia resolução). O vetor do candidato é lido de novo NO PIXEL (o campo continua liso entre os
+// pixels do mesmo 2×2); só a decisão é por bloco.
 float4 FinalBidirecional(Saida e) : SV_Target
 {
     float2 uv = e.pos.xy * texelDestino;
@@ -1053,19 +1106,45 @@ float4 FinalBidirecional(Saida e) : SV_Target
     if (corte >= 1.0)
         return float4(Sair(t < 0.5 ? anteriorNoLugar : atualNoLugar), 1);
 
-    float2 v = T2.SampleLevel(Linear, uv, 0).xy;
-    float melhor = ErroNaCruzSemHud(uv, v) - 0.005;
-    [unroll] for (int k = 0; k < 5; k++)
-    {
-        float2 d = (k == 0 ? float2(8, 0) : k == 1 ? float2(-8, 0) : k == 2 ? float2(0, 8) : float2(0, -8)) * texelDestino;
-        float2 outro = k == 4 ? float2(0, 0) : T2.SampleLevel(Linear, uv + d, 0).xy;
-        float erro = ErroNaCruzSemHud(uv, outro);
-        if (erro < melhor) { melhor = erro; v = outro; }
-    }
+    // BORDA SEM DEGRAU (como a `Final` antiga): a escolha é por bloco 2×2; onde o bloco vizinho escolheu OUTRO
+    // candidato, o pixel testa também o dele, pelo erro só no próprio ponto, e fica com o que faz os dois reais
+    // concordarem nele. Medido no WARP (panorâmica com mira): só a escolha por bloco, erro na mira 3,39 → 3,44; com
+    // este teste, 3,38. Sem vantagem para o candidato do próprio bloco: com 0,01 ficava 3,43; ponto em HUD pulado
+    // (como na cruz) piorou a volta da mira para 6,09.
+    int2 m = int2(e.pos.xy) / 2;
+    // Arredondado (e não `ceil`): 0,5 / (1/1920) pode dar 960,00006 em float.
+    int2 tamanhoEscolha = int2(floor(0.5 / texelDestino + 0.5));
+    float2 escolha = T5.Load(int3(m, 0)).xy;
+    int k = int(escolha.x + 0.5);
+    float2 v = k == 5 ? float2(0, 0) : T2.SampleLevel(Linear, uv + DesvioDoCandidato(k) * texelDestino, 0).xy;
     float2 pa = uv - v * texelDestino * t;
     float2 pb = uv + v * texelDestino * (1.0 - t);
     float3 a = T0.SampleLevel(Linear, pa, 0).rgb;
     float3 b = T1.SampleLevel(Linear, pb, 0).rgb;
+    float melhor = escolha.y;
+    float noPonto = dot(abs(a - b), PESOS_LUMA);
+    [loop] for (int n = 1; n < 5; n++)
+    {
+        float2 outra = T5.Load(int3(clamp(m + CRUZ[n], int2(0, 0), tamanhoEscolha - 1), 0)).xy;
+        int ko = int(outra.x + 0.5);
+        if (ko == k) continue;
+        float2 vo = ko == 5 ? float2(0, 0) : T2.SampleLevel(Linear, uv + DesvioDoCandidato(ko) * texelDestino, 0).xy;
+        float2 pao = uv - vo * texelDestino * t;
+        float2 pbo = uv + vo * texelDestino * (1.0 - t);
+        float3 ao = T0.SampleLevel(Linear, pao, 0).rgb;
+        float3 bo = T1.SampleLevel(Linear, pbo, 0).rgb;
+        float erroNoPonto = dot(abs(ao - bo), PESOS_LUMA);
+        if (erroNoPonto < noPonto)
+        {
+            noPonto = erroNoPonto;
+            k = ko;
+            melhor = outra.y;
+            pa = pao;
+            pb = pbo;
+            a = ao;
+            b = bo;
+        }
+    }
     float existeA = T4.SampleLevel(Linear, pa, 0).x;
     float existeB = T4.SampleLevel(Linear, pb, 0).y;
 
