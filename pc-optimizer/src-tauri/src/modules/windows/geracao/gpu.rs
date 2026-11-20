@@ -76,6 +76,8 @@ struct Passes {
     final_denso: ID3D11PixelShader,
     consistencia: ID3D11PixelShader,
     final_bidirecional: ID3D11PixelShader,
+    escolha_bidirecional: ID3D11PixelShader,
+    parado: ID3D11PixelShader,
     easu: ID3D11PixelShader,
     rcas: ID3D11PixelShader,
     cursor: ID3D11PixelShader,
@@ -156,6 +158,10 @@ struct Trabalho {
     pedacos_volta: [Alvo; 2],
     denso_volta: [Alvo; 2],
     consistencia: Alvo,
+    /// A escolha do vetor da `FinalBidirecional` (qual candidato e o erro dele), em 1/2, uma vez por real, em t = 0,5.
+    escolha_bi: Alvo,
+    /// O que está parado nos dois reais (interface ou A igual a B), em 1/2, uma vez por real, para a escolha.
+    parado: Alvo,
     /// Refeito a cada quadro gerado, porque depende de `t`.
     escolhido: Alvo,
     mascara: [Alvo; 2],
@@ -428,6 +434,8 @@ impl Gpu {
             final_denso: ps("FinalDenso")?,
             consistencia: ps("Consistencia")?,
             final_bidirecional: ps("FinalBidirecional")?,
+            escolha_bidirecional: ps("EscolhaBidirecional")?,
+            parado: ps("Parado")?,
             easu: ps("Easu")?,
             rcas: ps("Rcas")?,
             cursor: ps("Cursor")?,
@@ -839,6 +847,8 @@ impl Gpu {
             denso_volta: [self.alvo(sl, sa, vet, true)?, self.alvo(fl, fa, vet, true)?],
             consistencia: self.alvo_com_mips(fl, fa, vet)?,
             consistencia_leitura: self.leitura_1x1(vet)?,
+            escolha_bi: self.alvo(largura.div_ceil(2), altura.div_ceil(2), vet, true)?,
+            parado: self.alvo(largura.div_ceil(2), altura.div_ceil(2), luma, true)?,
             niveis_consistencia: 32 - fl.max(fa).leading_zeros(),
             luma_m: [
                 self.alvo(ml, ma, luma, true)?,
@@ -943,7 +953,7 @@ impl Gpu {
             self.ctx.Draw(3, 0);
             // A mesma textura vira alvo no passe seguinte.
             self.ctx
-                .PSSetShaderResources(0, Some(&[None, None, None, None, None, None]));
+                .PSSetShaderResources(0, Some(&[None, None, None, None, None, None, None, None]));
             self.ctx.OMSetRenderTargets(None, None);
         }
     }
@@ -1417,6 +1427,46 @@ impl Gpu {
                 },
             );
             unsafe { self.ctx.GenerateMips(&c.srv) };
+            // O parado e a escolha do vetor de cada ponto, uma vez por real (antes, refeitos por pixel em cada gerado).
+            let imagem = [1.0 / t.largura as f32, 1.0 / t.altura as f32];
+            let p = &t.parado;
+            self.passe(
+                &self.passes.parado,
+                p.rtv.as_ref().unwrap(),
+                p.largura,
+                p.altura,
+                &[
+                    Some(t.imagem[a].srv.clone()),
+                    Some(t.imagem[b].srv.clone()),
+                    None,
+                    Some(t.mascara[t.mascara_atual].srv.clone()),
+                ],
+                Parametros {
+                    texel_destino: imagem,
+                    ..Default::default()
+                },
+            );
+            let e = &t.escolha_bi;
+            self.passe(
+                &self.passes.escolha_bidirecional,
+                e.rtv.as_ref().unwrap(),
+                e.largura,
+                e.altura,
+                &[
+                    Some(t.imagem[a].srv.clone()),
+                    Some(t.imagem[b].srv.clone()),
+                    Some(t.denso[self.niveis_dis - 1].srv.clone()),
+                    Some(t.mascara[t.mascara_atual].srv.clone()),
+                    None,
+                    None,
+                    Some(p.srv.clone()),
+                ],
+                Parametros {
+                    texel_destino: imagem,
+                    t: 0.5,
+                    ..Default::default()
+                },
+            );
         }
     }
 
@@ -1549,6 +1599,7 @@ impl Gpu {
                         Some(tr.denso[self.niveis_dis - 1].srv.clone()),
                         Some(tr.mascara[tr.mascara_atual].srv.clone()),
                         Some(tr.consistencia.srv.clone()),
+                        Some(tr.escolha_bi.srv.clone()),
                     ],
                     Parametros {
                         texel_destino: texel,
@@ -2458,6 +2509,74 @@ mod qualidade {
             nome, direto, qualidade, desempenho
         );
         assert!(qualidade.is_finite() && desempenho.is_finite());
+    }
+
+    /// O CUSTO DO GERADOR NA PLACA (Plano 2.0, Onda 3). Tempo de placa (carimbos, `Cronometro`, sem esperar) do
+    /// `estimar` (uma vez por real) e do `compor` de um gerado em t = 0,5, em 1920×1080, na panorâmica com textura, um
+    /// quadrado andando e a mira fixa (`metrica::cenas::quadro`): o fundo anda 12 px e o quadrado 32 px entre os reais.
+    /// Só mede e imprime: o número depende da placa (a régua é a GTX 1650 do laboratório).
+    /// `cargo test --lib -- --ignored custo_do_gerador_na_placa --nocapture`
+    #[test]
+    #[ignore]
+    fn custo_do_gerador_na_placa() {
+        use super::super::metrica::cenas::quadro;
+        const VOLTAS: u64 = 200;
+        let (l, a) = (1920u32, 1080u32);
+        let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.unwrap();
+        let adaptador = unsafe { fabrica.EnumAdapters1(0) }.unwrap();
+        let nome = unsafe { adaptador.GetDesc1() }
+            .map(|d| String::from_utf16_lossy(&d.Description).trim_end_matches('\0').to_string())
+            .unwrap_or_default();
+        let mut gpu = Gpu::novo(&adaptador).unwrap();
+        gpu.preparar(l, a, false, Giro::Nenhum).unwrap();
+        let quadros = [
+            textura(&gpu, l, a, &quadro(l, a, 600, 0, true)),
+            textura(&gpu, l, a, &quadro(l, a, 632, 12, true)),
+        ];
+        let tudo = Retangulo { x: 0, y: 0, largura: l as i32, altura: a as i32 };
+        let (_saida, destino) = alvo_bgra(&gpu, l, a);
+        let mut cron_est = Cronometro::novo(&gpu).expect("a placa tem carimbos de tempo");
+        let mut cron_comp = Cronometro::novo(&gpu).expect("a placa tem carimbos de tempo");
+        let (mut est, mut n_est, mut comp, mut n_comp) = (0.0, 0u64, 0.0, 0u64);
+        for volta in 0..VOLTAS + 30 {
+            gpu.receber(&quadros[(volta % 2) as usize], tudo);
+            if volta < 30 {
+                gpu.estimar();
+                gpu.compor(&destino, l, a, Some(0.5));
+                unsafe { gpu.ctx.Flush() };
+                continue;
+            }
+            cron_est.medir(&gpu, || gpu.estimar());
+            cron_comp.medir(&gpu, || gpu.compor(&destino, l, a, Some(0.5)));
+            unsafe { gpu.ctx.Flush() };
+            for (c, soma, n) in [(&mut cron_est, &mut est, &mut n_est), (&mut cron_comp, &mut comp, &mut n_comp)] {
+                c.colher(&gpu);
+                let (s, m) = c.tirar();
+                *soma += s;
+                *n += m;
+            }
+        }
+        while (n_est < VOLTAS || n_comp < VOLTAS)
+            && (!cron_est.pendentes.is_empty() || !cron_comp.pendentes.is_empty())
+        {
+            unsafe { gpu.ctx.Flush() };
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            for (c, soma, n) in [(&mut cron_est, &mut est, &mut n_est), (&mut cron_comp, &mut comp, &mut n_comp)] {
+                c.colher(&gpu);
+                let (s, m) = c.tirar();
+                *soma += s;
+                *n += m;
+            }
+        }
+        assert!(n_est > 0 && n_comp > 0, "nenhuma medida voltou da placa");
+        println!(
+            "{}: 1920x1080 · estimar {:.3} ms por real ({} medidas) · compor {:.3} ms por gerado ({} medidas)",
+            nome,
+            est / n_est as f64,
+            n_est,
+            comp / n_comp as f64,
+            n_comp
+        );
     }
 
     /// O CURSOR AMPLIADO NA PLACA. Uma forma 4×4 (metade de cima vermelha opaca, de baixo transparente) desenhada 8×

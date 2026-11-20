@@ -8,13 +8,32 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.10_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.10_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.11_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.11_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.11: Correções de bugs no Frame Boost: liso de verdade e mais leve na placa
+
+Atualização da 1.0 (número interno 4.0.11).
+
+## Correções
+
+- **Frame Boost irregular ("o Auto trava", "o 2× deixa o jogo igual"):** para ficar liso, todo gerador de quadros
+  precisa do FPS do jogo travado numa fração do monitor (por exemplo 72 num monitor de 144 Hz). Sem o Otimiza aberto
+  como administrador, essa trava não acontecia, e o Frame Boost gerava num ritmo irregular. Agora ele só liga com a
+  trava valendo: ele mede o jogo por 15 s (com o jogo na frente), trava o FPS no driver da NVIDIA e gera o resto num
+  ritmo regular. Se não der para travar, ele não liga e diz o que fazer (abrir como administrador, reabrir o jogo).
+- **Jogo perdendo FPS com o Frame Boost:** o gerador ficou bem mais leve para a placa de vídeo. Numa GTX 1650, cada
+  quadro gerado passou a custar cerca de um quarto do que custava.
+
+Para usar o Frame Boost: abra o Otimiza como administrador (botão direito → Executar como administrador). Se ele pedir
+para reabrir o jogo, é só fechar e abrir: a trava do FPS só vale com o jogo reaberto.
 
 ---
 

@@ -1315,7 +1315,7 @@ pub(crate) fn trocas_demais(trocas: &[Instant], agora: Instant) -> bool {
 }
 
 /// A janela em primeiro plano é do jogo? (A sobreposição do gerador nunca fica com o foco: ela não ativa.)
-fn jogo_na_frente(pid: u32) -> bool {
+pub(crate) fn jogo_na_frente(pid: u32) -> bool {
     // Laboratório (só desenvolvimento): `OTIMIZA_FG_IGNORAR_FRENTE` mede o custo sem roubar o foco de quem usa o PC.
     if cfg!(debug_assertions) && std::env::var_os("OTIMIZA_FG_IGNORAR_FRENTE").is_some() {
         return true;

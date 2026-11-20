@@ -334,8 +334,36 @@ pub fn soltar_fila(executavel: &str, log: &mut crate::modules::changelog::Change
 /// Frame Boost volta nele (escolha lembrada ou receita do Turbo que gera) E o gerador rodou de fato nesta partida. Quem
 /// abre o jogo direto voltaria preso na base, sem quadro gerado; e um "Jogar" em que o Frame Boost não ligou (licença
 /// vencida, modo seguro, anticheat) prenderia o jogo na base partida após partida.
-pub fn manter_ao_fechar(pelo_jogar: bool, volta_no_jogar: bool, gerou_nesta_partida: bool) -> bool {
-    pelo_jogar && volta_no_jogar && gerou_nesta_partida
+///
+/// 1.0.11: `esperando_reabrir` — o portão da base acabou de travar e pediu para reabrir o jogo (o limite do driver só vale
+/// com o jogo reaberto). Soltar aí fazia o portão travar de novo a cada abertura e pedir para reabrir para sempre.
+pub fn manter_ao_fechar(pelo_jogar: bool, volta_no_jogar: bool, gerou_nesta_partida: bool, esperando_reabrir: bool) -> bool {
+    esperando_reabrir || (pelo_jogar && volta_no_jogar && gerou_nesta_partida)
+}
+
+/// Os jogos em que o portão da base travou e pediu para reabrir: o teto fica até a próxima partida.
+static ESPERANDO_REABRIR: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub fn marcar_esperando_reabrir(executavel: &str) {
+    if let Ok(mut l) = ESPERANDO_REABRIR.lock() {
+        let e = executavel.to_lowercase();
+        if !l.contains(&e) {
+            l.push(e);
+        }
+    }
+}
+
+/// Tira a marca (devolve se havia): vale para um fechamento só.
+fn tirar_esperando_reabrir(executavel: &str) -> bool {
+    ESPERANDO_REABRIR
+        .lock()
+        .map(|mut l| {
+            let e = executavel.to_lowercase();
+            let havia = l.contains(&e);
+            l.retain(|x| *x != e);
+            havia
+        })
+        .unwrap_or(false)
 }
 
 /// O jogo fechou: se o teto é do Frame Boost e ele não volta na próxima partida, o teto sai (ou volta o do Jogo liso).
@@ -343,7 +371,8 @@ pub fn manter_ao_fechar(pelo_jogar: bool, volta_no_jogar: bool, gerou_nesta_part
 #[cfg(target_os = "windows")]
 pub fn ao_fechar_o_jogo(executavel: &str, pelo_jogar: bool, log: &mut crate::modules::changelog::ChangeLog) {
     let (id, _) = super::historico::id_do_jogo(executavel);
-    if manter_ao_fechar(pelo_jogar, volta_sozinho(&id), gerou_nesta_partida(executavel)) {
+    let esperando = tirar_esperando_reabrir(executavel);
+    if manter_ao_fechar(pelo_jogar, volta_sozinho(&id), gerou_nesta_partida(executavel), esperando) {
         return;
     }
     if let Err(e) = aplicar(executavel, None, Pedido::FimDoFrameBoost, log) {
@@ -436,10 +465,12 @@ mod tests {
 
     #[test]
     fn so_o_jogar_mantem_o_teto_da_base_para_a_proxima_partida() {
-        assert!(manter_ao_fechar(true, true, true));
-        assert!(!manter_ao_fechar(false, true, true), "aberto direto: o Frame Boost não religa, o teto não pode ficar");
-        assert!(!manter_ao_fechar(true, false, true), "nada lembrado: o Frame Boost não volta");
-        assert!(!manter_ao_fechar(true, true, false), "Jogar em que o Frame Boost não ligou (licença vencida): solta");
+        assert!(manter_ao_fechar(true, true, true, false));
+        assert!(!manter_ao_fechar(false, true, true, false), "aberto direto: o Frame Boost não religa, o teto não pode ficar");
+        assert!(!manter_ao_fechar(true, false, true, false), "nada lembrado: o Frame Boost não volta");
+        assert!(!manter_ao_fechar(true, true, false, false), "Jogar em que o Frame Boost não ligou (licença vencida): solta");
+        // 1.0.11: o portão travou e pediu "reabra o jogo": o teto fica, senão o pedido se repetia para sempre.
+        assert!(manter_ao_fechar(false, false, false, true));
     }
 
     #[test]
