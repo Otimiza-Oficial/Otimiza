@@ -17,11 +17,9 @@
   import { noTauri } from "../lib/ponte";
   import Oti from "./Oti.svelte";
 
-  type Situacao =
-    | { situacao: "NaoSeAplica" }
-    | { situacao: "Contando"; restante_segundos: number }
-    | { situacao: "Liberado"; verificado_em: string }
-    | { situacao: "Exigido"; apagado: boolean };
+  import { recadoDaConferencia, type SituacaoDoFeedback } from "../lib/feedback";
+
+  type Situacao = SituacaoDoFeedback;
   type Estado = Situacao & { maquina: string; canal: string | null; canal_id: string; aviso: string | null };
 
   /** O convite embutido; o Rust devolve o atual quando consegue consultar. */
@@ -106,10 +104,10 @@
     try {
       const s = noTauri ? await como<Estado>(commands.feedbackVerificar()) : ({ ...estado!, situacao: "Liberado", verificado_em: "agora" } as Estado);
       aplicar(s);
-      if (s.situacao === "Liberado") {
-        recado = { tom: "ok", texto: "Feedback encontrado. As correções estão liberadas." };
-        setTimeout(() => (folhaAberta = false), 1400);
-      } else recado = { tom: "atencao", texto: s.aviso ?? "Ainda não achamos a sua mensagem. Tente de novo em um minuto." };
+      // Provisório: o nosso servidor não respondeu; o Rust liberou e confere sozinho, a folha só explica e fecha.
+      const r = recadoDaConferencia(s);
+      recado = { tom: r.tom, texto: r.texto };
+      if (r.fecharEmMs !== null) setTimeout(() => (folhaAberta = false), r.fecharEmMs);
     } catch (e) {
       recado = { tom: "atencao", texto: explicarErro(e) };
     } finally {
