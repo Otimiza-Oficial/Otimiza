@@ -1,20 +1,26 @@
 <script lang="ts" module>
   export type ModoDasBoasVindas = "completa" | "licenca";
-  /** Os Ajustes pedem a apresentação de novo por este evento (ela mora no App, por cima de tudo). */
+  /** Os Ajustes pedem a primeira execução de novo por este evento (ela mora no App, por cima de tudo). */
   export const ABRIR_BOAS_VINDAS = "otimiza:boas-vindas";
 </script>
 
 <script lang="ts">
-  // A apresentação da primeira abertura (e o atalho "Ativar licença" da barra, que abre só o passo da chave). Seis
-  // passos: o Oti, como o Otimiza trabalha, o PC lido de verdade, a licença, a aparência e o "Jogar". Nada aqui
-  // afirma o que não foi lido: o PC aparece com o que a ficha de hardware trouxe, ou "lendo". Com "reduzir movimento"
-  // no Windows, as animações param.
-  import { fade, fly, scale } from "svelte/transition";
-  import { backOut, cubicOut } from "svelte/easing";
+  // A primeira execução guiada (1.0.12, Frente 1.5): um fluxo só, com progresso, do zero até a prova.
+  //   Oi → 1. Licença → 2. Medir antes → 3. Primeiro ajuste → 4. Provar → Pronto.
+  // Cada passo usa a peça de verdade do app (a ativação, o laboratório, o Otimizar agora): o que se faz aqui fica feito
+  // lá. Dá para pular qualquer passo e voltar depois; nada aqui afirma o que não foi lido ou medido. O atalho "Ativar
+  // licença" da barra abre só o passo da licença. Com "reduzir movimento" ou jogo aberto, nada se mexe.
+  import { tick } from "svelte";
+  import { fade } from "svelte/transition";
   import Oti from "./Oti.svelte";
+  import Brilho from "./marca/Brilho.svelte";
   import Icone from "./Icone.svelte";
+  import Botao from "./base/Botao.svelte";
+  import Estado from "./base/Estado.svelte";
   import AtivarLicenca from "./AtivarLicenca.svelte";
-  import type { EstadoDaLicenca, Hardware } from "../lib/ponte";
+  import MedicaoGuiada from "./MedicaoGuiada.svelte";
+  import OtimizarAgora from "./OtimizarAgora.svelte";
+  import type { EstadoDaLicenca, Hardware, ResultadoDoLab } from "../lib/ponte";
 
   type Tema = "claro" | "escuro";
 
@@ -23,9 +29,7 @@
     hardware,
     licenca,
     tema,
-    semFundo,
     onescolherTema,
-    onalternarFundo,
     onlicenca,
     onfim,
   }: {
@@ -33,34 +37,58 @@
     hardware: Hardware | null;
     licenca: EstadoDaLicenca | null;
     tema: Tema;
-    semFundo: boolean;
     onescolherTema: (t: Tema) => void;
-    onalternarFundo: () => void;
     onlicenca: (l: EstadoDaLicenca) => void;
     onfim: () => void;
   } = $props();
 
-  type Passo = "oi" | "como" | "pc" | "licenca" | "visual" | "pronto";
-  const PASSOS = $derived<Passo[]>(modo === "licenca" ? ["licenca"] : ["oi", "como", "pc", "licenca", "visual", "pronto"]);
+  type Passo = "oi" | "licenca" | "medir" | "ajustar" | "provar" | "pronto";
+  /** Os quatro passos que contam no progresso (o "oi" e o "pronto" são a porta e a saída). */
+  const ETAPAS: { id: Passo; nome: string }[] = [
+    { id: "licenca", nome: "Licença" },
+    { id: "medir", nome: "Medir" },
+    { id: "ajustar", nome: "Ajustar" },
+    { id: "provar", nome: "Provar" },
+  ];
+  const PASSOS = $derived<Passo[]>(modo === "licenca" ? ["licenca"] : ["oi", "licenca", "medir", "ajustar", "provar", "pronto"]);
 
   let indice = $state(0);
-  let direcao = $state(1);
   const passo = $derived<Passo>(PASSOS[indice]);
   const ultimo = $derived(indice === PASSOS.length - 1);
-  const parado = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const etapa = $derived(ETAPAS.findIndex((e) => e.id === passo));
+  const parado =
+    typeof window !== "undefined" &&
+    (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("jogo-aberto"));
   const dur = (ms: number) => (parado ? 0 : ms);
 
-  function ir(n: number) {
+  /** O que já foi feito em cada passo (para o progresso e para o "Pronto" dizer a verdade). */
+  let lab = $state<ResultadoDoLab | null>(null);
+  let ajustou = $state(false);
+  const feito = $derived<Record<Passo, boolean>>({
+    oi: true,
+    licenca: !!licenca?.ativa,
+    medir: (lab?.rodadas_antes ?? 0) > 0,
+    ajustar: ajustou,
+    provar: (lab?.rodadas_depois ?? 0) > 0,
+    pronto: true,
+  });
+
+  let titulo: HTMLElement | undefined = $state();
+  async function ir(n: number) {
     if (n < 0 || n >= PASSOS.length) return;
-    direcao = n > indice ? 1 : -1;
     indice = n;
+    // O foco vai para o título do passo: quem usa leitor de tela ouve onde está.
+    await tick();
+    titulo?.focus();
   }
   const avancar = () => (ultimo ? onfim() : ir(indice + 1));
 
   function teclado(e: KeyboardEvent) {
-    // Enter dentro do campo da chave é da chave.
-    if ((e.target as HTMLElement)?.tagName === "TEXTAREA") return;
-    if (e.key === "ArrowRight" || e.key === "Enter") avancar();
+    if (e.key === "Escape") onfim();
+    // Setas só fora de campo, botão de escolha e rádio: ali elas são do controle.
+    const alvo = e.target as HTMLElement;
+    if (alvo?.closest("input, textarea, [role=radiogroup], [role=tablist]")) return;
+    if (e.key === "ArrowRight") avancar();
     if (e.key === "ArrowLeft") ir(indice - 1);
   }
 
@@ -74,184 +102,154 @@
   const telaPrincipal = $derived(hardware?.telas.find((t) => t.principal) ?? hardware?.telas[0] ?? null);
   const pecas = $derived.by(() => {
     if (!hardware) return [];
-    const l: { rotulo: string; valor: string; nota?: string; atencao?: boolean }[] = [
-      { rotulo: "Processador", valor: nome(hardware.processador), nota: `${hardware.nucleos_logicos} núcleos lógicos` },
-      { rotulo: "Placa de vídeo", valor: nome(hardware.placa.nome), nota: hardware.placa.driver ? `driver ${hardware.placa.driver}` : "driver não lido" },
+    const l: { rotulo: string; valor: string; atencao?: string }[] = [
+      { rotulo: "Processador", valor: nome(hardware.processador) },
+      { rotulo: "Placa de vídeo", valor: nome(hardware.placa.nome) },
       { rotulo: "Memória", valor: hardware.memoria_gb != null ? `${hardware.memoria_gb} GB` : "não lida" },
     ];
     const t = telaPrincipal;
-    if (t) {
-      const abaixo = t.hz_maximo > t.hz_atual + 1;
+    if (t)
       l.push({
         rotulo: "Monitor",
-        valor: `${t.largura}×${t.altura} · ${t.hz_atual} Hz`,
-        nota: abaixo ? `Ele aguenta ${t.hz_maximo} Hz: eu subo isso na área Tela, e é o ganho que mais se sente.` : "Já está na taxa máxima.",
-        atencao: abaixo,
+        valor: `${t.hz_atual} Hz`,
+        atencao: t.hz_maximo > t.hz_atual + 1 ? `aguenta ${t.hz_maximo} Hz` : undefined,
       });
-    }
     return l;
   });
 
-  // "Como eu trabalho" como uma história: o tempo de cada quadro com trancos (antes), a leitura passando, os picos
-  // achatando (o ajuste) e as duas linhas juntas (a prova). É ilustração, e a tela diz isso: número de verdade só sai
-  // da medição desta máquina.
-  const PONTOS = 48;
-  const PICOS: Record<number, number> = { 5: 30, 6: 52, 13: 26, 19: 44, 20: 18, 27: 38, 33: 22, 34: 48, 41: 30 };
-  const comTrancos = Array.from({ length: PONTOS }, (_, i) => PICOS[i] ?? 104 + Math.sin(i * 1.7) * 7 + Math.cos(i * 0.6) * 5);
-  const liso = Array.from({ length: PONTOS }, (_, i) => 100 + Math.sin(i * 0.5) * 2.2);
-  const caminho = (v: number[]) => v.map((y, i) => `${i ? "L" : "M"}${((i * 640) / (PONTOS - 1)).toFixed(1)} ${y.toFixed(1)}`).join(" ");
-  const ANTES = caminho(comTrancos);
-  const DEPOIS = caminho(liso);
-  const BATIDAS = [
-    { titulo: "Eu meço", texto: "Leio cada quadro do jogo enquanto você joga, sem nada por cima dele." },
-    { titulo: "Eu ajusto", texto: "Só o que rende nesta máquina. Tudo tem desfazer." },
-    { titulo: "Eu provo", texto: "Antes e depois no mesmo jogo. Piorou, eu volto." },
-  ];
-  /** 0 medindo, 1 ajustando, 2 provado. Sem movimento, já começa provado. */
-  let fase = $state(0);
-  $effect(() => {
-    if (passo !== "como") return;
-    fase = parado ? 2 : 0;
-    if (parado) return;
-    const t1 = setTimeout(() => (fase = 1), 2300);
-    const t2 = setTimeout(() => (fase = 2), 3900);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
+  /** O texto do botão de seguir: diz o que acontece, e admite quando o passo foi pulado. */
+  const rotuloDoSeguir = $derived.by(() => {
+    if (modo === "licenca") return licenca?.ativa ? "Fechar" : "Agora não";
+    if (passo === "oi") return "Começar";
+    if (ultimo) return "Ir para o Otimiza";
+    if (!feito[passo]) return passo === "licenca" ? "Continuar sem licença" : "Pular este passo";
+    return "Continuar";
   });
-
 </script>
 
 <svelte:window onkeydown={teclado} />
 
-<div class="veu" class:parado transition:fade={{ duration: dur(260) }}>
-  <div class="aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
-
+<div class="veu" transition:fade={{ duration: dur(200) }}>
   <div
     class="folha"
     role="dialog"
     aria-modal="true"
     aria-label={modo === "licenca" ? "Ativar a licença" : "Boas-vindas ao Otimiza"}
-    in:scale={{ duration: dur(420), start: 0.94, easing: cubicOut }}
   >
     <header class="cima">
-      {#if PASSOS.length > 1}
-        <div class="pontos" aria-label={`Passo ${indice + 1} de ${PASSOS.length}`}>
-          {#each PASSOS as p, i (p)}
-            <button class="ponto-passo" class:feito={i < indice} class:atual={i === indice} aria-label={`Ir para o passo ${i + 1}`} onclick={() => ir(i)}></button>
+      {#if modo === "completa"}
+        <ol class="progresso" aria-label="Progresso da primeira execução">
+          {#each ETAPAS as e, i (e.id)}
+            <li class:atual={i === etapa} class:feito={feito[e.id]} aria-current={i === etapa ? "step" : undefined}>
+              <button class="etapa" onclick={() => ir(PASSOS.indexOf(e.id))}>
+                <span class="barra" aria-hidden="true"></span>
+                <span class="nome-etapa"><span class="numero">{i + 1}</span> {e.nome}{#if feito[e.id]}<span class="so-leitor"> (feito)</span>{/if}</span>
+              </button>
+            </li>
           {/each}
-        </div>
-        {#if !ultimo}<button class="pular" onclick={onfim}>Pular apresentação</button>{/if}
+        </ol>
       {:else}
         <span></span>
-        <button class="fechar" aria-label="Fechar" onclick={onfim}><Icone nome="fechar" tamanho={16} /></button>
       {/if}
+      <button class="fechar" aria-label={ultimo ? "Fechar" : "Fechar e terminar depois"} onclick={onfim}><Icone nome="fechar" tamanho={16} /></button>
     </header>
 
     <div class="palco">
       {#key passo}
-        <section
-          class="passo"
-          in:fly={{ x: 48 * direcao, duration: dur(460), delay: dur(120), easing: cubicOut }}
-          out:fly={{ x: -36 * direcao, duration: dur(220), easing: cubicOut }}
-        >
+        <section class="passo" aria-labelledby="passo-titulo" in:fade={{ duration: dur(220) }}>
           {#if passo === "oi"}
-            <div class="centro">
-              <div class="oti-grande" in:scale={{ duration: dur(700), start: 0.4, delay: dur(200), easing: backOut }}>
-                <Oti tamanho={168} humor="feliz" segueCursor={false} />
+            <div class="abertura">
+              <div class="cena" aria-hidden="true">
+                <span class="cena-oti"><Oti tamanho={112} segueCursor rotulo="" /></span>
+                <span class="cena-brilho"><Brilho tamanho={180} densidade={1.2} /></span>
               </div>
-              <h1 in:fly={{ y: 16, duration: dur(500), delay: dur(500) }}>Oi, eu sou o Oti.</h1>
-              <p class="lead" in:fly={{ y: 16, duration: dur(500), delay: dur(650) }}>
-                Eu cuido do seu PC para o jogo rodar liso, e provo com número tudo o que eu mudo.
-              </p>
+              <div class="abertura-texto">
+                <p class="rotulo">Boas-vindas</p>
+                <h1 id="passo-titulo" tabindex="-1" bind:this={titulo}>Oi, eu sou o Oti.</h1>
+                <p class="lead">Em quatro passos eu deixo o seu PC pronto e provo com número o que mudou: ativar, medir, ajustar e provar.</p>
+                <p class="apoio">Leva uns dez minutos com o seu jogo aberto. Dá para pular qualquer passo e voltar depois.</p>
+                {#if pecas.length}
+                  <dl class="pecas" aria-label="Lido agora neste PC">
+                    {#each pecas as p (p.rotulo)}
+                      <div>
+                        <dt>{p.rotulo}</dt>
+                        <dd>{p.valor}{#if p.atencao}<span class="atencao"><span class="ponto" data-tom="atencao" aria-hidden="true"></span>{p.atencao}</span>{/if}</dd>
+                      </div>
+                    {/each}
+                  </dl>
+                {:else}
+                  <Estado tipo="lendo" linhas={2} titulo="Lendo o hardware deste PC" />
+                {/if}
+                <div class="tema" role="group" aria-label="Tema">
+                  <span class="apoio">Tema</span>
+                  <div class="segmento">
+                    <button aria-pressed={tema === "escuro"} onclick={() => onescolherTema("escuro")}>Escuro</button>
+                    <button aria-pressed={tema === "claro"} onclick={() => onescolherTema("claro")}>Claro</button>
+                  </div>
+                </div>
+              </div>
             </div>
-          {:else if passo === "como"}
-            <h2>Como eu trabalho</h2>
-            <p class="sub">O que você sente como "travando" é isto: alguns quadros demorando muito mais que os outros.</p>
-            <figure class="historia" data-fase={fase} in:fade={{ duration: dur(400), delay: dur(150) }}>
-              <figcaption>
-                <span>Tempo de cada quadro</span>
-                <span class="etiqueta">{fase === 2 ? "antes e depois" : fase === 1 ? "ajustando" : "medindo"}</span>
-                <span class="ilustracao">ilustração</span>
-              </figcaption>
-              <svg viewBox="0 0 640 140" preserveAspectRatio="none" aria-hidden="true">
-                <line class="guia" x1="0" x2="640" y1="100" y2="100" />
-                <path class="fantasma" d={ANTES} />
-                <path class="linha" d={fase === 0 ? ANTES : DEPOIS} />
-                <rect class="leitura" x="0" y="0" width="70" height="140" />
-              </svg>
-              <div class="legenda">
-                <span class="tag antes">com trancos</span>
-                <span class="tag depois">liso</span>
-              </div>
-            </figure>
-            <ol class="batidas">
-              {#each BATIDAS as b, i (b.titulo)}
-                <li class:acesa={fase >= i} class:atual={fase === i}>
-                  <span class="marca">{i + 1}</span>
-                  <strong>{b.titulo}</strong>
-                  <span>{b.texto}</span>
-                </li>
-              {/each}
-            </ol>
-          {:else if passo === "pc"}
-            <h2>Conhecendo o seu PC</h2>
-            <p class="sub">Isto foi lido agora, nesta máquina.</p>
-            {#if pecas.length}
-              <ul class="pecas">
-                {#each pecas as p, i (p.rotulo)}
-                  <li class:atencao={p.atencao} in:fly={{ x: 24, duration: dur(420), delay: dur(200 + i * 160), easing: cubicOut }}>
-                    <span class="rotulo">{p.rotulo}</span>
-                    <span class="valor">{p.valor}</span>
-                    {#if p.nota}<span class="nota">{p.nota}</span>{/if}
-                  </li>
-                {/each}
-              </ul>
-            {:else}
-              <div class="lendo"><span></span><span></span><span></span></div>
-              <p class="sub">Lendo o hardware…</p>
-            {/if}
           {:else if passo === "licenca"}
-            <h2>{licenca?.ativa ? "Sua licença" : "Ative a sua licença"}</h2>
+            <p class="rotulo">Passo 1 de 4</p>
+            <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>{licenca?.ativa ? "Sua licença está ativa" : "Ative a sua licença"}</h2>
             <p class="sub">
               {licenca?.ativa
-                ? "Está tudo certo por aqui."
+                ? "Está tudo certo por aqui. Siga para medir o seu jogo."
                 : "Sem licença você mede e vê o diagnóstico. Com ela, o Otimiza ajusta, liga o Turbo e o Jogar."}
             </p>
-            <div class="caixa-licenca"><AtivarLicenca {licenca} onativada={onlicenca} /></div>
-          {:else if passo === "visual"}
-            <h2>Do seu jeito</h2>
-            <p class="sub">Dá para trocar depois, na barra de cima.</p>
-            <div class="temas">
-              {#each [["claro", "Claro"], ["escuro", "Escuro"]] as [id, rotulo], i (id)}
-                <button
-                  class="tema-op"
-                  class:escolhido={tema === id}
-                  aria-pressed={tema === id}
-                  onclick={() => onescolherTema(id as Tema)}
-                  in:fly={{ y: 20, duration: dur(420), delay: dur(200 + i * 120) }}
-                >
-                  <span class="mini" data-tema={id}><span></span><span></span><span></span></span>
-                  {rotulo}
-                </button>
-              {/each}
-              <button class="tema-op" class:escolhido={semFundo} aria-pressed={semFundo} onclick={onalternarFundo} in:fly={{ y: 20, duration: dur(420), delay: dur(440) }}>
-                <span class="mini sem-fundo"><span></span><span></span><span></span></span>
-                Sem fundo
-              </button>
-            </div>
-            <p class="rodape">"Sem fundo" mostra a sua área de trabalho entre os cards.</p>
+            <div class="caixa"><AtivarLicenca {licenca} onativada={onlicenca} /></div>
+          {:else if passo === "medir"}
+            <p class="rotulo">Passo 2 de 4</p>
+            <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>Meça o jogo antes de mudar qualquer coisa</h2>
+            <p class="sub">
+              Abra o seu jogo e vá para um lugar que você conhece (o mesmo mapa, a mesma rua). Cada rodada mede 30 segundos, sem
+              nada por cima do jogo. Três rodadas dão um resultado confiável.
+            </p>
+            <div class="caixa"><MedicaoGuiada lado="Antes" onmudou={(l) => (lab = l)} /></div>
+          {:else if passo === "ajustar"}
+            <p class="rotulo">Passo 3 de 4</p>
+            <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>O primeiro ajuste</h2>
+            {#if licenca?.ativa}
+              <p class="sub">Escolha o nível e aplique. Cada mudança fica no Histórico com o valor de antes e se desfaz num toque.</p>
+              <div class="caixa ajuste"><OtimizarAgora onterminou={() => (ajustou = true)} /></div>
+            {:else}
+              <Estado tipo="vazio" titulo="O ajuste precisa da licença" fazer="Ative no passo 1 e volte aqui. A medição e a prova continuam livres.">
+                {#snippet acao()}<Botao pequeno onclick={() => ir(PASSOS.indexOf("licenca"))}>Voltar à licença</Botao>{/snippet}
+              </Estado>
+            {/if}
+          {:else if passo === "provar"}
+            <p class="rotulo">Passo 4 de 4</p>
+            <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>Prove o que mudou</h2>
+            <p class="sub">
+              Volte ao mesmo lugar do jogo e meça de novo. Com rodadas dos dois lados, o Otimiza compara com a margem de cada um e só
+              diz "melhorou" quando a diferença passa do acaso.
+            </p>
+            <div class="caixa"><MedicaoGuiada lado="Depois" onmudou={(l) => (lab = l)} /></div>
           {:else}
-            <div class="centro">
-              <div class="oti-grande" in:scale={{ duration: dur(700), start: 0.5, delay: dur(150), easing: backOut }}>
-                <Oti tamanho={140} humor="feliz" segueCursor={false} />
+            <div class="abertura">
+              <div class="cena pequena" aria-hidden="true">
+                <span class="cena-oti"><Oti tamanho={88} humor="feliz" rotulo="" /></span>
+                <span class="cena-brilho"><Brilho tamanho={140} densidade={1.4} semente={11} /></span>
               </div>
-              <h1 in:fly={{ y: 16, duration: dur(500), delay: dur(400) }}>Tudo pronto.</h1>
-              <p class="lead" in:fly={{ y: 16, duration: dur(500), delay: dur(550) }}>
-                Toque em <strong>Jogar</strong> na capa do seu jogo: eu ligo o que rende nele e, quando você fechar, mostro como foi
-                a partida.
-              </p>
+              <div class="abertura-texto">
+                <p class="rotulo">Pronto</p>
+                <h1 id="passo-titulo" tabindex="-1" bind:this={titulo}>{ETAPAS.every((e) => feito[e.id]) ? "Tudo feito." : "Por agora, é isso."}</h1>
+                <ul class="resumo">
+                  {#each ETAPAS as e (e.id)}
+                    <li>
+                      <span class="ponto" data-tom={feito[e.id] ? "ok" : "atencao"} aria-hidden="true"></span>
+                      <span>
+                        <strong>{e.nome}</strong>
+                        {#if e.id === "licenca"}{feito.licenca ? "ativa" : "não ativada: dá para ativar pela barra de cima"}
+                        {:else if e.id === "medir"}{feito.medir ? `${lab?.rodadas_antes} ${lab?.rodadas_antes === 1 ? "rodada" : "rodadas"} antes` : "não medido: a área Prova faz isso quando quiser"}
+                        {:else if e.id === "ajustar"}{feito.ajustar ? "aplicado: está no Histórico" : "não aplicado: o Turbo tem o Otimizar agora"}
+                        {:else}{feito.provar ? `${lab?.rodadas_depois} ${lab?.rodadas_depois === 1 ? "rodada" : "rodadas"} depois: o resultado fica na Prova` : "não provado: meça depois na área Prova"}{/if}
+                      </span>
+                    </li>
+                  {/each}
+                </ul>
+                <p class="apoio">Daqui em diante, toque em <strong>Jogar</strong> na capa do seu jogo: eu ligo o que rende nele e mostro como foi a partida.</p>
+              </div>
             </div>
           {/if}
         </section>
@@ -259,14 +257,8 @@
     </div>
 
     <footer class="baixo">
-      {#if indice > 0}<button class="btn" onclick={() => ir(indice - 1)}>Voltar</button>{:else}<span></span>{/if}
-      <button class="btn primario grande" onclick={avancar}>
-        {#if modo === "licenca"}{licenca?.ativa ? "Fechar" : "Agora não"}
-        {:else if passo === "oi"}Começar
-        {:else if passo === "licenca" && !licenca?.ativa}Continuar sem licença
-        {:else if ultimo}Ir para o Otimiza
-        {:else}Continuar{/if}
-      </button>
+      {#if indice > 0 && modo === "completa"}<Botao onclick={() => ir(indice - 1)}>Voltar</Botao>{:else}<span></span>{/if}
+      <Botao variante={feito[passo] || passo === "oi" || ultimo ? "principal" : "contorno"} onclick={avancar}>{rotuloDoSeguir}</Botao>
     </footer>
   </div>
 </div>
@@ -278,525 +270,244 @@
     z-index: 60;
     display: grid;
     place-items: center;
-    padding: 24px;
-    background: rgb(14 16 26 / 0.38);
-    backdrop-filter: blur(18px) saturate(1.2);
-    overflow: hidden;
-  }
-  /* A luz que anda atrás da folha: três manchas de cor desfocadas, devagar. */
-  .aurora span {
-    position: absolute;
-    width: 46vmax;
-    height: 46vmax;
-    border-radius: 50%;
-    filter: blur(70px);
-    opacity: 0.55;
-    animation: deriva 18s ease-in-out infinite alternate;
-  }
-  .a1 {
-    left: -10vmax;
-    top: -12vmax;
-    background: #7c8cff;
-  }
-  .a2 {
-    right: -14vmax;
-    top: 10vmax;
-    background: #ff9db5;
-    animation-delay: -6s !important;
-  }
-  .a3 {
-    left: 20vmax;
-    bottom: -20vmax;
-    background: #7fe3d0;
-    animation-delay: -12s !important;
-  }
-  @keyframes deriva {
-    to {
-      transform: translate(8vmax, 6vmax) scale(1.15);
-    }
+    padding: var(--e-5);
+    background: var(--veu);
+    backdrop-filter: var(--desfoque);
   }
   .folha {
-    position: relative;
     display: grid;
     grid-template-rows: auto 1fr auto;
-    width: min(760px, 100%);
-    height: min(600px, calc(100vh - 48px));
-    border-radius: 28px;
-    border: 1px solid rgb(255 255 255 / 0.6);
-    background: rgb(250 249 247 / 0.86);
-    box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.6) inset,
-      0 40px 90px rgb(20 20 40 / 0.35);
-    color: #1d1d1f;
+    width: min(780px, 100%);
+    height: min(620px, calc(100vh - 48px));
+    border: 1px solid var(--linha-forte);
+    border-radius: var(--raio-4);
+    background: var(--superficie);
+    box-shadow: var(--fio), var(--sombra-3);
+    color: var(--tinta);
     overflow: hidden;
-  }
-  :global(:root[data-tema="noite"]) .folha {
-    background: rgb(32 32 36 / 0.9);
-    border-color: rgb(255 255 255 / 0.12);
-    color: #f5f5f7;
   }
   .cima {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 24px 0;
+    gap: var(--e-4);
+    padding: var(--e-4) var(--e-4) 0 var(--e-6);
   }
-  .pontos {
-    display: flex;
-    gap: 6px;
-  }
-  .ponto-passo {
-    width: 8px;
-    height: 8px;
+  /* O progresso: quatro etapas com nome, cada uma com o seu traço. Feita = traço cheio; a de agora = texto cheio. */
+  .progresso {
+    flex: 1;
+    list-style: none;
+    margin: 0;
     padding: 0;
-    border: 0;
-    border-radius: 4px;
-    background: currentColor;
-    opacity: 0.18;
-    cursor: pointer;
-    transition:
-      width 320ms cubic-bezier(0.3, 1.4, 0.5, 1),
-      opacity 200ms;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--e-2);
+    max-width: 520px;
   }
-  .ponto-passo.feito {
-    opacity: 0.45;
-  }
-  .ponto-passo.atual {
-    width: 26px;
-    opacity: 0.9;
-  }
-  .pular,
-  .fechar {
+  .etapa {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 0;
     border: 0;
     background: none;
-    color: inherit;
-    opacity: 0.6;
-    font: inherit;
-    font-size: 13px;
+    color: var(--tinta-3);
+    text-align: left;
     cursor: pointer;
   }
-  .pular:hover,
+  .barra {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--superficie-3);
+    transition: background var(--mov-medio) ease;
+  }
+  .nome-etapa {
+    font-size: var(--t-apoio);
+    font-weight: 500;
+  }
+  .nome-etapa .numero {
+    letter-spacing: 0;
+  }
+  .feito .barra {
+    background: var(--tinta-3);
+  }
+  .atual .barra {
+    background: var(--tinta);
+  }
+  .atual .etapa,
+  .feito .etapa {
+    color: var(--tinta);
+  }
+  .fechar {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--tinta-3);
+    cursor: pointer;
+  }
   .fechar:hover {
-    opacity: 1;
+    background: var(--acao-suave);
+    color: var(--tinta);
   }
   .palco {
-    position: relative;
-    display: grid;
-    overflow: hidden;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--e-5) var(--e-6) var(--e-4);
   }
   .passo {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 18px 40px 8px;
-    overflow-y: auto;
-  }
-  .centro {
-    margin: auto;
     display: grid;
-    justify-items: center;
-    gap: 12px;
-    text-align: center;
-    max-width: 460px;
+    gap: var(--e-3);
+    align-content: start;
   }
-  .oti-grande {
-    animation: flutuar 4.5s ease-in-out infinite;
-  }
-  @keyframes flutuar {
-    50% {
-      transform: translateY(-8px);
-    }
+  h1,
+  h2 {
+    font-family: var(--fonte-titulo);
+    font-weight: 700;
+    letter-spacing: var(--rastreio-titulo);
+    line-height: 1.08;
   }
   h1 {
-    margin: 8px 0 0;
-    font-family: var(--fonte-titulo);
-    font-size: 28px;
-    font-weight: 650;
-    letter-spacing: -0.02em;
+    font-size: var(--t-destaque);
   }
   h2 {
-    margin: 0;
-    font-family: var(--fonte-titulo);
-    font-size: 28px;
-    font-weight: 650;
-    letter-spacing: -0.015em;
+    font-size: var(--t-titulo-area);
+  }
+  h1:focus,
+  h2:focus {
+    outline: none;
+  }
+  .sub {
+    max-width: 62ch;
+    color: var(--tinta-2);
+    line-height: 1.5;
   }
   .lead {
-    margin: 0;
-    font-size: 16px;
-    line-height: 1.5;
-    opacity: 0.78;
+    max-width: 46ch;
+    font-size: var(--t-subtitulo);
+    line-height: 1.45;
   }
-  .sub,
-  .rodape {
-    margin: 0;
-    font-size: 13px;
-    opacity: 0.66;
+  .caixa {
+    margin-top: var(--e-2);
   }
-  .rodape {
-    margin-top: auto;
-    padding-top: 6px;
+  .caixa.ajuste :global(.secao) {
+    padding-top: 0;
+    border-top: 0;
   }
-  .historia {
-    margin: 10px 0 0;
-    padding: 16px 18px 12px;
-    border-radius: 20px;
-    background: rgb(255 255 255 / 0.62);
-    border: 1px solid rgb(0 0 0 / 0.06);
+  .caixa.ajuste :global(.secao > h2) {
+    display: none;
   }
-  :global(:root[data-tema="noite"]) .historia {
-    background: rgb(255 255 255 / 0.05);
-    border-color: rgb(255 255 255 / 0.1);
-  }
-  .historia figcaption {
-    display: flex;
+  /* A abertura e o fim: a cena da marca à esquerda (o Oti olhando o brilho), o texto à direita. */
+  .abertura {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: var(--e-6);
     align-items: center;
-    gap: 10px;
-    font-size: 12px;
+    min-height: 100%;
   }
-  .historia figcaption > span:first-child {
-    opacity: 0.6;
+  .abertura-texto {
+    display: grid;
+    gap: var(--e-3);
+    justify-items: start;
   }
-  .etiqueta {
-    padding: 2px 9px;
-    border-radius: 999px;
-    background: rgb(0 0 0 / 0.07);
-    font-size: 12px;
-    font-weight: 600;
+  .cena {
+    position: relative;
+    width: 220px;
+    height: 220px;
   }
-  :global(:root[data-tema="noite"]) .etiqueta {
-    background: rgb(255 255 255 / 0.12);
+  .cena-oti {
+    position: absolute;
+    left: 8px;
+    bottom: 24px;
   }
-  .ilustracao {
-    margin-left: auto;
-    padding: 1px 8px;
-    border: 1px dashed currentColor;
-    border-radius: 999px;
-    font-size: 12px;
-    opacity: 0.5;
+  .cena-brilho {
+    position: absolute;
+    right: -24px;
+    top: -6px;
   }
-  .historia svg {
-    display: block;
+  .cena.pequena .cena-oti {
+    left: 24px;
+    bottom: 40px;
+  }
+  .pecas {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--e-2) var(--e-5);
     width: 100%;
-    height: 150px;
-    margin-top: 6px;
-    overflow: visible;
+    margin: var(--e-2) 0 0;
+    padding: var(--e-3) 0 0;
+    border-top: 1px solid var(--linha);
   }
-  .guia {
-    stroke: currentColor;
-    stroke-opacity: 0.12;
-    stroke-dasharray: 4 6;
+  .pecas dt {
+    color: var(--tinta-2);
+    font-size: var(--t-apoio);
   }
-  .linha,
-  .fantasma {
-    fill: none;
-    stroke-width: 3;
-    stroke-linejoin: round;
-    stroke-linecap: round;
-    vector-effect: non-scaling-stroke;
-  }
-  /* Âmbar com os picos enquanto mede; verde e liso depois do ajuste. A forma muda pelo próprio caminho (`d`). */
-  .linha {
-    stroke: var(--laranja, #c2730f);
-    stroke-dasharray: 2400;
-    stroke-dashoffset: 2400;
-    animation: desenhar 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    transition:
-      d 1.1s cubic-bezier(0.5, 0, 0.2, 1),
-      stroke 0.8s ease;
-  }
-  [data-fase="1"] .linha,
-  [data-fase="2"] .linha {
-    stroke: var(--verde, #34c759);
-  }
-  .fantasma {
-    stroke: var(--laranja, #c2730f);
-    opacity: 0;
-    transition: opacity 0.6s ease;
-  }
-  [data-fase="2"] .fantasma {
-    opacity: 0.3;
-  }
-  .leitura {
-    fill: currentColor;
-    opacity: 0.07;
-    animation: varrer 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  @keyframes desenhar {
-    to {
-      stroke-dashoffset: 0;
-    }
-  }
-  @keyframes varrer {
-    from {
-      transform: translateX(-70px);
-    }
-    90% {
-      opacity: 0.07;
-    }
-    to {
-      transform: translateX(640px);
-      opacity: 0;
-    }
-  }
-  .legenda {
+  .pecas dd {
     display: flex;
-    gap: 14px;
-    margin-top: 6px;
-    font-size: 12px;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--e-2);
+    margin: 0;
+    font-size: var(--t-linha);
+    font-weight: 500;
   }
-  .tag {
+  .atencao {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    opacity: 0.35;
-    transition: opacity 0.5s ease;
+    color: var(--tinta-2);
+    font-size: var(--t-apoio);
+    font-weight: 400;
   }
-  .tag::before {
-    content: "";
-    width: 14px;
-    height: 3px;
-    border-radius: 2px;
-  }
-  .tag.antes::before {
-    background: var(--laranja, #c2730f);
-  }
-  .tag.depois::before {
-    background: var(--verde, #34c759);
-  }
-  [data-fase="0"] .tag.antes,
-  [data-fase="1"] .tag.depois,
-  [data-fase="2"] .tag {
-    opacity: 0.85;
-  }
-  .batidas {
-    list-style: none;
-    margin: 16px 0 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-  }
-  .batidas li {
-    display: grid;
-    align-content: start;
-    gap: 4px;
-    padding-top: 12px;
-    border-top: 2px solid rgb(127 127 127 / 0.2);
-    opacity: 0.4;
-    transition:
-      opacity 0.5s ease,
-      border-color 0.5s ease;
-  }
-  .batidas li.acesa {
-    opacity: 1;
-  }
-  .batidas li.atual {
-    border-top-color: currentColor;
-  }
-  .marca {
-    font-size: 12px;
-    font-weight: 600;
-    opacity: 0.55;
-    font-variant-numeric: tabular-nums;
-  }
-  .batidas strong {
-    font-size: 15px;
-  }
-  .batidas li > span:last-child {
-    font-size: 12px;
-    line-height: 1.45;
-    opacity: 0.72;
-  }
-  .parado .linha,
-  .parado .leitura {
-    animation: none;
-    stroke-dashoffset: 0;
-    transition: none;
-  }
-  .parado .leitura {
-    opacity: 0;
-  }
-  .pecas {
-    list-style: none;
-    margin: 10px 0 0;
-    padding: 0;
-    display: grid;
-    gap: 8px;
-  }
-  .pecas li {
-    display: grid;
-    grid-template-columns: 130px 1fr;
-    column-gap: 16px;
-    row-gap: 2px;
-    padding: 12px 16px;
-    border-radius: 16px;
-    background: rgb(255 255 255 / 0.62);
-    border: 1px solid rgb(0 0 0 / 0.06);
-  }
-  /* No escuro a ficha era branca com letra branca (ilegível): vira o mesmo vidro escuro da caixa da licença. */
-  :global(:root[data-tema="noite"]) .pecas li {
-    background: rgb(255 255 255 / 0.05);
-    border-color: rgb(255 255 255 / 0.1);
-  }
-  .pecas li.atencao {
-    border-color: color-mix(in srgb, var(--laranja, #c2730f) 45%, transparent);
-  }
-  .rotulo {
-    font-size: 12px;
-    opacity: 0.6;
-    align-self: center;
-  }
-  .valor {
-    font-weight: 600;
-    font-size: 15px;
-  }
-  .nota {
-    grid-column: 2;
-    font-size: 12px;
-    opacity: 0.68;
-  }
-  .atencao .nota {
-    color: var(--laranja, #c2730f);
-    opacity: 1;
-  }
-  .lendo {
+  .tema {
     display: flex;
-    gap: 8px;
-    margin: 40px auto 0;
+    align-items: center;
+    gap: var(--e-3);
   }
-  .lendo span {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: 0.3;
-    animation: piscar 1.2s ease-in-out infinite;
-  }
-  .lendo span:nth-child(2) {
-    animation-delay: 0.2s;
-  }
-  .lendo span:nth-child(3) {
-    animation-delay: 0.4s;
-  }
-  @keyframes piscar {
-    50% {
-      opacity: 0.9;
-      transform: translateY(-4px);
-    }
-  }
-  .caixa-licenca {
-    margin-top: 8px;
-    padding: 18px;
-    border-radius: 20px;
-    background: rgb(255 255 255 / 0.5);
-    border: 1px solid rgb(0 0 0 / 0.06);
-    --texto: currentColor;
-  }
-  :global(:root[data-tema="noite"]) .caixa-licenca {
-    background: rgb(255 255 255 / 0.05);
-    border-color: rgb(255 255 255 / 0.1);
-    --superficie-2: rgb(255 255 255 / 0.08);
-    --linha: rgb(255 255 255 / 0.1);
-    --linha-forte: rgb(255 255 255 / 0.18);
-  }
-  .temas {
+  .resumo {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-top: 12px;
+    gap: var(--e-2);
+    font-size: var(--t-linha);
   }
-  .tema-op {
-    display: grid;
-    gap: 10px;
-    justify-items: center;
-    padding: 14px;
-    border-radius: 20px;
-    border: 2px solid transparent;
-    background: rgb(255 255 255 / 0.62);
-    color: inherit;
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    transition:
-      border-color 200ms,
-      transform var(--mov-medio) var(--curva-mola);
+  .resumo li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--e-2);
   }
-  .tema-op:hover {
-    transform: translateY(-2px);
-  }
-  .tema-op.escolhido {
-    border-color: currentColor;
-    box-shadow: 0 6px 18px rgb(0 0 0 / 0.12);
-  }
-  /* Miniatura da casca: céu e três cards. */
-  .mini {
-    position: relative;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px;
-    width: 100%;
-    aspect-ratio: 16 / 10;
-    padding: 10px;
-    box-sizing: border-box;
-    border-radius: 12px;
-    background: linear-gradient(160deg, #cfc7bd, #e9c9c6);
-  }
-  .mini span {
-    border-radius: 5px;
-    background: rgb(255 255 255 / 0.7);
-  }
-  .mini span:first-child {
-    grid-column: span 2;
-  }
-  .mini[data-tema="escuro"] {
-    background: linear-gradient(160deg, #3a3530, #4b3a3c);
-  }
-  .mini[data-tema="escuro"] span {
-    background: rgb(40 40 44 / 0.85);
-  }
-  .mini.sem-fundo {
-    background:
-      repeating-conic-gradient(rgb(0 0 0 / 0.06) 0 25%, transparent 0 50%) 0 0 / 12px 12px,
-      linear-gradient(135deg, #1e3a8a, #0ea5e9 55%, #f59e0b);
-  }
-  .mini.sem-fundo span {
-    background: rgb(250 249 247 / 0.92);
+  .resumo strong {
+    margin-right: 4px;
   }
   .baixo {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 24px 22px;
+    padding: var(--e-4) var(--e-6) var(--e-5);
+    border-top: 1px solid var(--linha);
   }
-  /* Os botões neutros da folha: as áreas trocam os tokens de cor, e aqui eles não valem. */
-  .baixo .btn:not(.primario) {
-    background: rgb(255 255 255 / 0.7);
-    border: 1px solid rgb(0 0 0 / 0.1);
-    color: inherit;
+  .baixo :global(.btn) {
+    min-height: 40px;
+    padding: 0 var(--e-5);
   }
-  :global(:root[data-tema="noite"]) .baixo .btn:not(.primario) {
-    background: rgb(255 255 255 / 0.08);
-    border-color: rgb(255 255 255 / 0.14);
-  }
-  .btn.grande {
-    min-width: 200px;
-    height: 44px;
-    font-size: 15px;
-  }
-  .parado .aurora span,
-  .parado .oti-grande,
-  .parado .lendo span {
-    animation: none;
+  .so-leitor {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   @media (max-width: 760px) {
-    .batidas,
-    .temas {
+    .abertura {
       grid-template-columns: 1fr;
     }
-    .passo {
-      padding: 14px 22px 8px;
+    .cena {
+      height: 150px;
     }
   }
 </style>

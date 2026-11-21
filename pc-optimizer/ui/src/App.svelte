@@ -111,8 +111,6 @@
   const fundoPapel = $derived(opcaoDo(fundo).tipo === "cena" || opcaoDo(fundo).tipo === "foto");
   const semFundo = $derived(fundo === "area");
   let menuDoFundo = $state(false);
-  /** O fundo que volta quando a apresentação desliga a "área de trabalho". */
-  let fundoAntes: Fundo = "limpo";
   /** A apresentação aberta: inteira (primeira vez, ou pedida nos Ajustes) ou só o passo da licença (botão da barra). */
   let boasVindas = $state<ModoDasBoasVindas | null>(null);
   let licenca = $state<EstadoDaLicenca | null>(null);
@@ -299,7 +297,6 @@
   }
 
   function escolherFundo(f: Fundo) {
-    if (f !== "area") fundoAntes = f;
     fundo = f;
     // As fotos pedem o ajuste à mão: o menu fica aberto nelas. Os outros fecham na hora.
     if (opcaoDo(f).tipo !== "foto") menuDoFundo = false;
@@ -329,11 +326,6 @@
     } catch {
       // Vale até fechar o app.
     }
-  }
-
-  /** A apresentação só liga e desliga a área de trabalho. */
-  function alternarFundo() {
-    escolherFundo(fundo === "area" ? fundoAntes : "area");
   }
 
   function abrirBoasVindas(modo: ModoDasBoasVindas) {
@@ -985,9 +977,7 @@
       {hardware}
       {licenca}
       {tema}
-      {semFundo}
       onescolherTema={escolherTema}
-      onalternarFundo={alternarFundo}
       onlicenca={(l) => (licenca = l)}
       onfim={fecharBoasVindas}
     />

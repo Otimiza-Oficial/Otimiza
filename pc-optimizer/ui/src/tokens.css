@@ -341,6 +341,7 @@ h2 {
   color: var(--tinta);
 }
 .segmento > button[aria-checked="true"],
+.segmento > button[aria-pressed="true"],
 .segmento > button[aria-selected="true"] {
   background: var(--segmento-ativo);
   color: var(--tinta);

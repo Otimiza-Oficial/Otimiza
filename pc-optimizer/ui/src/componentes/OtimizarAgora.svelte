@@ -21,6 +21,9 @@
 
   const CHAVE = "otimiza.nivel";
 
+  /** Quem embute (a primeira execução) sabe quando a rodada terminou bem, para marcar o passo como feito. */
+  let { onterminou }: { onterminou?: () => void } = $props();
+
   let niveis = $state<Nivel[]>([]);
   let escolhido = $state(ler());
   let rodando = $state(false);
@@ -106,6 +109,7 @@
             " Agora jogue uns minutos e veja na Prova se melhorou. Tudo se desfaz no Histórico."
           : "Nada a mudar: o que é compatível com este PC já estava certo.",
       };
+      onterminou?.();
     } catch (e) {
       fim = {
         tom: "erro",

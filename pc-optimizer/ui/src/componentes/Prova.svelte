@@ -107,7 +107,7 @@
         {@const vez = (lado === "Antes" && passo === 1) || (lado === "Depois" && passo >= 2)}
         <div class="lado" class:vez>
           <span class="rotulo">{lado}</span>
-          <span class="numero grande">{feitas}<small> {Number(feitas) === 1 ? "rodada" : "rodadas"}</small></span>
+          <span class="numero grande">{feitas}<small>{Number(feitas) === 1 ? "rodada" : "rodadas"}</small></span>
           <span class="apoio">{Number(falta) > 0 ? `Faltam ${falta} para comparar` : "Rodadas suficientes"}</span>
           <Botao
             variante={vez ? "principal" : "contorno"}
@@ -249,7 +249,6 @@
     padding: var(--e-4);
     border: 1px solid var(--linha);
     border-radius: var(--raio-3);
-    background: var(--superficie-2);
   }
   .lado.vez {
     border-color: var(--linha-forte);
@@ -260,6 +259,7 @@
     letter-spacing: var(--rastreio-titulo);
   }
   .grande small {
+    margin-left: 6px;
     color: var(--tinta-2);
     font-size: var(--t-linha);
     font-weight: 500;

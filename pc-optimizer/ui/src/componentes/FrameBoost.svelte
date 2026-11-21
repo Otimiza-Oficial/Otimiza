@@ -347,7 +347,7 @@
               </div>
             {/if}
             {#if linha}<p class="apoio detalhe">{linha}</p>{/if}
-            {#if prova}<p class="apoio detalhe">{prova}</p>{/if}
+            {#if prova && !leitura}<p class="apoio detalhe">{prova}</p>{/if}
           {:else if estimativa}
             {@const de = n(estimativa.minimo)}
             {@const ate = n(estimativa.maximo)}
