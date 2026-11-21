@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   // A área Cores (trazida da 3.3, `src/v33/app.ts`, `telaCores`): saturação (vibração digital na NVIDIA), brilho,
   // contraste, gama e matiz do monitor, pelo driver da placa ou pela gama do Windows, com perfil por jogo. A cena é
   // processada pixel a pixel, antes e depois com o divisor em cima da própria imagem. "Voltar ao normal" devolve o
@@ -85,7 +86,7 @@
       await salvar();
       recado = { texto: `Aplicado pelo ${CAMINHO[c]}.${soComJogo ? " Volta ao normal quando o jogo fechar." : " Fica até você voltar ao normal."}`, tom: "ok" };
     } catch (e) {
-      recado = { texto: String(e), tom: "atencao" };
+      recado = { texto: explicarErro(e), tom: "atencao" };
     }
   }
 
@@ -113,7 +114,7 @@
       if (jogo) await ferramentas.coresSalvarPerfil(jogo.id, null, soComJogo).catch(() => {});
       recado = { texto: "As cores voltaram ao que eram antes do Otimiza.", tom: "ok" };
     } catch (e) {
-      recado = { texto: String(e), tom: "atencao" };
+      recado = { texto: explicarErro(e), tom: "atencao" };
     }
   }
 

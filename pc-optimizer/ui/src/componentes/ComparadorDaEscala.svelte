@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O comparador da escala (trazido da interface 3.3/3.6, `comparadorDaEscala`): o mesmo pedaço do centro do jogo,
@@ -29,7 +30,7 @@
     try {
       await commands.escalaPedirComparacao();
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
       return;
     }
     etapa = "esperando";

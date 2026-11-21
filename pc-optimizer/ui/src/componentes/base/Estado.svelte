@@ -45,7 +45,7 @@
   const FAZER_PADRAO = {
     lendo: null,
     vazio: null,
-    erro: "Tente de novo em alguns segundos. Se repetir, mande o arquivo de registro (Ajustes › Suporte).",
+    erro: "Tente de novo em alguns segundos. Se repetir, gere o relatório em Ajustes › Versão e suporte e mande ao suporte.",
     "sem-admin": "Feche o Otimiza e abra de novo com o botão direito › Executar como administrador.",
   } as const;
 </script>

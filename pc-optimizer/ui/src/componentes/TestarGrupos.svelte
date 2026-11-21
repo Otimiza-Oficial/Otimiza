@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./base/Esqueleto.svelte";
@@ -47,7 +48,7 @@
       grupos = await como<Experimento[]>(commands.protocoloDeGrupos(null));
     } catch (e) {
       // A recusa explica o que fazer: é a primeira instrução do protocolo.
-      recusa = String(e);
+      recusa = explicarErro(e);
     }
   });
 

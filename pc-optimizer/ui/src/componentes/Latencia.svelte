@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // A área Latência: o Caçador de DPC. Mede por alguns segundos qual driver segura o processador (o que o LatencyMon
@@ -35,7 +36,7 @@
     try {
       mouse = await ponte.medirMouse(SEGUNDOS_DO_MOUSE);
     } catch (e) {
-      erroMouse = String(e);
+      erroMouse = explicarErro(e);
     } finally {
       medindoMouse = false;
     }
@@ -71,7 +72,7 @@
     try {
       resultado = await ponte.capturarDpc(segundos);
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       clearInterval(relogio);
       medindo = false;
@@ -89,7 +90,7 @@
       const msg = await ponte.abrirComoAdministrador();
       if (msg) erro = msg;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 

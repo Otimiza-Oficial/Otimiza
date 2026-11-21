@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O driver da placa de vídeo (trazido da interface antiga: `src/main.ts`, ajustes da NVIDIA, perfis e limitador, e
@@ -108,7 +109,7 @@
       }
     } catch (e) {
       linhas = [];
-      nota = String(e);
+      nota = explicarErro(e);
     }
   }
 
@@ -121,7 +122,7 @@
       const r = (await f()) as { message?: string } | undefined;
       if (r?.message) recado = r.message;
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       ocupado = false;
       await carregar();
@@ -137,7 +138,7 @@
       try {
         if (noTauri) await como<Resultado>(commands.aplicarAjusteNvidia(id));
       } catch (e) {
-        recado = String(e);
+        recado = explicarErro(e);
         ocupado = false;
         await carregar();
         return;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./base/Esqueleto.svelte";
@@ -83,7 +84,7 @@
       processos = noTauri ? await como<Processo[]>(commands.topProcesses()) : DEMO_PROCESSOS;
       erroDosProcessos = null;
     } catch (e) {
-      erroDosProcessos = String(e);
+      erroDosProcessos = explicarErro(e);
     } finally {
       lendo = false;
     }
@@ -103,7 +104,7 @@
     try {
       gargalo = noTauri ? await como<Gargalo>(commands.analyzeBottleneck(10)) : await demoGargalo();
     } catch (e) {
-      erroDoGargalo = String(e);
+      erroDoGargalo = explicarErro(e);
     } finally {
       medindo = false;
     }

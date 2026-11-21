@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
@@ -76,7 +77,7 @@
       recado = r.message;
       await carregar();
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       limpando = null;
     }

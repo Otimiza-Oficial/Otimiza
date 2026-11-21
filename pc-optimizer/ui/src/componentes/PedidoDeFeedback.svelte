@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O pedido de feedback (trazido da interface 3.3/3.6, `src/v33/app.ts`, "feedback"): depois de 10 minutos de uso as
@@ -105,7 +106,7 @@
         setTimeout(() => (folhaAberta = false), 1400);
       } else recado = { tom: "atencao", texto: s.aviso ?? "Ainda não achamos a sua mensagem. Tente de novo em um minuto." };
     } catch (e) {
-      recado = { tom: "atencao", texto: String(e) };
+      recado = { tom: "atencao", texto: explicarErro(e) };
     } finally {
       conferindo = false;
     }

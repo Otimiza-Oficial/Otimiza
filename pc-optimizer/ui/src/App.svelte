@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "./lib/erros";
   // A casca da interface nova, no formato da referência do dono (painel de vidro estilo visionOS): barra de cima com
   // boas-vindas, a busca do Oti e Claro/Escuro; trilho de ícones à esquerda; uma grade de blocos de vidro no meio; abas
   // embaixo. Cada bloco mostra um dado lido deste PC ou liga uma coisa que existe de verdade; o que ainda não migrou
@@ -507,7 +508,7 @@
       });
     } catch (e) {
       reacao = null;
-      dizer({ texto: String(e), humor: "preocupado", acoes: [] });
+      dizer({ texto: explicarErro(e), humor: "preocupado", acoes: [] });
     }
   }
 

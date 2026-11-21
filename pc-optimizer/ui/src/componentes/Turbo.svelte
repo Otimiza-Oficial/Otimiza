@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import Esqueleto from "./base/Esqueleto.svelte";
   // A área Turbo: mede o jogo aberto por 10 s, monta a receita pelo gargalo (escala, Frame Boost, energia), liga e
   // lembra. A prova A-B (uns 5 minutos) é o que diz se ganhou de verdade; o antes × depois de uma sessão NÃO é prova e
@@ -53,7 +54,7 @@
       painel = await ponte.turbo();
       erro = null;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -102,7 +103,7 @@
       painel = await ponte.ligarTurbo(lembrado);
       if (painel.provando) vigiar();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       clearInterval(relogio);
       ocupado = "";
@@ -115,7 +116,7 @@
     try {
       painel = await ponte.desligarTurbo();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = "";
     }
@@ -129,7 +130,7 @@
     try {
       await ponte.provarTurbo();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       clearInterval(relogio);
       ocupado = "";
@@ -141,7 +142,7 @@
     try {
       painel = await ponte.atrasoDoTurbo(menor);
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -149,7 +150,7 @@
     try {
       painel = await ponte.esquecerTurbo();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -159,7 +160,7 @@
       copiado = true;
       setTimeout(() => (copiado = false), 2500);
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 

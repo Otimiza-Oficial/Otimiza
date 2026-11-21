@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
@@ -171,7 +172,7 @@
     try {
       recado = noTauri ? `Salva em ${await como<string>(commands.salvarFichaDaBios(texto()))}` : "Salva em Documentos\\ficha-da-bios.txt";
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     }
   }
 
@@ -184,7 +185,7 @@
       recado = "Reiniciando na BIOS…";
     } catch (e) {
       reiniciando = false;
-      recado = String(e);
+      recado = explicarErro(e);
     }
   }
 </script>

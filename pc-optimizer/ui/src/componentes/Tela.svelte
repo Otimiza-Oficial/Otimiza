@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import Esqueleto from "./base/Esqueleto.svelte";
   // A área Tela: o Hz que cada monitor aguenta e o que está usando. A troca é em dois tempos, como o Windows faz:
   // aplica sem gravar, pergunta "Manter?" e, sem resposta no prazo, o Rust volta sozinho. A tela só conta o prazo;
@@ -26,7 +27,7 @@
       for (const t of telas) if (t.atual) aoMudarHz?.(t.dispositivo, t.atual.hz);
       erro = null;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -64,7 +65,7 @@
       troca = await ponte.trocarHz(t.dispositivo, hz);
       contar(troca);
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       ocupado = null;
     }
@@ -82,7 +83,7 @@
           ? { tipo: "ok", texto: `Pronto: ${fim.hz} Hz. Para voltar, use o Histórico.` }
           : { tipo: "atencao", texto: `A tela voltou para ${fim.hz} Hz.` };
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       await carregar();
     }
@@ -97,7 +98,7 @@
       const fim = await ponte.voltarTroca(t.token);
       aviso = { tipo: "ok", texto: `Voltou para ${fim.hz} Hz.` };
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       await carregar();
     }

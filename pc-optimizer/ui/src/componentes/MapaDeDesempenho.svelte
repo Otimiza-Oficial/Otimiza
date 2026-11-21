@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O mapa de desempenho (trazido da interface 3.6, `src/mapa.ts`): 40 s dos contadores do Windows (processador,
@@ -165,7 +166,7 @@
       relogio = setInterval(() => (pct = Math.min(100, ((Date.now() - inicio) / 1000 / SEGUNDOS) * 100)), 400);
       d = noTauri ? await como<Diagnostico>(commands.diagnosticoAoVivo(SEGUNDOS)) : await demo();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       clearInterval(relogio);
       etapa = "parado";

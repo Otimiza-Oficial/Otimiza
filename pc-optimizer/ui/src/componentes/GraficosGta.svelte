@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // A configuração gráfica do GTA V / FiveM (`settings.xml`), trazida de `src/main.ts`: o que custa caro no arquivo
@@ -37,7 +38,7 @@
         : [["MSAA", "4", "0", "o anti-serrilhado mais caro do jogo"], ["Grass", "3", "1", "grama alta pesa nas áreas abertas"]];
     } catch (e) {
       previa = null;
-      recado = String(e);
+      recado = explicarErro(e);
     }
   }
 
@@ -49,7 +50,7 @@
       recado = r.length ? `Aplicado: ${r.join("; ")}. Vale ao abrir o jogo de novo; desfaz pelo Histórico.` : "Nada a mudar: o arquivo já estava assim.";
       previa = null;
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       ocupado = false;
     }

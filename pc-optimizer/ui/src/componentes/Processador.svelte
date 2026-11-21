@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./base/Esqueleto.svelte";
@@ -65,7 +66,7 @@
       if (typeof r === "string") recado = r;
       await carregar();
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       ocupado = null;
     }

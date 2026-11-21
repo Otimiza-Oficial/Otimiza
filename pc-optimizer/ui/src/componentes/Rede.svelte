@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { notaDaFila, tomDaNota } from "../lib/fila";
   import Esqueleto from "./base/Esqueleto.svelte";
   // A área Rede: por onde o PC sai (cabo, Wi-Fi, VPN), a rota salto a salto com o dono de cada trecho, e a varredura
@@ -76,7 +77,7 @@
     try {
       servidores = await ponte.servidoresFivem(listaDeServidores.split(/\r?\n/));
     } catch (e) {
-      erroServidores = String(e);
+      erroServidores = explicarErro(e);
     } finally {
       medindoServidores = false;
     }
@@ -90,7 +91,7 @@
     try {
       prioridade = await ponte.definirPrioridadeNaRede(!prioridade);
     } catch (e) {
-      erroPrioridade = String(e);
+      erroPrioridade = explicarErro(e);
     }
   }
 
@@ -104,7 +105,7 @@
     try {
       quemUsa = await ponte.quemUsaARede();
     } catch (e) {
-      erroQuemUsa = String(e);
+      erroQuemUsa = explicarErro(e);
     } finally {
       medindoQuemUsa = false;
     }
@@ -122,7 +123,7 @@
     try {
       provaDaPlaca = await ponte.provarPlaca();
     } catch (e) {
-      erroDaPlaca = String(e);
+      erroDaPlaca = explicarErro(e);
     } finally {
       provandoPlaca = false;
     }
@@ -163,9 +164,9 @@
   const saltoDoProblema = $derived(rota?.veredito.tipo === "problema" ? rota.veredito.salto : null);
 
   onMount(() => {
-    ponte.wifi().then((w) => (wifi = w)).catch((e) => (erroWifi = String(e)));
-    ponte.varredura().then((v) => (varredura = v)).catch((e) => (erroVarredura = String(e)));
-    ponte.banda().then((b) => (banda = b)).catch((e) => (erroBanda = String(e)));
+    ponte.wifi().then((w) => (wifi = w)).catch((e) => (erroWifi = explicarErro(e)));
+    ponte.varredura().then((v) => (varredura = v)).catch((e) => (erroVarredura = explicarErro(e)));
+    ponte.banda().then((b) => (banda = b)).catch((e) => (erroBanda = explicarErro(e)));
     carregarHistorico();
     ponte.prioridadeNaRede().then((v) => (prioridade = v)).catch(() => (prioridade = false));
   });
@@ -214,7 +215,7 @@
       banda = await ponte.banda();
       respostaBanda = explicar(r, banda.agindo_em !== null);
     } catch (e) {
-      erroBanda = String(e);
+      erroBanda = explicarErro(e);
     } finally {
       mudandoBanda = false;
     }
@@ -225,7 +226,7 @@
       const msg = await ponte.abrirComoAdministrador();
       if (msg) erroBanda = msg;
     } catch (e) {
-      erroBanda = String(e);
+      erroBanda = explicarErro(e);
     }
   }
 
@@ -240,7 +241,7 @@
     try {
       rota = qual === "jogo" ? await ponte.rotaDoJogo() : await ponte.rota(destino);
     } catch (e) {
-      erroRota = String(e);
+      erroRota = explicarErro(e);
     } finally {
       medindo = null;
       carregarHistorico();
@@ -253,7 +254,7 @@
     try {
       fila = await ponte.fila();
     } catch (e) {
-      erroFila = String(e);
+      erroFila = explicarErro(e);
     } finally {
       medindoFila = false;
     }
@@ -269,7 +270,7 @@
     try {
       varredura = await ponte.definirVarredura(!varredura.ligado);
     } catch (e) {
-      erroVarredura = String(e);
+      erroVarredura = explicarErro(e);
     } finally {
       mudandoVarredura = false;
     }

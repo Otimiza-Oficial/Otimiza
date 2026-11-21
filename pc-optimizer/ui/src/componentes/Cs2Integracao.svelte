@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import Cartao from "./base/Cartao.svelte";
   import Esqueleto from "./base/Esqueleto.svelte";
   // A integração oficial do CS2 (Game State Integration) no destaque do jogo: ligar escreve um arquivo na pasta `cfg`
@@ -51,7 +52,7 @@
       painel = ligar ? await ponte.cs2Ligar() : await ponte.cs2Desligar();
       recemLigado = ligar;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       mudando = false;
     }

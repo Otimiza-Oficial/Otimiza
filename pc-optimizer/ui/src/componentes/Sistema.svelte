@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import Esqueleto from "./base/Esqueleto.svelte";
   import Abas from "./base/Abas.svelte";
   // A área Sistema: todos os ajustes do catálogo por grupo (cada um com o efeito honesto, aplicar e desfazer), o que
@@ -89,7 +90,7 @@
       if (a === "limpeza" && !limpeza) limpeza = await ponte.medirLimpeza();
       if (a === "restauracao" && !restauracao) restauracao = await ponte.restauracao();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -108,7 +109,7 @@
         : { tom: "perigo", texto: `${a.name}: ${r.message}` };
       catalogo = await ponte.catalogo();
     } catch (e) {
-      recado = { tom: "perigo", texto: `${a.name}: ${String(e)}` };
+      recado = { tom: "perigo", texto: `${a.name}: ${explicarErro(e)}` };
     } finally {
       ocupado = null;
     }
@@ -140,7 +141,7 @@
       };
       limpeza = await ponte.medirLimpeza();
     } catch (e) {
-      recado = { tom: "perigo", texto: `${item.nome}: ${String(e)}` };
+      recado = { tom: "perigo", texto: `${item.nome}: ${explicarErro(e)}` };
     } finally {
       ocupado = null;
     }
@@ -153,7 +154,7 @@
       recado = { tom: "ok", texto: await ponte.criarPontoDeRestauracao() };
       restauracao = await ponte.restauracao();
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     } finally {
       ocupado = null;
     }

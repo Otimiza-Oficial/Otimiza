@@ -127,7 +127,7 @@
   <h2 id="otimizar-titulo">Otimizar agora</h2>
   <p class="apoio">Os ajustes do Windows, do registro e do plano de energia, conferidos neste PC. Cada um fica no Histórico com o valor de antes.</p>
   {#if semNiveis}
-    <Estado tipo="erro" titulo="Não consegui ler os níveis de otimização" fazer="Feche e abra o Otimiza. Se continuar, mande o arquivo de registro ao suporte (Ajustes)." />
+    <Estado tipo="erro" titulo="Não consegui ler os níveis de otimização" fazer="Feche e abra o Otimiza. Se continuar, gere o relatório em Ajustes › Versão e suporte e mande ao suporte." />
   {:else if niveis.length === 0}
     <Estado tipo="lendo" linhas={2} titulo="Lendo os ajustes compatíveis" />
   {:else}
