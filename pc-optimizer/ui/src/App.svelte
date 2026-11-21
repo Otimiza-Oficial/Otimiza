@@ -310,7 +310,15 @@
     }
   }
 
+  /** O fundo que volta quando a primeira execução desliga o "Sem fundo" (a área de trabalho). */
+  let fundoAntes: Fundo = "limpo";
+  /** A primeira execução só liga e desliga a área de trabalho. */
+  function alternarFundo() {
+    escolherFundo(fundo === "area" ? fundoAntes : "area");
+  }
+
   function escolherFundo(f: Fundo) {
+    if (f !== "area") fundoAntes = f;
     fundo = f;
     // As fotos pedem o ajuste à mão: o menu fica aberto nelas. Os outros fecham na hora.
     if (opcaoDo(f).tipo !== "foto") menuDoFundo = false;
@@ -1003,6 +1011,8 @@
       {licenca}
       {tema}
       onescolherTema={escolherTema}
+      {semFundo}
+      onalternarFundo={alternarFundo}
       onlicenca={(l) => (licenca = l)}
       onfim={fecharBoasVindas}
     />

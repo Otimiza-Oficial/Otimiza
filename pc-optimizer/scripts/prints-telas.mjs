@@ -116,8 +116,10 @@ for (const tema of ["escuro", "claro"]) {
   await avaliar(`localStorage.clear(); localStorage.setItem("otimiza.tema", "${tema}"); localStorage.setItem("otimiza.fundo", "limpo")`);
   await cdp("Page.navigate", { url: `http://127.0.0.1:${porta}/?semlicenca` });
   await espera(2500);
-  const passos = ["1-oi", "2-licenca", "3-medir", "4-ajustar", "5-provar", "6-pronto"];
+  const passos = ["1-oi", "2-conhecer", "3-licenca", "4-medir", "5-ajustar", "6-provar", "7-aparencia", "8-pronto"];
   for (const [i, nome] of passos.entries()) {
+    // A história anda em três fases (medindo, ajustando, provado): a foto espera a última.
+    if (nome === "2-conhecer") await espera(4300);
     await fotografar(`${tema}-boas-vindas-${nome}`);
     if (i === passos.length - 1) break;
     await avaliar(`[...document.querySelectorAll('.folha .baixo .btn')].at(-1)?.click()`);

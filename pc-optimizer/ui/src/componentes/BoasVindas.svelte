@@ -5,8 +5,9 @@
 </script>
 
 <script lang="ts">
-  // A primeira execução guiada (1.0.12, Frente 1.5): um fluxo só, com progresso, do zero até a prova.
-  //   Oi → 1. Licença → 2. Medir antes → 3. Primeiro ajuste → 4. Provar → Pronto.
+  // A primeira execução guiada (1.0.12, Frente 1.5; 1.0.13 devolveu a história e a escolha de fundo, decisão do dono):
+  // um fluxo só, com progresso, do zero até a prova.
+  //   Oi → 1. Conhecer (a história) → 2. Licença → 3. Medir antes → 4. Primeiro ajuste → 5. Provar → 6. Aparência → Pronto.
   // Cada passo usa a peça de verdade do app (a ativação, o laboratório, o Otimizar agora): o que se faz aqui fica feito
   // lá. Dá para pular qualquer passo e voltar depois; nada aqui afirma o que não foi lido ou medido. O atalho "Ativar
   // licença" da barra abre só o passo da licença. Com "reduzir movimento" ou jogo aberto, nada se mexe.
@@ -31,6 +32,8 @@
     licenca,
     tema,
     onescolherTema,
+    semFundo,
+    onalternarFundo,
     onlicenca,
     onfim,
   }: {
@@ -39,19 +42,24 @@
     licenca: EstadoDaLicenca | null;
     tema: Tema;
     onescolherTema: (t: Tema) => void;
+    /** O fundo é a área de trabalho (a janela transparente). */
+    semFundo: boolean;
+    onalternarFundo: () => void;
     onlicenca: (l: EstadoDaLicenca) => void;
     onfim: () => void;
   } = $props();
 
-  type Passo = "oi" | "licenca" | "medir" | "ajustar" | "provar" | "pronto";
+  type Passo = "oi" | "como" | "licenca" | "medir" | "ajustar" | "provar" | "aparencia" | "pronto";
   /** Os quatro passos que contam no progresso (o "oi" e o "pronto" são a porta e a saída). */
   const ETAPAS: { id: Passo; nome: string }[] = [
+    { id: "como", nome: "Conhecer" },
     { id: "licenca", nome: "Licença" },
     { id: "medir", nome: "Medir" },
     { id: "ajustar", nome: "Ajustar" },
     { id: "provar", nome: "Provar" },
+    { id: "aparencia", nome: "Aparência" },
   ];
-  const PASSOS = $derived<Passo[]>(modo === "licenca" ? ["licenca"] : ["oi", "licenca", "medir", "ajustar", "provar", "pronto"]);
+  const PASSOS = $derived<Passo[]>(modo === "licenca" ? ["licenca"] : ["oi", "como", "licenca", "medir", "ajustar", "provar", "aparencia", "pronto"]);
 
   let indice = $state(0);
   const passo = $derived<Passo>(PASSOS[indice]);
@@ -64,6 +72,9 @@
   let ajustou = $state(false);
   const feito = $derived<Record<Passo, boolean>>({
     oi: true,
+    // A história e a aparência contam como feitas quando a pessoa passa por elas.
+    como: indice >= PASSOS.indexOf("como"),
+    aparencia: indice >= PASSOS.indexOf("aparencia"),
     licenca: !!licenca?.ativa,
     medir: (lab?.rodadas_antes ?? 0) > 0,
     ajustar: ajustou,
@@ -115,6 +126,36 @@
     return l;
   });
 
+  // "Como eu trabalho" como uma história: o tempo de cada quadro com trancos (antes), a leitura passando, os picos
+  // achatando (o ajuste) e as duas linhas juntas (a prova). É ilustração, e a tela diz isso: número de verdade só sai
+  // da medição desta máquina. Sem movimento (reduzir movimento ou jogo aberto), já começa provado.
+  const PONTOS = 48;
+  const PICOS: Record<number, number> = { 5: 30, 6: 52, 13: 26, 19: 44, 20: 18, 27: 38, 33: 22, 34: 48, 41: 30 };
+  const comTrancos = Array.from({ length: PONTOS }, (_, i) => PICOS[i] ?? 104 + Math.sin(i * 1.7) * 7 + Math.cos(i * 0.6) * 5);
+  const liso = Array.from({ length: PONTOS }, (_, i) => 100 + Math.sin(i * 0.5) * 2.2);
+  const caminho = (v: number[]) => v.map((y, i) => `${i ? "L" : "M"}${((i * 640) / (PONTOS - 1)).toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const ANTES = caminho(comTrancos);
+  const DEPOIS = caminho(liso);
+  const BATIDAS = [
+    { titulo: "Eu meço", texto: "Leio cada quadro do jogo enquanto você joga, sem nada por cima dele." },
+    { titulo: "Eu ajusto", texto: "Só o que rende nesta máquina. Tudo tem desfazer." },
+    { titulo: "Eu provo", texto: "Antes e depois no mesmo jogo. Piorou, eu volto." },
+  ];
+  /** 0 medindo, 1 ajustando, 2 provado. */
+  let fase = $state(0);
+  $effect(() => {
+    if (passo !== "como") return;
+    const parado = dur(1) === 0;
+    fase = parado ? 2 : 0;
+    if (parado) return;
+    const t1 = setTimeout(() => (fase = 1), 2300);
+    const t2 = setTimeout(() => (fase = 2), 3900);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  });
+
   /** O texto do botão de seguir: diz o que acontece, e admite quando o passo foi pulado. */
   const rotuloDoSeguir = $derived.by(() => {
     if (modo === "licenca") return licenca?.ativa ? "Fechar" : "Agora não";
@@ -164,7 +205,7 @@
               <div class="abertura-texto">
                 <p class="rotulo">Boas-vindas</p>
                 <h1 id="passo-titulo" tabindex="-1" bind:this={titulo}>Oi, eu sou o Oti.</h1>
-                <p class="lead">Em quatro passos eu deixo o seu PC pronto e provo com número o que mudou: ativar, medir, ajustar e provar.</p>
+                <p class="lead">Em poucos passos eu deixo o seu PC pronto e provo com número o que mudou: ativar, medir, ajustar e provar.</p>
                 <p class="apoio">Leva uns dez minutos com o seu jogo aberto. Dá para pular qualquer passo e voltar depois.</p>
                 {#if pecas.length}
                   <dl class="pecas" aria-label="Lido agora neste PC">
@@ -178,17 +219,40 @@
                 {:else}
                   <Estado tipo="lendo" linhas={2} titulo="Lendo o hardware deste PC" />
                 {/if}
-                <div class="tema" role="group" aria-label="Tema">
-                  <span class="apoio">Tema</span>
-                  <div class="segmento">
-                    <button aria-pressed={tema === "escuro"} onclick={() => onescolherTema("escuro")}>Escuro</button>
-                    <button aria-pressed={tema === "claro"} onclick={() => onescolherTema("claro")}>Claro</button>
-                  </div>
-                </div>
               </div>
             </div>
+          {:else if passo === "como"}
+            <p class="rotulo">Passo {etapa + 1} de {ETAPAS.length}</p>
+            <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>Como eu trabalho</h2>
+            <p class="sub">O que você sente como "travando" é isto: alguns quadros demorando muito mais que os outros.</p>
+            <figure class="historia" class:parada={dur(1) === 0} data-fase={fase}>
+              <figcaption>
+                <span class="apoio">Tempo de cada quadro</span>
+                <span class="etiqueta">{fase === 2 ? "antes e depois" : fase === 1 ? "ajustando" : "medindo"}</span>
+                <span class="selo estimado ilustracao">ilustração</span>
+              </figcaption>
+              <svg viewBox="0 0 640 140" preserveAspectRatio="none" aria-hidden="true">
+                <line class="guia" x1="0" x2="640" y1="100" y2="100" />
+                <path class="fantasma" d={ANTES} />
+                <path class="linha" d={fase === 0 ? ANTES : DEPOIS} />
+                <rect class="leitura" x="0" y="0" width="70" height="140" />
+              </svg>
+              <div class="legenda">
+                <span class="tag antes">com trancos</span>
+                <span class="tag depois">liso</span>
+              </div>
+            </figure>
+            <ol class="batidas">
+              {#each BATIDAS as b, i (b.titulo)}
+                <li class:acesa={fase >= i} class:atual={fase === i}>
+                  <span class="numero marca-batida">{i + 1}</span>
+                  <strong>{b.titulo}</strong>
+                  <span class="apoio">{b.texto}</span>
+                </li>
+              {/each}
+            </ol>
           {:else if passo === "licenca"}
-            <p class="rotulo">Passo 1 de 4</p>
+            <p class="rotulo">Passo {etapa + 1} de {ETAPAS.length}</p>
             <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>{licenca?.ativa ? "Sua licença está ativa" : "Ative a sua licença"}</h2>
             <p class="sub">
               {licenca?.ativa
@@ -197,7 +261,7 @@
             </p>
             <div class="caixa"><AtivarLicenca {licenca} onativada={onlicenca} /></div>
           {:else if passo === "medir"}
-            <p class="rotulo">Passo 2 de 4</p>
+            <p class="rotulo">Passo {etapa + 1} de {ETAPAS.length}</p>
             <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>Meça o jogo antes de mudar qualquer coisa</h2>
             <p class="sub">
               Abra o seu jogo e vá para um lugar que você conhece (o mesmo mapa, a mesma rua). Cada rodada mede 30 segundos, sem
@@ -205,7 +269,7 @@
             </p>
             <div class="caixa"><MedicaoGuiada lado="Antes" onmudou={(l) => (lab = l)} /></div>
           {:else if passo === "ajustar"}
-            <p class="rotulo">Passo 3 de 4</p>
+            <p class="rotulo">Passo {etapa + 1} de {ETAPAS.length}</p>
             <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>O primeiro ajuste</h2>
             {#if licenca?.ativa}
               <p class="sub">Escolha o nível e aplique. Cada mudança fica no Histórico com o valor de antes e se desfaz num toque.</p>
@@ -216,13 +280,30 @@
               </Estado>
             {/if}
           {:else if passo === "provar"}
-            <p class="rotulo">Passo 4 de 4</p>
+            <p class="rotulo">Passo {etapa + 1} de {ETAPAS.length}</p>
             <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>Prove o que mudou</h2>
             <p class="sub">
               Volte ao mesmo lugar do jogo e meça de novo. Com rodadas dos dois lados, o Otimiza compara com a margem de cada um e só
               diz "melhorou" quando a diferença passa do acaso.
             </p>
             <div class="caixa"><MedicaoGuiada lado="Depois" onmudou={(l) => (lab = l)} /></div>
+          {:else if passo === "aparencia"}
+            <p class="rotulo">Passo {etapa + 1} de {ETAPAS.length}</p>
+            <h2 id="passo-titulo" tabindex="-1" bind:this={titulo}>Do seu jeito</h2>
+            <p class="sub">O tema e o fundo atrás do painel. Dá para trocar depois, na barra de cima ("Fundo").</p>
+            <div class="temas" role="group" aria-label="Aparência">
+              {#each [["escuro", "Escuro"], ["claro", "Claro"]] as [id, rotulo] (id)}
+                <button class="tema-op" aria-pressed={tema === id} onclick={() => onescolherTema(id as Tema)}>
+                  <span class="mini" data-tema={id}><span></span><span></span><span></span></span>
+                  {rotulo}
+                </button>
+              {/each}
+              <button class="tema-op" aria-pressed={semFundo} onclick={onalternarFundo}>
+                <span class="mini sem-fundo" data-tema={tema}><span></span><span></span><span></span></span>
+                Sem fundo
+              </button>
+            </div>
+            <p class="apoio">"Sem fundo" mostra a sua área de trabalho entre os cartões. Os outros fundos (cenas, fotos, a sua imagem) ficam no botão "Fundo".</p>
           {:else}
             <div class="abertura">
               <div class="cena pequena" aria-hidden="true">
@@ -233,7 +314,7 @@
                 <p class="rotulo">Pronto</p>
                 <h1 id="passo-titulo" tabindex="-1" bind:this={titulo}>{ETAPAS.every((e) => feito[e.id]) ? "Tudo feito." : "Por agora, é isso."}</h1>
                 <ul class="resumo">
-                  {#each ETAPAS as e (e.id)}
+                  {#each ETAPAS.filter((e) => e.id !== "como" && e.id !== "aparencia") as e (e.id)}
                     <li>
                       <span class="ponto" data-tom={feito[e.id] ? "ok" : "atencao"} aria-hidden="true"></span>
                       <span>
@@ -298,9 +379,8 @@
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: var(--e-2);
-    max-width: 520px;
   }
   .etapa {
     display: grid;
@@ -460,10 +540,211 @@
     font-size: var(--t-apoio);
     font-weight: 400;
   }
-  .tema {
+  /* A história: o tempo de cada quadro. Trancos em atenção, liso em ok: as duas cores aqui são estado. */
+  .historia {
+    margin: var(--e-1) 0 0;
+    padding: var(--e-3) var(--e-4) 10px;
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-3);
+    background: var(--superficie-2);
+  }
+  .historia figcaption {
     display: flex;
     align-items: center;
+    gap: 10px;
+    font-size: var(--t-apoio);
+  }
+  .etiqueta {
+    padding: 2px 9px;
+    border-radius: var(--raio-pilula);
+    background: var(--superficie-3);
+    font-size: var(--t-apoio);
+    font-weight: 600;
+  }
+  .ilustracao {
+    margin-left: auto;
+  }
+  .historia svg {
+    display: block;
+    width: 100%;
+    height: 96px;
+    margin-top: 6px;
+    overflow: visible;
+    color: var(--tinta);
+  }
+  .guia {
+    stroke: currentColor;
+    stroke-opacity: 0.12;
+    stroke-dasharray: 4 6;
+  }
+  .linha,
+  .fantasma {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+  .linha {
+    stroke: var(--atencao);
+    stroke-dasharray: 2400;
+    stroke-dashoffset: 2400;
+    animation: desenhar 2s var(--curva-padrao) forwards;
+    transition:
+      d 1.1s var(--curva-padrao),
+      stroke var(--mov-lento) ease;
+  }
+  [data-fase="1"] .linha,
+  [data-fase="2"] .linha {
+    stroke: var(--ok);
+  }
+  .fantasma {
+    stroke: var(--atencao);
+    opacity: 0;
+    transition: opacity var(--mov-lento) ease;
+  }
+  [data-fase="2"] .fantasma {
+    opacity: 0.3;
+  }
+  .leitura {
+    fill: currentColor;
+    opacity: 0.07;
+    animation: varrer 2s var(--curva-padrao) forwards;
+  }
+  /* Parada (reduzir movimento ou jogo aberto): as linhas aparecem inteiras, sem a varredura. */
+  .historia.parada .linha {
+    stroke-dashoffset: 0;
+  }
+  .historia.parada .leitura {
+    opacity: 0;
+  }
+  @keyframes desenhar {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes varrer {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(570px);
+      opacity: 0;
+    }
+  }
+  .legenda {
+    display: flex;
+    gap: 14px;
+    margin-top: 6px;
+    font-size: var(--t-apoio);
+    color: var(--tinta-2);
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tag::before {
+    content: "";
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+  }
+  .tag.antes::before {
+    background: var(--atencao);
+  }
+  .tag.depois::before {
+    background: var(--ok);
+  }
+  .batidas {
+    list-style: none;
+    margin: var(--e-1) 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--e-4);
+  }
+  .batidas li {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    padding-top: var(--e-3);
+    border-top: 2px solid var(--superficie-3);
+    color: var(--tinta-3);
+    transition:
+      color var(--mov-lento) ease,
+      border-color var(--mov-lento) ease;
+  }
+  .batidas li.acesa {
+    color: var(--tinta);
+  }
+  .batidas li.atual {
+    border-top-color: var(--tinta);
+  }
+  .marca-batida {
+    font-size: var(--t-apoio);
+    color: var(--tinta-2);
+  }
+  .batidas strong {
+    font-size: var(--t-subtitulo);
+  }
+  /* A aparência: três cartões com a miniatura do painel em cada um. */
+  .temas {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--e-3);
+    margin-top: var(--e-2);
+  }
+  .tema-op {
+    display: grid;
+    gap: 10px;
+    justify-items: center;
+    padding: var(--e-3);
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-3);
+    background: var(--superficie-2);
+    color: var(--tinta);
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color var(--mov-rapido) ease;
+  }
+  .tema-op:hover {
+    border-color: var(--linha-forte);
+  }
+  .tema-op[aria-pressed="true"] {
+    border-color: var(--tinta);
+    box-shadow: inset 0 0 0 1px var(--tinta);
+  }
+  .mini {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    padding: 8px;
+    border-radius: var(--raio-2);
+    background: var(--preto);
+    overflow: hidden;
+  }
+  .mini span {
+    border-radius: 4px;
+    background: var(--grafite-2);
+    border: 1px solid rgb(255 255 255 / 0.08);
+  }
+  .mini span:first-child {
+    grid-column: 1 / -1;
+  }
+  .mini[data-tema="claro"] {
+    background: var(--papel);
+  }
+  .mini[data-tema="claro"] span {
+    background: var(--branco);
+    border-color: rgb(0 0 0 / 0.08);
+  }
+  /* Sem fundo: a área de trabalho (um degradê qualquer, como um papel de parede) aparece entre os cartões. */
+  .mini.sem-fundo {
+    background: linear-gradient(135deg, #3a4a63, #6b5a7a 50%, #a67c6d);
   }
   .resumo {
     list-style: none;
