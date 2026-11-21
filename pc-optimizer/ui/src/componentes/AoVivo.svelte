@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { relogio } from "../lib/relogio";
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // Sistema › Agora (trazido da interface 3.6, `src/main.ts`: `renderProcesses`, `analyzeBottleneck` e `carregarPlaca`):
   // quem está pesando agora, o que segura a máquina medido por 10 s, e a placa com o driver. A lista se atualiza a cada
   // 3 s só com a aba à vista, e para com jogo aberto (a interface congela: `jogo-aberto` no <html>). Tipos escritos à
@@ -73,17 +75,17 @@
 
   const maisPesado = $derived(Math.max(1, ...(processos ?? []).map((p) => p.cpu_percent)));
 
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
   let lendo = false;
 
   async function lerProcessos() {
-    if (lendo || document.hidden || document.documentElement.classList.contains("jogo-aberto")) return;
+    if (lendo || document.documentElement.classList.contains("jogo-aberto")) return;
     lendo = true;
     try {
       processos = noTauri ? await como<Processo[]>(commands.topProcesses()) : DEMO_PROCESSOS;
       erroDosProcessos = null;
     } catch (e) {
-      erroDosProcessos = String(e);
+      erroDosProcessos = explicarErro(e);
     } finally {
       lendo = false;
     }
@@ -91,11 +93,11 @@
 
   onMount(() => {
     void lerProcessos();
-    relogio = setInterval(lerProcessos, 3000);
+    pararRelogio = relogio.cada(3000, lerProcessos, { aoVoltar: true });
     placa = undefined;
     (noTauri ? como<Placa>(commands.placaDeVideo()) : Promise.resolve(DEMO_PLACA)).then((p) => (placa = p)).catch(() => (placa = null));
   });
-  onDestroy(() => clearInterval(relogio));
+  onDestroy(() => pararRelogio());
 
   async function medirGargalo() {
     medindo = true;
@@ -103,7 +105,7 @@
     try {
       gargalo = noTauri ? await como<Gargalo>(commands.analyzeBottleneck(10)) : await demoGargalo();
     } catch (e) {
-      erroDoGargalo = String(e);
+      erroDoGargalo = explicarErro(e);
     } finally {
       medindo = false;
     }
@@ -285,7 +287,7 @@
     height: 100%;
     border-radius: 2px;
     background: var(--tinta-2);
-    transition: width 400ms ease;
+    transition: width var(--mov-lento) var(--curva-padrao);
   }
   .veredito {
     display: grid;

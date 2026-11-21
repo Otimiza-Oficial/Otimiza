@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // Sistema avançado (trazido da interface antiga, `src/main.ts`): os serviços essenciais que "Windows lite" e outros
   // otimizadores desligam (e o religar), os serviços de outros programas, as tarefas agendadas que não são da
   // Microsoft e os programas que vieram de fábrica. Cada mudança entra no histórico. Nada é marcado sem motivo escrito,
@@ -75,7 +76,7 @@
       recado = typeof r === "string" ? r : (r?.message ?? null);
       await carregar();
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       ocupado = null;
     }

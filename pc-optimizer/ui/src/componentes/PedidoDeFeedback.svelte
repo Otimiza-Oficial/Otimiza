@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O pedido de feedback (trazido da interface 3.3/3.6, `src/v33/app.ts`, "feedback"): depois de 10 minutos de uso as
@@ -11,6 +12,7 @@
   // Sem esta tela, um cliente no estado "Exigido" veria as correções falharem sem saber por quê. O Rust decide a
   // situação (`feedback_estado`, evento `feedback:situacao`); aqui só se mostra e se confere (`feedback_verificar`).
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
     import { listen } from "@tauri-apps/api/event";
   import { noTauri } from "../lib/ponte";
   import Oti from "./Oti.svelte";
@@ -36,7 +38,7 @@
   const perto = $derived(estado?.situacao === "Contando" && estado.restante_segundos <= 120);
   const minutos = $derived(estado?.situacao === "Contando" ? Math.max(1, Math.ceil(estado.restante_segundos / 60)) : 0);
 
-  let vigia: ReturnType<typeof setInterval> | undefined;
+  let pararVigia = () => {};
   let deixar: (() => void) | undefined;
 
   function aplicar(s: Partial<Estado> & Situacao) {
@@ -44,12 +46,16 @@
     if (estado.situacao === "Exigido" && !soMedindo) folhaAberta = true;
     if (estado.situacao === "Liberado") folhaAberta = false;
     // Contando: confere a cada 30 s, para o lembrete aparecer na hora certa (o evento só vem na troca de situação).
-    clearInterval(vigia);
+    pararVigia();
     if (estado.situacao === "Contando" && noTauri) {
-      vigia = setInterval(async () => {
-        const novo = await como<Estado>(commands.feedbackEstado()).catch(() => null);
-        if (novo) aplicar(novo);
-      }, 30000);
+      pararVigia = relogio.cada(
+        30000,
+        async () => {
+          const novo = await como<Estado>(commands.feedbackEstado()).catch(() => null);
+          if (novo) aplicar(novo);
+        },
+        { aoVoltar: true },
+      );
     }
   }
 
@@ -72,7 +78,7 @@
 
   onDestroy(() => {
     window.removeEventListener(ABRIR_FEEDBACK, abrir);
-    clearInterval(vigia);
+    pararVigia();
     deixar?.();
   });
 
@@ -105,7 +111,7 @@
         setTimeout(() => (folhaAberta = false), 1400);
       } else recado = { tom: "atencao", texto: s.aviso ?? "Ainda não achamos a sua mensagem. Tente de novo em um minuto." };
     } catch (e) {
-      recado = { tom: "atencao", texto: String(e) };
+      recado = { tom: "atencao", texto: explicarErro(e) };
     } finally {
       conferindo = false;
     }
@@ -269,7 +275,7 @@
     border-radius: 999px;
     background: var(--marca-suave);
     color: var(--marca);
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -381,13 +387,13 @@
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
-    transition: transform var(--mov-rapido) var(--curva-mola), filter var(--mov-rapido) ease;
+    transition: transform var(--mov-rapido) var(--curva-padrao), filter var(--mov-rapido) ease;
   }
+  /* Marca v2: sem o azul do Discord nem brilho; o botão principal na cor do texto. */
   .botao-discord {
     border: 0;
-    background: #5865f2;
-    color: #fff;
-    box-shadow: 0 10px 24px -8px rgb(88 101 242 / 0.7);
+    background: var(--acao);
+    color: var(--contra);
   }
   .botao-discord svg {
     width: 20px;

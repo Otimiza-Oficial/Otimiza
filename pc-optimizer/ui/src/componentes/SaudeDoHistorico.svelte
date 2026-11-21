@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // A saúde do que foi aplicado (trazida da interface antiga, `src/main.ts`): o que o Windows (ou outro programa)
@@ -55,7 +56,7 @@
       recado = r.message;
       await carregar();
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       ocupado = null;
     }

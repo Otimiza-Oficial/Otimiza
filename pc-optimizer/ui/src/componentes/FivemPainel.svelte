@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
@@ -9,7 +10,7 @@
   import { onMount } from "svelte";
   import { noTauri } from "../lib/ponte";
   import Cartao from "./base/Cartao.svelte";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
 
   let { parte }: { parte: "cache" | "crashes" } = $props();
 
@@ -76,7 +77,7 @@
       recado = r.message;
       await carregar();
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       limpando = null;
     }

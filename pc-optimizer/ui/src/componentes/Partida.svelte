@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import GraficoDaPartida from "./GraficoDaPartida.svelte";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
@@ -144,7 +145,7 @@
       try {
         diagnostico = await como<Diagnostico>(commands.diagnosticoDaPartida());
       } catch (e) {
-        erroDoDiagnostico = String(e);
+        erroDoDiagnostico = explicarErro(e);
       }
     }
   });

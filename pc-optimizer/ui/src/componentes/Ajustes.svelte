@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { ferramentas } from "../lib/ferramentas";
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Ajustes: o FPS por cima do jogo (sobreposição), o que o Otimiza faz sozinho, a licença, a versão e o
   // relatório de suporte. O tema (claro/escuro) mora na barra de cima, onde a referência põe.
   import { onMount } from "svelte";
@@ -50,7 +51,7 @@
     try {
       escalaPermitida = await ferramentas.definirEscalaPermitida(!escalaPermitida);
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     }
   }
   async function alternarSmoothMotion() {
@@ -61,7 +62,7 @@
       await commands.flagsGravar({ ...atual, smooth_motion_drs: ligado });
       smoothMotion = ligado;
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     }
   }
 
@@ -97,9 +98,9 @@
 
   function lerEpoca() {
     try {
-      return localStorage.getItem("otimiza.epoca") !== "desligada";
+      return localStorage.getItem("otimiza.epoca") === "ligada";
     } catch {
-      return true;
+      return false;
     }
   }
 
@@ -126,7 +127,7 @@
       const ligado = await ponte.comunidadeParticipar(!preferencias.comunidade);
       preferencias = { ...preferencias, comunidade: ligado };
     } catch (e) {
-      nuvem = { tipo: "erro", texto: String(e) };
+      nuvem = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       mudandoComunidade = false;
     }
@@ -143,7 +144,7 @@
     try {
       nuvem = { tipo: "ok", texto: qual === "guardar" ? await ponte.nuvemGuardar() : await ponte.nuvemRestaurar() };
     } catch (e) {
-      nuvem = { tipo: "erro", texto: String(e) };
+      nuvem = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       nuvemOcupada = false;
     }
@@ -171,7 +172,7 @@
     try {
       sobreposicao = await ponte.gravarSobreposicao(modo, canto, comFb);
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     }
   }
 
@@ -179,7 +180,7 @@
     try {
       sobreposicao = await ponte.mostrarSobreposicao(false);
     } catch (e) {
-      recado = { tom: "atencao", texto: String(e) };
+      recado = { tom: "atencao", texto: explicarErro(e) };
     }
   }
 
@@ -188,7 +189,7 @@
     try {
       preferencias = await ponte.gravarPreferencias({ ...preferencias, [k]: v });
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     }
   }
 
@@ -197,7 +198,7 @@
       await navigator.clipboard.writeText(await ponte.relatorioDeSuporte());
       recado = { tom: "ok", texto: "Relatório copiado. Cole na conversa com o suporte." };
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     }
   }
 
@@ -206,7 +207,7 @@
       const caminho = await ponte.salvarLogDeSuporte();
       recado = { tom: "ok", texto: `Registro salvo em ${caminho}. Mande esse arquivo para o suporte.` };
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     }
   }
 </script>
@@ -338,8 +339,8 @@
       <div class="info">
         <h2>Temas de época</h2>
         <span class="apoio">
-          O painel muda sozinho no Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween: o Oti
-          ganha um enfeite e o fundo, um clima. Para de animar com jogo aberto.
+          Vem desligado. Ligado, no Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween o painel
+          ganha a saudação e um clima da época, em tons de cinza como o resto da marca. Para de animar com jogo aberto.
           {#if epocaDeHoje}Agora: <b>{epocaDeHoje.nome}</b>.{/if}
         </span>
       </div>

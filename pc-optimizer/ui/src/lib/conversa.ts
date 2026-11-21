@@ -1,7 +1,7 @@
 // O que o Oti diz. Cada fala vem de um dado lido (os avisos de `clima.ts`) ou explica uma área; nenhuma promete o que a
 // área não faz. A barra de pergunta entende por palavra-chave, não é IA, e quando não entende diz isso.
 
-import type { Gesto, Humor } from "../componentes/Oti.svelte";
+import type { Humor } from "../componentes/Oti.svelte";
 import type { IdDaArea } from "./areas";
 import type { Aviso } from "./clima";
 import { fraseDaComparacao, type Cartao } from "./partida";
@@ -14,7 +14,6 @@ export interface Fala {
   texto: string;
   detalhe?: string;
   humor: Humor;
-  gesto?: Gesto;
   acoes: Acao[];
 }
 
@@ -40,7 +39,6 @@ function explicarHz(): Fala {
     detalhe:
       "Em 60 Hz, tudo que sua placa faz acima de 60 FPS não chega aos seus olhos. Na taxa certa, o jogo fica mais liso e o clique aparece antes. Dá para desfazer pelo Histórico.",
     humor: "falando",
-    gesto: "apontar",
     acoes: [
       { rotulo: "Arrumar agora", tipo: "abrir", area: "tela", principal: true },
       { rotulo: "Depois", tipo: "falar", fala: ociosa },
@@ -56,7 +54,6 @@ export function abertura(avisos: Aviso[]): Fala {
       texto: `${tela.titulo}.`,
       detalhe: "Corrigir leva um clique, e dá para desfazer quando quiser. Quer que eu arrume?",
       humor: "preocupado",
-      gesto: "apontar",
       acoes: [
         { rotulo: "Arrumar", tipo: "abrir", area: "tela", principal: true },
         { rotulo: "Por quê?", tipo: "falar", fala: explicarHz },
@@ -77,7 +74,6 @@ export function abertura(avisos: Aviso[]): Fala {
     texto: "Oi! Olhei a tela e a memória e está tudo certo.",
     detalhe: "Rede, temperatura e disco eu aprendo nas próximas versões. O que você quer melhorar?",
     humor: "feliz",
-    gesto: "acenar",
     acoes: SUGESTOES,
   };
 }
@@ -128,7 +124,7 @@ export function entender(pergunta: string): { area: IdDaArea | null; fala: Fala 
   }
   return {
     area: achada.area,
-    fala: { texto: "Deixa comigo.", humor: "feliz", gesto: "apontar", acoes: [] },
+    fala: { texto: "Deixa comigo.", humor: "feliz", acoes: [] },
   };
 }
 
@@ -141,7 +137,7 @@ const DICAS = [
 
 let dica = 0;
 export function cutucada(): Fala {
-  return { texto: DICAS[dica++ % DICAS.length], humor: "feliz", gesto: "comemorar", acoes: SUGESTOES };
+  return { texto: DICAS[dica++ % DICAS.length], humor: "feliz", acoes: SUGESTOES };
 }
 
 export function jogoAbriu(nome: string): Fala {
@@ -158,7 +154,6 @@ export function jogoFechou(nome: string): Fala {
     texto: "E aí, como foi?",
     detalhe: `Se você jogou ${nome} comigo aberto, a partida está em Jogos.`,
     humor: "feliz",
-    gesto: "comemorar",
     acoes: [
       { rotulo: "Ver a partida", tipo: "abrir", area: "jogos", principal: true },
       { rotulo: "Depois", tipo: "falar", fala: ociosa },
@@ -214,7 +209,6 @@ export function partidaTerminou(c: Cartao): Fala {
     texto: `${c.jogo}: ${n(c.fps)} FPS médio, 1% pior ${n(c.low)}${trancos}.`,
     detalhe: `${c.duracao} de partida.${c.comparacao ? ` ${fraseDaComparacao(c.comparacao)}` : ""}${c.rede ? ` ${c.rede.frase}` : ""}`,
     humor: c.comparacao?.sentido === "abaixo" ? "preocupado" : "feliz",
-    gesto: c.comparacao?.sentido === "acima" ? "comemorar" : undefined,
     acoes: [ver],
   };
 }

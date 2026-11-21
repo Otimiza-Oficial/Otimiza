@@ -1,10 +1,11 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // O Frame Boost na interface nova (trazido do painel da 3.3, `src/v33/app.ts`, `painelFrameBoost`). Com o jogo
   // aberto, o Rust escolhe o melhor gerador: o do jogo, o do driver (AFMF, Smooth Motion) ou o do Otimiza. Aqui só se
   // mostra: estimado antes de ligar (pelo último FPS nativo medido) e MEDIDO na tela depois; a prova de custo (quanto do
   // FPS o jogo manteve) vem da guarda do Rust. Desligar nunca depende de licença.
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import {
     ferramentas,
     motivo,
@@ -14,6 +15,11 @@
     type Suporte,
   } from "../lib/ferramentas";
   import ComparadorDaEscala from "./ComparadorDaEscala.svelte";
+  import Botao from "./base/Botao.svelte";
+  import Estado from "./base/Estado.svelte";
+  import SeloDeEstado from "./base/SeloDeEstado.svelte";
+  import { lerFrameBoost } from "../lib/frameboost";
+  import { abrirArea } from "../lib/areas";
 
   const CHAVE_MULT = "otimiza-fb-mult";
   const CHAVE_ESCALA = "otimiza-fb-escala";
@@ -51,7 +57,7 @@
   let leve = $state(ler(CHAVE_LEVE, "0") === "1");
   /** Com a escala desligada nos Ajustes, as opções dela nem aparecem: o Otimiza não muda a resolução do jogo. */
   let escalaPermitida = $state(true);
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
 
   function ler(chave: string, padrao: string) {
     try {
@@ -90,18 +96,9 @@
     // Ligado pelo gerador do Otimiza o número muda a cada segundo; desligado, basta olhar de vez em quando.
     // Com a janela escondida (o jogo na frente, o Otimiza na bandeja) não pergunta nada: cada pergunta abria a sessão
     // do driver, varria os processos e lia o histórico, a partida inteira. Ao voltar, relê na hora.
-    relogio = setInterval(() => {
-      if (!ocupado && !document.hidden) void carregar();
-    }, 1500);
-    document.addEventListener("visibilitychange", aoVoltar);
+    pararRelogio = relogio.cada(1500, () => !ocupado && void carregar(), { aoVoltar: true });
   });
-  function aoVoltar() {
-    if (!document.hidden && !ocupado) void carregar();
-  }
-  onDestroy(() => {
-    clearInterval(relogio);
-    document.removeEventListener("visibilitychange", aoVoltar);
-  });
+  onDestroy(() => pararRelogio());
 
   const a = $derived(p?.ativo ?? null);
   const rec = $derived(p?.recomendado ?? null);
@@ -144,12 +141,32 @@
 
   const n = (v: number, casas = 0) => v.toLocaleString("pt-BR", { maximumFractionDigits: casas, minimumFractionDigits: casas });
 
-  function selo(s: Suporte) {
-    if (s.estado === "Suportado") return { texto: "funciona aqui", tom: "ok" };
-    if (s.estado === "Parcial") return { texto: "com condição", tom: "atencao" };
-    if (s.estado === "PrecisaAtualizar") return { texto: "atualize o driver", tom: "atencao" };
-    return { texto: "indisponível", tom: "neutro" };
+  /** O estado de cada gerador e o que fazer com ele (1.0.12, U9): "com condição" sozinho não dizia qual condição. */
+  function selo(s: Suporte): { texto: string; tom: "ok" | "atencao" | "neutro"; fazer: string } {
+    const m = motivo(s);
+    if (s.estado === "Suportado") return { texto: "Funciona aqui", tom: "ok", fazer: m ?? "Pode ligar com o jogo aberto." };
+    if (s.estado === "Parcial") return { texto: "Com condição", tom: "atencao", fazer: m ?? "Funciona em parte deste jogo ou desta placa." };
+    if (s.estado === "PrecisaAtualizar") return { texto: "Atualize o driver", tom: "atencao", fazer: m ?? "Instale o driver mais novo da placa de vídeo e abra o jogo de novo." };
+    return { texto: "Indisponível", tom: "neutro", fazer: m ?? "Não serve neste jogo com esta placa." };
   }
+
+  /** O multiplicador real, por que está assim e o próximo passo (`lib/frameboost.ts`). */
+  const leitura = $derived(
+    a
+      ? lerFrameBoost({
+          multiplicador: a.multiplicador,
+          automatico: a.automatico,
+          situacao: a.situacao,
+          hz: a.hz,
+          pelo_driver: a.pelo_driver,
+          fps_na_tela: medido,
+          fps_do_jogo: a.fps_do_jogo ?? null,
+          manteve_pct: a.manteve_pct ?? null,
+          degrau: a.degrau ?? null,
+          so_escala: soEscalaLigada,
+        })
+      : null,
+  );
 
   const linha = $derived.by(() => {
     if (!a) return "";
@@ -157,7 +174,7 @@
     if (a.situacao === "ProcurandoJanela") return "Ajustando à janela do jogo…";
     if (a.situacao === "SemQuadros") return "O jogo parou de desenhar: a sobreposição some até ele voltar.";
     const tamanho = a.escala && a.jogo_px && a.tela_px ? `jogo ${a.jogo_px[0]}×${a.jogo_px[1]} → tela ${a.tela_px[0]}×${a.tela_px[1]} · ` : "";
-    const modo = soEscalaLigada ? "só escala, sem gerar quadros" : a.automatico ? `Auto (agora ${a.multiplicador}×)` : `${a.multiplicador}×`;
+    const modo = soEscalaLigada ? "só escala" : a.automatico ? "Auto" : `fixo em ${a.multiplicador}×`;
     const atraso = a.atraso_ms.valor !== null ? ` · atraso +${n(a.atraso_ms.valor, 1)} ms (estimado)` : "";
     const placa = a.placa_pct != null ? ` · usa ${n(a.placa_pct, 1)}% da placa (medido)` : "";
     return `${tamanho}${modo} · monitor de ${a.hz} Hz${atraso}${placa}`;
@@ -253,24 +270,32 @@
   <div class="topo">
     <h2>Frame Boost</h2>
     {#if p && rec}<span class="gerador">{rec.nome}</span>{/if}
-    {#if a}<span class="ligado"><span class="ponto" data-tom="ok"></span>Ligado</span>{/if}
+    {#if a}<SeloDeEstado tom="ok" texto="Ligado" forte />{/if}
   </div>
 
   {#if !p}
-    {#if erro}<p class="apoio">{erro}</p>{:else}<Esqueleto />{/if}
+    {#if erro}
+      <Estado tipo="erro" titulo="Não consegui ler o Frame Boost" fazer="Ele tenta de novo sozinho. Se continuar, feche e abra o Otimiza." detalhe={erro} />
+    {:else}<Esqueleto rotulo="Lendo o Frame Boost" />{/if}
   {:else}
     {#if rec && p.jogo}
       <p class="apoio">{motivo(rec.suporte) ?? (doOtimiza ? "Funciona por fora do jogo, sem injetar nada. Acrescenta um pouco de atraso." : "Funciona neste jogo e nesta placa.")}</p>
     {/if}
     {#if !rec}
-      <div class="vazio">
-        <strong>{p.jogo ? "Nenhum gerador funciona aqui" : "Abra um jogo"}</strong>
-        <p class="apoio">
-          {p.jogo
-            ? (porQueNaoOtimiza ?? "Nem o jogo, nem o driver, nem o gerador do Otimiza servem neste jogo com esta placa.")
-            : "Com o jogo aberto, o Otimiza escolhe o melhor gerador de quadros: o do jogo, depois o do driver, depois o dele."}
-        </p>
-      </div>
+      {#if p.jogo}
+        <Estado
+          tipo="vazio"
+          titulo="Nenhum gerador funciona neste jogo"
+          fazer={porQueNaoOtimiza ?? "Nem o jogo, nem o driver, nem o gerador do Otimiza servem neste jogo com esta placa. A lista abaixo diz o que falta em cada um."}
+        />
+      {:else}
+        <Estado
+          tipo="vazio"
+          oti
+          titulo="Abra um jogo"
+          fazer="Com o jogo aberto, o Otimiza escolhe o melhor gerador de quadros: o do jogo, depois o do driver, depois o dele."
+        />
+      {/if}
     {:else}
       <!-- O herói: o número que chega à tela, e à direita o que se escolhe -->
       <div class="palco">
@@ -289,9 +314,32 @@
               {#if a.leve}<span class="selo">modo leve</span>{/if}
               {#if a.escala}<span class="selo">escala {NOMES_DA_ESCALA[a.escala]}</span>{/if}
             </div>
-            {#if linha}<p class="apoio">{linha}</p>{/if}
-            {#if prova}<p class="apoio">{prova}</p>{/if}
-            {#if a.degrau}<p class="aviso">{a.degrau}</p>{/if}
+            {#if leitura}
+              <dl class="real">
+                <div>
+                  <dt>Multiplicador real</dt>
+                  <dd class="numero">{leitura.multiplicador ?? "—"}</dd>
+                </div>
+                {#if a.fps_do_jogo != null}
+                  <div>
+                    <dt>FPS do jogo</dt>
+                    <dd class="numero">{n(a.fps_do_jogo)}</dd>
+                  </div>
+                {/if}
+              </dl>
+              <div class="leitura">
+                <p><span class="rotulo-leitura">Por quê</span>{leitura.motivo}</p>
+                <p class="proximo" data-tom={leitura.tom}>
+                  <span class="ponto" data-tom={leitura.tom === "neutro" ? undefined : leitura.tom} aria-hidden="true"></span>
+                  <span><span class="rotulo-leitura">Agora</span>{leitura.proximo}</span>
+                </p>
+                {#if leitura.area}
+                  <Botao variante="link" pequeno onclick={() => leitura?.area && abrirArea(leitura.area)}>{leitura.area === "tela" ? "Abrir Tela" : "Abrir a Prova"}</Botao>
+                {/if}
+              </div>
+            {/if}
+            {#if linha}<p class="apoio detalhe">{linha}</p>{/if}
+            {#if prova && !leitura}<p class="apoio detalhe">{prova}</p>{/if}
           {:else if estimativa}
             {@const de = n(estimativa.minimo)}
             {@const ate = n(estimativa.maximo)}
@@ -472,8 +520,10 @@
       </div>
     {/if}
 
-    {#each avisos as t, i (i)}<p class="aviso">{t}</p>{/each}
-    {#if erro}<p class="erro">{erro}</p>{/if}
+    {#each avisos as t, i (i)}<p class="aviso"><span class="ponto" data-tom="atencao" aria-hidden="true"></span>{t}</p>{/each}
+    {#if erro}
+      <Estado tipo="erro" titulo="O Frame Boost não respondeu" fazer="Tente de novo. Se o jogo travou, Ctrl+Alt+G desliga de dentro dele." detalhe={erro} />
+    {/if}
 
     {#if p.opcoes.length}
       <div class="outros">
@@ -481,9 +531,12 @@
         <ul class="opcoes">
           {#each p.opcoes as r (r.recurso)}
             {@const s = selo(r.suporte)}
-            <li title={motivo(r.suporte) ?? undefined}>
-              <span>{r.nome}</span>
-              <span class="selo" data-tom={s.tom}>{s.texto}</span>
+            <li>
+              <div>
+                <span>{r.nome}</span>
+                <span class="apoio">{s.fazer}</span>
+              </div>
+              <SeloDeEstado tom={s.tom} texto={s.texto} />
             </li>
           {/each}
         </ul>
@@ -502,18 +555,52 @@
     display: grid;
     gap: 16px;
   }
-  /* Ligado: uma luz da marca acende atrás do número. */
+  /* Ligado: a borda do cartão fica mais firme. Sem luz colorida: a marca v2 é monocromática. */
   .fb.aceso {
-    isolation: isolate;
+    border-color: var(--linha-forte);
   }
-  .fb.aceso::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(60% 70% at 18% 30%, var(--marca-suave), transparent 70%);
-    pointer-events: none;
+  .real {
+    display: flex;
+    gap: var(--e-5);
+    margin: var(--e-1) 0 0;
+  }
+  .real dt {
+    color: var(--tinta-2);
+    font-size: var(--t-apoio);
+  }
+  .real dd {
+    margin: 2px 0 0;
+    font-size: var(--t-numero);
+    letter-spacing: var(--rastreio-titulo);
+    line-height: 1;
+  }
+  .leitura {
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+    padding: var(--e-3) var(--e-4);
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-2);
+    background: var(--superficie-2);
+    font-size: var(--t-linha);
+    line-height: 1.5;
+  }
+  .leitura p {
+    margin: 0;
+  }
+  .rotulo-leitura {
+    display: block;
+    color: var(--tinta-2);
+    font-size: var(--t-apoio);
+    font-weight: 500;
+  }
+  .proximo {
+    display: flex;
+    gap: var(--e-2);
+    align-items: baseline;
+  }
+  .detalhe {
+    font-size: var(--t-apoio);
   }
   .topo {
     display: flex;
@@ -526,30 +613,14 @@
   .gerador {
     padding: 4px 10px;
     border-radius: 999px;
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
     border: 1px solid var(--linha);
     color: var(--tinta-2);
-    font-size: 12px;
+    font-size: var(--t-apoio);
     font-weight: 500;
-  }
-  .ligado {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ok) 14%, transparent);
-    color: var(--ok-texto);
-    font-size: 12px;
-    font-weight: 600;
   }
   p {
     margin: 0;
-  }
-  .vazio {
-    display: grid;
-    gap: 6px;
-    padding: 6px 0 2px;
   }
   .palco {
     position: relative;
@@ -564,7 +635,7 @@
     align-content: start;
   }
   .gigante {
-    font-size: 84px;
+    font-size: var(--t-heroi);
     line-height: 0.92;
     font-weight: 700;
     letter-spacing: -0.045em;
@@ -583,7 +654,7 @@
     gap: 16px;
     padding: 16px 18px;
     border-radius: 16px;
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
     border: 1px solid var(--linha);
   }
   .escolha {
@@ -592,14 +663,14 @@
     justify-items: start;
   }
   .rotulo {
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--tinta-3);
   }
   .dica {
-    font-size: 12px;
+    font-size: var(--t-apoio);
     color: var(--tinta-2);
   }
   .acoes {
@@ -618,7 +689,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 12px;
+    font-size: var(--t-apoio);
     color: var(--tinta-2);
   }
   kbd {
@@ -631,7 +702,7 @@
     border: 1px solid var(--linha-forte);
     border-bottom-width: 2px;
     font-family: var(--fonte-texto);
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 600;
     color: var(--tinta);
   }
@@ -643,11 +714,11 @@
     padding: 12px 14px;
     border-radius: 14px;
     border: 1px solid var(--linha);
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
   }
   .lembrada p {
     margin-top: 4px;
-    font-size: 13px;
+    font-size: var(--t-linha);
   }
   .linha {
     display: flex;
@@ -657,9 +728,10 @@
     padding-top: 12px;
     border-top: 1px solid var(--linha);
   }
-  .erro {
-    color: var(--perigo);
-    font-size: 13px;
+  .aviso {
+    display: flex;
+    gap: var(--e-2);
+    align-items: baseline;
   }
   .outros {
     display: grid;
@@ -667,22 +739,29 @@
     padding-top: 12px;
     border-top: 1px solid var(--linha);
   }
+  /* Cada gerador numa linha: o nome, o que fazer com ele, e o estado (ponto + texto) à direita. */
   .opcoes {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    display: grid;
   }
   .opcoes li {
     display: flex;
-    gap: 8px;
+    gap: var(--e-3);
     align-items: center;
-    padding: 6px 8px 6px 12px;
-    border-radius: 999px;
-    border: 1px solid var(--linha);
-    font-size: 12px;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-top: 1px solid var(--linha);
+    font-size: var(--t-linha);
+  }
+  .opcoes li:first-child {
+    border-top: 0;
+  }
+  .opcoes li > div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
   }
   @media (max-width: 1100px) {
     .palco {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   // Energia por jogo (trazido da interface antiga, `src/energia.ts`): o vencedor da calibração guardado para o jogo
   // aberto, a lista dos jogos com perfil e o modo dinâmico — ligado, o Otimiza troca para o perfil do jogo quando ele
@@ -25,7 +26,7 @@
       perfis = p.perfis_de_jogo.map((x) => x.executavel);
       dinamico = p.dinamico;
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     }
     lido = true;
   }
@@ -39,7 +40,7 @@
       await f();
       await carregar();
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       ocupado = false;
     }

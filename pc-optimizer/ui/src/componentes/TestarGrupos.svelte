@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // Testar um grupo de cada vez (trazido da interface 3.6, `carregarProtocolo`): vinte ajustes juntos dão um número e
   // nenhuma informação; seis grupos em sequência dão seis respostas, que valem para sempre nesta máquina. Só mostra
   // o estado de cada grupo (`protocolo_de_grupos`); aplicar continua no Otimizar e desfazer no Histórico. "Não mudou
@@ -47,7 +48,7 @@
       grupos = await como<Experimento[]>(commands.protocoloDeGrupos(null));
     } catch (e) {
       // A recusa explica o que fazer: é a primeira instrução do protocolo.
-      recusa = String(e);
+      recusa = explicarErro(e);
     }
   });
 

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import { explicarErro } from "../lib/erros";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Energia: o plano OTIMIZA (ver antes o que muda, aplicar, conferir se continua no lugar, reparar e desfazer),
   // a energia de jogo (o processador sem dormir só com o jogo aberto), os limites escondidos que seguram o FPS e o
   // "por que não funcionou?". O plano do cliente nunca é tocado: o OTIMIZA é um plano à parte e desfazer reativa o
@@ -61,7 +62,7 @@
     try {
       calibracao = await ponte.calibrarEnergia((p) => (passo = p));
     } catch (e) {
-      erroCalibracao = String(e);
+      erroCalibracao = explicarErro(e);
     } finally {
       calibrando = false;
       void lerVistoria();
@@ -80,7 +81,7 @@
       if (calibracao) calibracao = { ...calibracao, pode_aplicar: false };
       void lerVistoria();
     } catch (e) {
-      erroCalibracao = String(e);
+      erroCalibracao = explicarErro(e);
     } finally {
       aplicandoCalibrado = false;
     }
@@ -104,7 +105,7 @@
   onMount(() => {
     void lerVistoria();
     ponte.administrador().then((a) => (admin = a)).catch(() => (admin = null));
-    ponte.energiaDeJogo().then((j) => (jogo = j)).catch((e) => (erro = String(e)));
+    ponte.energiaDeJogo().then((j) => (jogo = j)).catch((e) => (erro = explicarErro(e)));
     void lerTetos();
   });
 
@@ -131,7 +132,7 @@
               : "O Windows não aceitou o plano. Veja a lista e o diagnóstico abaixo.";
       }
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = "";
       await lerVistoria();
@@ -146,7 +147,7 @@
       relatorio = null;
       aviso = "Pronto: o seu plano de energia voltou a ser o ativo.";
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = "";
       await lerVistoria();
@@ -159,7 +160,7 @@
     try {
       jogo = await ponte.definirEnergiaDeJogo(!jogo.ligado);
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = "";
     }
@@ -469,7 +470,7 @@
   .progresso div {
     height: 100%;
     background: var(--acao);
-    transition: width 600ms ease;
+    transition: width var(--mov-lento) var(--curva-padrao);
   }
   .veredito-calibracao {
     display: flex;

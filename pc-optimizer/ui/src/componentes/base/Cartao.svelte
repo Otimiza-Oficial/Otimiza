@@ -17,7 +17,7 @@
     titulo: string;
     /** Uma frase sob o título: o que este cartão resolve. */
     apoio?: string | null;
-    /** O brilho da marca no topo: só para o cartão principal da página (o Turbo do jogo). */
+    /** O cartão principal da página (o Turbo do jogo): a borda mais firme. Sem cor: a marca v2 é monocromática. */
     marca?: boolean;
     selo?: Snippet;
     children?: Snippet;
@@ -49,13 +49,14 @@
     align-content: start;
     gap: 10px;
     min-width: 0;
-    padding: 16px 18px;
+    padding: var(--e-4) 18px;
     border: 1px solid var(--linha);
     border-radius: var(--raio-3);
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
   }
   .cartao.marca {
-    background: linear-gradient(180deg, var(--marca-suave), transparent 70%), var(--bloco, var(--superficie-2));
+    border-color: var(--linha-forte);
+    box-shadow: var(--fio);
   }
   .cabeca {
     display: flex;
@@ -68,8 +69,8 @@
     margin: 0;
     font-family: var(--fonte-titulo);
     font-size: var(--t-corpo);
-    font-weight: 650;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    letter-spacing: var(--rastreio-subtitulo);
   }
   .selo-do-cartao {
     display: inline-flex;

@@ -1,8 +1,10 @@
 <script lang="ts">
-  // Os botões do trilho da esquerda: as 4 abas (a intenção). O vidro e a posição são do contêiner, na casca
-  // (`App.svelte`, `nav.trilho`). Saiu do `App.svelte` na 1.0.12 (Frente 1.2), sem mudar o visual.
+  // As 4 abas do trilho da esquerda (a intenção). Abas de verdade (1.0.12, Frente 1.3): `tablist` vertical, setas de
+  // cima e de baixo, Home e End, só a escolhida no Tab. A posição e a superfície são do contêiner, na casca.
+  import { tick } from "svelte";
   import Icone, { type NomeDoIcone } from "./Icone.svelte";
   import { grupos, type Grupo, type IdDoGrupo } from "../lib/areas";
+  import { indiceDeTab, proximaAba } from "../lib/abas";
 
   let { ativo, onabrir }: { ativo: IdDoGrupo; onabrir: (g: Grupo) => void } = $props();
 
@@ -12,54 +14,83 @@
     prova: "relogio",
     ajustes: "ajustes",
   };
+
+  let lista: HTMLElement | undefined = $state();
+
+  async function teclado(e: KeyboardEvent) {
+    const proximo = proximaAba(
+      grupos.findIndex((g) => g.id === ativo),
+      e.key,
+      grupos.length,
+      "vertical",
+    );
+    if (proximo === null) return;
+    e.preventDefault();
+    onabrir(grupos[proximo]);
+    await tick();
+    lista?.querySelector<HTMLElement>(`#trilho-${grupos[proximo].id}`)?.focus();
+  }
 </script>
 
-{#each grupos as g (g.id)}
-  <button
-    class="trilho-botao"
-    class:ativo={ativo === g.id}
-    aria-label={g.nome}
-    aria-current={ativo === g.id ? "page" : undefined}
-    title={g.nome}
-    onclick={() => onabrir(g)}
-  >
-    <Icone nome={ICONE_DO_GRUPO[g.id]} tamanho={20} />
-    <span class="trilho-nome">{g.nome}</span>
-  </button>
-{/each}
+<div bind:this={lista} class="trilho-lista" role="tablist" aria-label="Seções" aria-orientation="vertical" tabindex="-1" onkeydown={teclado}>
+  {#each grupos as g (g.id)}
+    <button
+      id={`trilho-${g.id}`}
+      class="trilho-botao"
+      class:ativo={ativo === g.id}
+      role="tab"
+      aria-selected={ativo === g.id}
+      aria-controls="painel-da-area"
+      aria-label={g.nome}
+      tabindex={indiceDeTab(ativo === g.id)}
+      onclick={() => onabrir(g)}
+    >
+      <Icone nome={ICONE_DO_GRUPO[g.id]} tamanho={20} />
+      <span class="trilho-nome" aria-hidden="true">{g.nome}</span>
+    </button>
+  {/each}
+</div>
 
 <style>
+  .trilho-lista {
+    display: grid;
+    gap: var(--e-1);
+  }
+  .trilho-lista:focus {
+    outline: none;
+  }
   .trilho-botao {
     display: grid;
     place-items: center;
     align-content: center;
-    gap: 3px;
-    width: 56px;
-    height: 54px;
+    gap: 5px;
+    width: 64px;
+    height: 60px;
     border: 0;
-    border-radius: 18px;
+    border-radius: var(--raio-3);
     background: transparent;
-    color: var(--texto);
+    color: var(--tinta-2);
     cursor: pointer;
     transition:
-      background var(--mov-medio) ease,
-      transform var(--mov-medio) var(--curva-mola);
+      background var(--mov-rapido) ease,
+      color var(--mov-rapido) ease;
   }
   .trilho-botao:hover {
-    background: var(--bloco-2);
+    background: var(--acao-suave);
+    color: var(--tinta);
   }
-  /* O lugar onde você está: cheio e escuro, para achar de relance sobre o vidro claro. */
+  /* O lugar onde você está: a superfície de cima e o texto cheio. Sem cor: a marca é monocromática. */
   .trilho-botao.ativo {
-    background: var(--texto);
-    color: var(--contra, #fff);
-    box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+    background: var(--superficie-3);
+    color: var(--tinta);
+    box-shadow: var(--fio);
   }
   .trilho-botao:focus-visible {
-    outline-offset: 0;
+    outline-offset: -2px;
   }
   /* O nome da aba sob o ícone: quatro abas, e quem abre pela primeira vez lê onde está o "Jogar". */
   .trilho-nome {
-    font-size: 10.5px;
+    font-size: var(--t-apoio);
     font-weight: 500;
     line-height: 1;
     white-space: nowrap;

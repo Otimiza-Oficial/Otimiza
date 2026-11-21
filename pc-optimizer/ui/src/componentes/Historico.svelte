@@ -1,5 +1,6 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import { explicarErro } from "../lib/erros";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Histórico: tudo o que o Otimiza mudou neste PC, com o valor de antes como foi GRAVADO, e o desfazer um por
   // um ou tudo de uma vez. Lista vazia com histórico ilegível não é "nada mudou": a leitura aparece antes da lista.
   // Onde o Rust manda `null` (item fora do catálogo), a tela não afirma nem nega admin ou reinício.
@@ -37,7 +38,7 @@
       historico = await ponte.historico();
       erroDeLeitura = null;
     } catch (e) {
-      erroDeLeitura = String(e);
+      erroDeLeitura = explicarErro(e);
     }
   }
 
@@ -77,7 +78,7 @@
           }
         : { tipo: "erro", texto: `${m.nome}: ${r.message}` };
     } catch (e) {
-      aviso = { tipo: "erro", texto: `${m.nome}: ${String(e)}` };
+      aviso = { tipo: "erro", texto: `${m.nome}: ${explicarErro(e)}` };
     } finally {
       ocupado = null;
       await carregar();
@@ -114,7 +115,7 @@
     try {
       aviso = resumo(await ponte.desfazerTudo());
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       ocupado = null;
       await carregar();
@@ -126,7 +127,7 @@
       const msg = await ponte.abrirComoAdministrador();
       if (msg) aviso = { tipo: "atencao", texto: msg };
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     }
   }
 </script>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   // A área Mira (trazida da 3.3, `src/v33/app.ts`, `telaMira`): a mira numa janela do Otimiza por cima do jogo (sem
   // tocar nele), os comandos para a mira do próprio CS2, a sensibilidade em cm por volta, o treino de tracking e, para
   // o FiveM, o campo de visão e o contador de FPS do jogo. Na 1.0.3: o código da mira para o Valorant (lá a janela por
@@ -74,7 +75,7 @@
         ? { texto: "Pronto. No CS2, abra um servidor seu (Jogar > Praticar) e digite no console: exec otimiza_treino ou exec otimiza_mira.", tom: "ok" }
         : { texto: "Tirei os arquivos de treino do Otimiza da pasta do CS2.", tom: "ok" };
     } catch (e) {
-      treinoRecado = { texto: String(e), tom: "atencao" };
+      treinoRecado = { texto: explicarErro(e), tom: "atencao" };
     }
   }
 
@@ -87,7 +88,7 @@
         tom: nota ? "atencao" : "ok",
       };
     } catch (e) {
-      recado = { texto: String(e), tom: "atencao" };
+      recado = { texto: explicarErro(e), tom: "atencao" };
     }
   }
 
@@ -117,7 +118,7 @@
       recado = { texto: "Mira ligada. Ela some quando o jogo sai da frente.", tom: "ok" };
     } catch (e) {
       const t = String(e);
-      recado = t.startsWith("CONFIRMAR:") ? { texto: t.slice(10), tom: "atencao", confirmar: true } : { texto: t, tom: "atencao" };
+      recado = t.startsWith("CONFIRMAR:") ? { texto: t.slice(10), tom: "atencao", confirmar: true } : { texto: explicarErro(t), tom: "atencao" };
     }
   }
 
@@ -136,7 +137,7 @@
       await navigator.clipboard.writeText(await ferramentas.miraCs2($state.snapshot(mira) as Mira));
       recado = { texto: "Copiado. No CS2, abra o console e cole: a mira fica no próprio jogo, sem janela por cima.", tom: "ok" };
     } catch (e) {
-      recado = { texto: String(e), tom: "atencao" };
+      recado = { texto: explicarErro(e), tom: "atencao" };
     }
   }
 
@@ -178,7 +179,7 @@
       fov = await f();
       fovPosicao = fov.pedido ?? fov.atual ?? fovPosicao;
     } catch (e) {
-      fovErro = String(e);
+      fovErro = explicarErro(e);
     }
   }
 
@@ -187,7 +188,7 @@
     try {
       contador = await ferramentas.contadorFivemDefinir(!contador.ligado);
     } catch (e) {
-      fovErro = String(e);
+      fovErro = explicarErro(e);
     }
   }
 
@@ -523,7 +524,7 @@
     background: var(--superficie-2);
     color: var(--tinta);
     font: inherit;
-    font-size: 10.5px;
+    font-size: var(--t-apoio);
     cursor: pointer;
   }
   .estilos svg {
@@ -552,7 +553,7 @@
     background: var(--cor);
     box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
     cursor: pointer;
-    transition: transform 140ms cubic-bezier(0.3, 1.5, 0.5, 1);
+    transition: transform var(--mov-rapido) var(--curva-padrao);
   }
   .cores button:hover,
   .livre:hover {

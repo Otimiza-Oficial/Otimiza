@@ -31,6 +31,7 @@
 </script>
 
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O que mudou neste jogo (trazido da interface 3.6, `desenharLinhaDoJogo`): as partidas medidas, o que trocou em volta
@@ -38,7 +39,7 @@
   // não prova que foi a causa: a queda só é dita quando as partidas de antes e de depois passam da margem de erro.
   import { noTauri } from "../lib/ponte";
   import Cartao from "./base/Cartao.svelte";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
 
   let { jogo }: { jogo: string } = $props();
 
@@ -61,7 +62,7 @@
     linha = undefined;
     todas ??= noTauri
       ? como<LinhaDoJogo[]>(commands.oQueMudou()).catch((e) => {
-          erro = String(e);
+          erro = explicarErro(e);
           todas = null;
           return null;
         })

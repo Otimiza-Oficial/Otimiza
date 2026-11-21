@@ -175,7 +175,7 @@
   }
   .eixo {
     fill: var(--tinta-3);
-    font-size: 11px;
+    font-size: var(--t-apoio);
   }
   .serie {
     fill: none;

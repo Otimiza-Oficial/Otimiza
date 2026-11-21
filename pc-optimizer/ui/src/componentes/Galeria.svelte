@@ -1,24 +1,17 @@
 <script lang="ts">
-  // Só em desenvolvimento (`?galeria`): o Oti em todos os humores e gestos, para conferir o desenho de uma vez.
-  import Oti, { type Gesto, type Humor } from "./Oti.svelte";
-  import type { Acessorio } from "../lib/temporadas";
+  // Só em desenvolvimento (`?galeria`): o Oti da marca v2 em cada olhar e nos dois tons, para conferir o desenho.
+  import Oti, { type Humor } from "./Oti.svelte";
 
-  const humores: Humor[] = ["atento", "falando", "feliz", "pensando", "preocupado", "surpreso", "jogando", "dormindo"];
-  const gestos: Gesto[] = ["acenar", "apontar", "comemorar"];
-  const acessorios: Acessorio[] = ["gorro", "cartola", "mascara", "orelhas", "chapeu-de-palha", "bone", "chapeu-de-bruxa"];
+  const humores: Humor[] = ["atento", "pensando", "jogando", "preocupado", "dormindo"];
 </script>
 
 <main>
   {#each humores as h (h)}
-    <figure><Oti humor={h} tamanho={180} segueCursor={false} /><figcaption>{h}</figcaption></figure>
+    <figure><Oti humor={h} tamanho={180} tom="branco" /><figcaption>{h}</figcaption></figure>
   {/each}
-  {#each gestos as g (g)}
-    <figure><Oti gesto={g} humor="feliz" tamanho={180} segueCursor={false} /><figcaption>{g}</figcaption></figure>
-  {/each}
-  {#each acessorios as a (a)}
-    <figure class="claro"><Oti acessorio={a} tamanho={150} segueCursor={false} /><figcaption>{a}</figcaption></figure>
-  {/each}
-  <figure class="claro"><Oti tamanho={180} segueCursor={false} /><figcaption>fundo claro</figcaption></figure>
+  <figure class="claro"><Oti tamanho={180} tom="negativo" /><figcaption>fundo claro (negativo)</figcaption></figure>
+  <figure><Oti tamanho={32} tom="branco" /><figcaption>32 px</figcaption></figure>
+  <figure class="claro"><Oti tamanho={24} tom="negativo" /><figcaption>24 px</figcaption></figure>
 </main>
 
 <style>
@@ -29,7 +22,7 @@
     padding: 32px;
     height: 100vh;
     overflow: auto;
-    background: radial-gradient(circle at 50% 30%, #2a2466, #0b0b22);
+    background: var(--preto);
     color: #fff;
   }
   figure {
@@ -39,8 +32,8 @@
     gap: 8px;
   }
   .claro {
-    background: #eef1fb;
-    color: #222;
+    background: var(--papel);
+    color: var(--carvao);
     border-radius: 16px;
   }
 </style>

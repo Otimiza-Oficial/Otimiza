@@ -1,11 +1,6 @@
-/* Tokens da Nova Geração. As regras de uso estão em `ui/DESIGN.md`. Um arquivo só para o app e, depois, para o site. */
-
-@font-face {
-  font-family: "Jakarta";
-  src: url("/jakarta-variavel.woff2") format("woff2");
-  font-weight: 200 800;
-  font-display: block;
-}
+/* Tokens da marca Otimiza v2. As regras de uso estão em `ui/DESIGN.md`; a fonte é a entrega aprovada pelo dono
+   (`tokens-marca.json`). Monocromática: preto, branco e cinzas. Cor só para estado (ok, atenção, perigo), nunca para
+   enfeite. Uma família só, a Geist. */
 
 @font-face {
   font-family: "Geist";
@@ -15,188 +10,157 @@
 }
 
 :root {
-  /* Texto: três tons neutros, os mesmos do painel (Plano de refino 2.1.3: uma camada só de tokens). O apoio é mais
-     claro, não menor. `--texto`, `--sec` e `--contra` são os nomes que a casca usa para os mesmos tons. */
-  --tinta: #1d1d1f;
-  --tinta-2: #5d5d63;
-  --tinta-3: #8e8e93;
+  /* ---- Primitivas (a paleta da marca). Componente não usa estas: usa as semânticas logo abaixo. ---- */
+  --preto: #000000;
+  --carvao: #0a0a0b;
+  --grafite: #141416;
+  --grafite-2: #1c1c1f;
+  --grafite-3: #26262a;
+  --cinza-600: #5e5e63;
+  --cinza-400: #8e8e93;
+  --cinza-300: #a1a1a6;
+  --papel: #f5f5f7;
+  --branco: #ffffff;
+  /* O Oti: disco branco chapado e olhos quase pretos. No claro, o negativo (disco carvão, olhos brancos). */
+  --oti-disco: #ffffff;
+  --oti-olho: #12121c;
+  /* O Oti no tema: no claro, o negativo; no escuro, o original. */
+  --oti-disco-tema: var(--carvao);
+  --oti-olho-tema: var(--branco);
+
+  /* ---- Tema claro (papel). Contrastes medidos em `ui/testes/contraste.test.ts`. ---- */
+  --fundo: var(--papel);
+  --tinta: var(--carvao); /* 18,9:1 no papel */
+  --tinta-2: var(--cinza-600); /* apoio: 5,9:1 no papel, 6,4:1 no branco */
+  --tinta-3: #68686d; /* terceiro nível: 5,1:1 no papel, 4,7:1 na superfície 2 */
   --texto: var(--tinta);
   --sec: var(--tinta-2);
   /* A letra do botão principal: o avesso do texto. */
-  --contra: #ffffff;
+  --contra: var(--branco);
 
-  /* A ação é a cor do texto (preto no claro, branco no escuro), como no painel: o app não tem uma cor de marca no
-     botão. O verde é de "ligado"; o âmbar, de "medido". */
-  --acao: #1d1d1f;
-  --acao-forte: #000000;
-  --acao-suave: rgb(29 29 31 / 0.06);
+  /* A ação é a cor do texto (carvão no claro, branco no escuro): o app não tem cor de marca em botão. */
+  --acao: var(--carvao);
+  --acao-forte: var(--preto);
+  --acao-suave: rgb(10 10 11 / 0.06);
 
-  /* A cor da marca (a do vídeo): só em momento de marca — aba ativa, segmento escolhido, número-herói, foco. Botão
-     principal continua preto/branco. Nunca para estado (ok, atenção e perigo têm cores próprias). */
-  --marca: #e5262c;
-  --marca-suave: rgb(229 38 44 / 0.1);
+  /* "Marca" na v2 é o próprio texto: aba ativa, segmento, número-herói. Nome mantido para os componentes antigos. */
+  --marca: var(--tinta);
+  --marca-suave: rgb(10 10 11 / 0.08);
 
-  /* Estado: só em ponto, ícone pequeno ou texto curto. */
-  --ok: #1d936e;
-  --ok-texto: #157a5a; /* o verde em texto miúdo: 4,5:1 sobre o cartão */
-  --atencao: #b8741a;
-  --atencao-texto: #8a5410; /* o âmbar em texto miúdo: 4,5:1 sobre o cartão */
-  --veu: rgb(6 6 10 / 0.5);
-  --perigo: #cc4a43;
-  /* O âmbar dos olhos do mascote: só para o selo "Medido". */
-  --ambar: #9a5a14;
-  --ambar-fundo: #fbefdc;
+  /* Estado: só em ponto, ícone pequeno ou texto curto. Todos passam no AA sobre o fundo e a superfície. */
+  --ok: #157a5a;
+  /* O verde da marca dá 4,5:1 raspando na superfície 2; o texto desce um tom para passar com folga. */
+  --ok-texto: #126e51;
+  --atencao: #8a5410;
+  --atencao-texto: #8a5410;
+  --perigo: #b8322f;
+  --perigo-texto: #b8322f;
 
-  /* Superfícies claras e quase opacas: o vidro é do mascote, não de cada caixa. */
-  --superficie: rgb(255 255 255 / 0.88);
-  --superficie-2: rgb(245 245 247 / 0.95);
-  --superficie-menu: rgb(255 255 255 / 0.62);
+  --superficie: var(--branco);
+  --superficie-2: #ececef;
+  --superficie-3: #e2e2e6;
+  --superficie-menu: var(--branco);
   --linha: rgb(0 0 0 / 0.08);
-  --linha-forte: rgb(0 0 0 / 0.14);
+  --linha-forte: rgb(0 0 0 / 0.16);
+  --veu: rgb(10 10 11 / 0.42);
+  --segmento-ativo: var(--branco);
+  --foco: var(--carvao);
 
+  /* Sombras curtas: a profundidade vem da borda fina e do contraste das superfícies, não de nuvem cinza. */
   --sombra-1: 0 1px 2px rgb(0 0 0 / 0.06);
-  --sombra-2: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 16px rgb(0 0 0 / 0.08);
-  --sombra-3: 0 2px 6px rgb(0 0 0 / 0.06), 0 28px 64px rgb(0 0 0 / 0.18);
-  --desfoque: blur(24px) saturate(1.3);
+  --sombra-2: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 24px -8px rgb(0 0 0 / 0.12);
+  --sombra-3: 0 2px 6px rgb(0 0 0 / 0.06), 0 32px 72px -16px rgb(0 0 0 / 0.24);
+  /* O fio de luz no alto de um cartão (no escuro é o que separa grafite de preto). */
+  --fio: inset 0 1px 0 rgb(255 255 255 / 0.7);
+  --desfoque: blur(24px) saturate(1.2);
 
-  --segmento-ativo: #ffffff;
+  /* ---- Espaço: uma escala de 4 em 4 até 16, depois 24, 32, 48, 64. ---- */
+  --e-1: 4px;
+  --e-2: 8px;
+  --e-3: 12px;
+  --e-4: 16px;
+  --e-5: 24px;
+  --e-6: 32px;
+  --e-7: 48px;
+  --e-8: 64px;
 
-  --raio-1: 8px;
-  --raio-2: 12px;
-  --raio-3: 18px;
+  /* ---- Raio ---- */
+  --raio-1: 8px; /* controle pequeno, selo */
+  --raio-2: 12px; /* botão, campo, linha */
+  --raio-3: 16px; /* bloco interno */
+  --raio-4: 22px; /* cartão de área, bloco da tela inicial */
+  --raio-pilula: 999px;
 
-  /* Três tamanhos de texto e um para número grande. */
-  --t-apoio: 12px;
-  --t-corpo: 14px;
-  --t-linha: 13px; /* linha de lista, aviso e recado curto */
-  --t-titulo: 20px;
-  --t-numero: 28px;
-  --t-destaque: 32px; /* o nome e os números do jogo no destaque */
-
-  /* Movimento (Plano de refino 2.3.1): três durações e duas curvas para o app inteiro. Rápido para resposta a toque
-     (hover, interruptor), médio para troca de estado, entrar para o que aparece. Tudo para com o jogo aberto e com
-     "reduzir movimento" (regras no fim deste arquivo). */
-  --mov-rapido: 140ms;
-  --mov-medio: 200ms;
-  --mov-entrar: 420ms;
-  --curva-mola: cubic-bezier(0.3, 1.4, 0.5, 1);
-  --curva-saida: cubic-bezier(0.2, 0.8, 0.2, 1);
-
-  --fonte-titulo: "Jakarta", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  /* ---- Tipografia: Geist. 700 nos títulos com rastreio apertado, 500 em caixa alta nos rótulos, 400 no texto. O
+     mínimo do app é 12 px (`--t-apoio`). ---- */
+  --fonte-titulo: "Geist", "Segoe UI Variable Display", "Segoe UI", sans-serif;
   --fonte-texto: "Geist", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --t-apoio: 12px;
+  --t-rotulo: 12px;
+  --t-linha: 13px; /* linha de lista, aviso e recado curto */
+  --t-corpo: 14px;
+  --t-subtitulo: 16px;
+  --t-titulo: 20px;
+  --t-titulo-area: 28px;
+  --t-numero: 28px;
+  --t-destaque: 40px; /* o nome e os números do jogo no destaque */
+  --t-heroi: 56px;
+  --rastreio-titulo: -0.04em;
+  --rastreio-subtitulo: -0.02em;
+  --rastreio-rotulo: 0.16em;
+
+  /* ---- Movimento sóbrio: sem mola, sem quique. Rápido para resposta a toque, médio para troca de estado, entrar para
+     o que aparece. Tudo para com o jogo aberto e com "reduzir movimento" (regras no fim deste arquivo). ---- */
+  --mov-rapido: 120ms;
+  --mov-medio: 200ms;
+  --mov-entrar: 320ms;
+  --mov-lento: 640ms;
+  --curva-padrao: cubic-bezier(0.32, 0.72, 0, 1);
+  --curva-saida: cubic-bezier(0.22, 1, 0.36, 1);
+  --curva-entrada: cubic-bezier(0.64, 0, 0.78, 0);
+  /* Nome antigo: a mola da v1 virou a curva padrão, sem passar do ponto. */
+  --curva-mola: var(--curva-padrao);
 
   color-scheme: light;
 }
 
 :root[data-tema="noite"] {
-  --tinta: #f5f5f7;
-  --tinta-2: #a1a1a8;
-  --tinta-3: #85858c;
-  --contra: #1d1d1f;
-  --acao: #f5f5f7;
-  --acao-forte: #ffffff;
+  --fundo: var(--preto);
+  --oti-disco-tema: var(--oti-disco);
+  --oti-olho-tema: var(--oti-olho);
+  --tinta: var(--branco); /* 21:1 no preto */
+  --tinta-2: var(--cinza-300); /* 8,2:1 no preto, 7,2:1 no grafite */
+  --tinta-3: var(--cinza-400); /* 6,4:1 no preto, 5,6:1 no grafite */
+  --contra: var(--carvao);
+  --acao: var(--branco);
+  --acao-forte: var(--papel);
   --acao-suave: rgb(255 255 255 / 0.08);
-  --marca: #ff3b3b;
-  --marca-suave: rgb(255 59 59 / 0.14);
-  --ok: #4cc59a;
-  --ok-texto: #4cc59a;
-  --atencao: #e2a34f;
-  --atencao-texto: #e2a34f;
-  --veu: rgb(0 0 0 / 0.55);
-  --perigo: #ec7a73;
-  --ambar: #f1c48a;
-  --ambar-fundo: rgb(241 196 138 / 0.14);
-  /* Cinza neutro, como o vidro escuro do painel: o azul-marinho de antes destoava dele. */
-  --superficie: rgb(28 28 31 / 0.96);
-  --superficie-2: rgb(40 40 44 / 0.95);
-  --superficie-menu: rgb(30 30 34 / 0.6);
-  --linha: rgb(255 255 255 / 0.07);
-  --linha-forte: rgb(255 255 255 / 0.14);
-  --sombra-1: 0 1px 2px rgb(0 0 0 / 0.25);
-  --segmento-ativo: rgb(255 255 255 / 0.16);
-  --sombra-2: 0 1px 2px rgb(0 0 0 / 0.2), 0 6px 16px rgb(0 0 0 / 0.25);
-  --sombra-3: 0 2px 6px rgb(0 0 0 / 0.2), 0 28px 64px rgb(0 0 0 / 0.45);
+  --marca-suave: rgb(255 255 255 / 0.1);
+  --ok: #30d158;
+  --ok-texto: #30d158;
+  --atencao: #ff9f0a;
+  --atencao-texto: #ff9f0a;
+  --perigo: #ff6961;
+  --perigo-texto: #ff6961;
+  --superficie: var(--grafite);
+  --superficie-2: var(--grafite-2);
+  --superficie-3: var(--grafite-3);
+  --superficie-menu: var(--grafite-2);
+  --linha: rgb(255 255 255 / 0.08);
+  --linha-forte: rgb(255 255 255 / 0.16);
+  --veu: rgb(0 0 0 / 0.66);
+  --segmento-ativo: var(--grafite-3);
+  --foco: var(--branco);
+  --sombra-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --sombra-2: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.7);
+  --sombra-3: 0 2px 6px rgb(0 0 0 / 0.4), 0 40px 80px -20px rgb(0 0 0 / 0.85);
+  --fio: inset 0 1px 0 rgb(255 255 255 / 0.05);
   color-scheme: dark;
 }
 
-/* ---------------------------------------------------------------------------------------------------------------
-   As épocas do ano. Cada uma troca a cor da marca e ganha um detalhe nos cartões; o cenário (varal e partículas) está
-   em `componentes/EfeitoDeEpoca.svelte`. Tudo some com o jogo aberto (a regra `.jogo-aberto` lá embaixo). */
-:root[data-epoca="natal"] {
-  --marca: #ff4d4d;
-  --epoca-luz: #ffd36b;
-}
-:root[data-epoca="ano-novo"] {
-  --marca: #f2c14e;
-  --epoca-luz: #ffe9a8;
-}
-:root[data-epoca="carnaval"] {
-  --marca: #ff4fa3;
-  --epoca-luz: #8b5cf6;
-}
-:root[data-epoca="pascoa"] {
-  --marca: #a78bfa;
-  --epoca-luz: #fbcfe8;
-}
-:root[data-epoca="festa-junina"] {
-  --marca: #ff8a1f;
-  --epoca-luz: #facc15;
-}
-:root[data-epoca="dia-das-criancas"] {
-  --marca: #3b82f6;
-  --epoca-luz: #facc15;
-}
-:root[data-epoca="halloween"] {
-  --marca: #ff8a1f;
-  --epoca-luz: #a855f7;
-}
-:root[data-epoca] {
-  --marca-suave: color-mix(in srgb, var(--marca) 16%, transparent);
-}
-
-/* O filete de cima dos cartões ganha a luz da época (da marca para a luz, sumindo nas pontas). */
-:root[data-epoca] .bloco::after,
-:root[data-epoca] .area-corpo .secao:not(.secao .secao)::after {
-  content: "";
-  position: absolute;
-  left: 14%;
-  right: 14%;
-  top: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--marca), var(--epoca-luz), transparent);
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-/* Natal: uma geada fina no alto de cada cartão, com a borda irregular de neve acumulada. */
-:root[data-epoca="natal"] .bloco::before,
-:root[data-epoca="natal"] .area-corpo .secao:not(.secao .secao)::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 9px -2px, rgb(255 255 255 / 0.85) 7px, transparent 7.6px) 0 0 / 23px 8px repeat-x,
-    radial-gradient(circle at 4px -1px, rgb(255 255 255 / 0.7) 4px, transparent 4.6px) 11px 0 / 23px 6px repeat-x,
-    linear-gradient(180deg, rgb(255 255 255 / 0.75), rgb(255 255 255 / 0)) 0 0 / 100% 4px no-repeat;
-  opacity: 0.32;
-}
-:root[data-epoca="natal"][data-tema="dia"] .bloco::before,
-:root[data-epoca="natal"][data-tema="dia"] .area-corpo .secao:not(.secao .secao)::before {
-  opacity: 0.9;
-  filter: drop-shadow(0 1px 1px rgb(120 140 170 / 0.35));
-}
-
-/* Com jogo aberto: nada de desfoque (recalcula a cada quadro da janela) e superfícies opacas. */
+/* Com jogo aberto: nada de desfoque (recalcula a cada quadro da janela). */
 :root.jogo-aberto {
   --desfoque: none;
-  --superficie: rgb(255 255 255 / 0.97);
-  --superficie-menu: rgb(242 242 245 / 0.97);
-}
-:root.jogo-aberto[data-tema="noite"] {
-  --superficie: rgb(30 30 34 / 0.98);
-  --superficie-menu: rgb(30 30 34 / 0.98);
 }
 
 * {
@@ -214,12 +178,12 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  /* Plano de refino 2.3.2: dígitos da mesma largura no app inteiro, para o número que muda não dançar. */
+  /* Dígitos da mesma largura no app inteiro, para o número que muda não dançar. */
   font-variant-numeric: tabular-nums;
 }
 
 body {
-  background: #cddcf6;
+  background: var(--fundo);
 }
 :root.janela-transparente,
 :root.janela-transparente body {
@@ -227,14 +191,21 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
 
+/* Foco: um anel na cor do texto (branco no escuro, carvão no claro), só pelo teclado. Vale para o app inteiro; um
+   componente só muda o recuo, nunca tira o anel. */
 :focus-visible {
-  outline: 2px solid var(--marca);
+  outline: 2px solid var(--foco);
   outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 ::selection {
@@ -256,62 +227,73 @@ h2 {
 .numero {
   font-family: var(--fonte-titulo);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: var(--rastreio-subtitulo);
+}
+
+/* O rótulo da marca: caixa alta, rastreio aberto, 500. Para nome de grupo e legenda de número. */
+.rotulo {
+  font-size: var(--t-rotulo);
+  font-weight: 500;
+  letter-spacing: var(--rastreio-rotulo);
+  text-transform: uppercase;
+  color: var(--tinta-2);
 }
 
 /* ---------------------------------------------------------------------------------------------------------------
-   Peças comuns. As áreas usam estas classes em vez de cada uma inventar seu botão. */
+   Peças comuns. As áreas usam estas classes (ou os componentes de `componentes/base/`, que as usam) em vez de cada uma
+   inventar seu botão. */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--e-2);
   min-height: 36px;
-  padding: 0 16px;
+  padding: 0 var(--e-4);
   border: 1px solid var(--linha-forte);
-  border-radius: var(--raio-1);
-  background: var(--superficie);
+  border-radius: var(--raio-2);
+  background: transparent;
   color: var(--tinta);
   font-size: var(--t-corpo);
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--mov-rapido) ease, border-color var(--mov-rapido) ease;
+  transition:
+    background var(--mov-rapido) ease,
+    border-color var(--mov-rapido) ease,
+    color var(--mov-rapido) ease;
 }
 .btn:hover:not(:disabled) {
-  background: var(--superficie-2);
+  background: var(--acao-suave);
   border-color: var(--linha-forte);
 }
 .btn.primario {
   border-color: transparent;
   background: var(--acao);
-  color: #fff;
+  color: var(--contra);
+  font-weight: 600;
 }
 .btn.primario:hover:not(:disabled) {
   background: var(--acao-forte);
 }
-:root[data-tema="noite"] .btn.primario {
-  color: #1d1d1f;
-}
 .btn.perigo {
   border-color: transparent;
   background: var(--perigo);
-  color: #fff;
+  color: var(--branco);
+  font-weight: 600;
 }
 /* No escuro o vermelho é claro: o texto escuro dá o contraste que o branco não dá. */
 :root[data-tema="noite"] .btn.perigo {
-  color: #1d1d1f;
+  color: var(--carvao);
 }
+/* O link: sempre sublinhado de leve, para não ser confundido com um título em negrito. */
 .btn.quieto {
   min-height: 28px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--acao);
-}
-/* O link: sempre sublinhado de leve, para não ser confundido com um título em negrito. */
-.btn.quieto {
   text-decoration: underline;
   text-decoration-color: var(--linha-forte);
   text-underline-offset: 3px;
@@ -320,39 +302,46 @@ h2 {
   background: none;
   text-decoration-color: currentColor;
 }
+.btn.pequeno {
+  min-height: 30px;
+  padding: 0 var(--e-3);
+  font-size: var(--t-linha);
+}
 .btn:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
-/* Seletor segmentado (opções, abas internas): trilho cinza e a opção escolhida em branco, levantada. O mesmo em
-   toda área; a barra de cima e as abas de baixo seguem a mesma ideia. */
+/* Seletor segmentado (opções, abas internas): trilho e a opção escolhida levantada. */
 .segmento {
   display: inline-flex;
   flex: none;
   width: fit-content;
   gap: 2px;
   padding: 3px;
-  border-radius: 10px;
-  background: var(--linha);
+  border-radius: var(--raio-2);
+  background: var(--superficie-2);
 }
 .segmento > button {
   height: 30px;
-  padding: 0 12px;
+  padding: 0 var(--e-3);
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
   color: var(--tinta-2);
-  font-size: 13px;
+  font-size: var(--t-linha);
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: background var(--mov-rapido) ease, color var(--mov-rapido) ease;
+  transition:
+    background var(--mov-rapido) ease,
+    color var(--mov-rapido) ease;
 }
 .segmento > button:hover:not(:disabled) {
   color: var(--tinta);
 }
 .segmento > button[aria-checked="true"],
+.segmento > button[aria-pressed="true"],
 .segmento > button[aria-selected="true"] {
   background: var(--segmento-ativo);
   color: var(--tinta);
@@ -387,25 +376,27 @@ h2 {
   font-size: var(--t-apoio);
 }
 
-/* Selos: um formato só no app inteiro. Neutro informa; "medido" é o âmbar do mascote; "estimado" é tracejado, porque
+/* Selos: um formato só no app inteiro. Neutro informa; "medido" é cheio (é fato lido); "estimado" é tracejado, porque
    ainda não é medida. */
 .selo {
   display: inline-block;
-  padding: 1px 6px;
+  padding: 1px 7px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--superficie-2);
   color: var(--tinta-2);
-  font-size: 12px;
+  font-size: var(--t-apoio);
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1.5;
   vertical-align: 1px;
   white-space: nowrap;
 }
-.selo.medido {
-  background: var(--ambar-fundo);
-  color: var(--ambar);
+.selo.medido,
+.selo-medido {
+  border-color: transparent;
+  background: var(--tinta);
+  color: var(--contra);
 }
 .selo.estimado {
   border: 1px dashed var(--linha-forte);
@@ -417,14 +408,14 @@ h2 {
 .selo[data-tom="atencao"] {
   color: var(--atencao-texto);
 }
-
+.selo[data-tom="perigo"] {
+  color: var(--perigo-texto);
+}
 .selo-medido {
   display: inline-block;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--ambar-fundo);
-  color: var(--ambar);
-  font-size: 12px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: var(--t-apoio);
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -457,14 +448,14 @@ h2 {
 }
 /* O rótulo de um grupo dentro de um cartão ("Cache", "Crashes"). */
 .rotulo-grupo {
-  font-size: var(--t-apoio);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: var(--t-rotulo);
+  font-weight: 500;
+  letter-spacing: var(--rastreio-rotulo);
+  text-transform: uppercase;
   color: var(--tinta-2);
 }
 
-/* Linhas com uma ação à direita (cache para limpar, programa para fechar): o texto e o apoio à esquerda, o botão à
-   direita, alinhado ao centro. */
+/* Linhas com uma ação à direita: o texto e o apoio à esquerda, o botão à direita, alinhado ao centro. */
 .linhas {
   list-style: none;
   margin: 0;
@@ -476,7 +467,7 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: var(--e-3);
   font-size: var(--t-linha);
 }
 .linhas > li > div {
@@ -488,62 +479,47 @@ h2 {
 /* Seção de uma janela: separada por linha fina, nunca por outro cartão. */
 .secao {
   display: grid;
-  gap: 12px;
+  gap: var(--e-3);
   padding: 20px 0;
   border-top: 1px solid var(--linha);
 }
 .secao:first-child {
   border-top: 0;
-  padding-top: 4px;
+  padding-top: var(--e-1);
 }
 .secao > h2 {
   font-size: var(--t-corpo);
   font-weight: 600;
 }
 
-/* Dentro de uma área aberta, cada seção de primeiro nível vira um cartão: o filete de luz em cima, a borda do vidro e
-   uma entrada em cascata. Seção dentro de seção continua só separada por linha. */
+/* Dentro de uma área aberta, cada seção de primeiro nível vira um cartão: superfície firme, borda fina e o fio de luz
+   no alto. Seção dentro de seção continua só separada por linha. */
 .area-corpo .secao:not(.secao .secao) {
   position: relative;
-  padding: 22px 24px;
-  border: 1px solid var(--vidro-borda, var(--linha));
-  border-radius: 20px;
-  background: var(--cartao-fundo, rgb(255 255 255 / 0.72));
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.5),
-    0 1px 2px rgb(0 0 0 / 0.04),
-    0 12px 32px -12px rgb(0 0 0 / 0.12);
+  padding: var(--e-5);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-4);
+  background: var(--superficie);
+  box-shadow: var(--fio), var(--sombra-1);
   animation: secao-entra var(--mov-entrar) var(--curva-saida) both;
 }
-:root[data-tema="noite"] .area-corpo .secao:not(.secao .secao) {
-  --cartao-fundo: linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.025));
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.07),
-    0 18px 40px -18px rgb(0 0 0 / 0.6);
-}
 .area-corpo .secao:not(.secao .secao) + .secao {
-  margin-top: 12px;
+  margin-top: var(--e-3);
 }
 .area-corpo .secao:not(.secao .secao) > h2 {
   font-family: var(--fonte-titulo);
-  font-size: 16px;
+  font-size: var(--t-subtitulo);
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--rastreio-subtitulo);
 }
-.area-corpo .secao:nth-child(2) { animation-delay: 40ms; }
-.area-corpo .secao:nth-child(3) { animation-delay: 80ms; }
-.area-corpo .secao:nth-child(4) { animation-delay: 120ms; }
-.area-corpo .secao:nth-child(5) { animation-delay: 160ms; }
-.area-corpo .secao:nth-child(n + 6) { animation-delay: 200ms; }
+.area-corpo .secao:nth-child(2) { animation-delay: 30ms; }
+.area-corpo .secao:nth-child(3) { animation-delay: 60ms; }
+.area-corpo .secao:nth-child(4) { animation-delay: 90ms; }
+.area-corpo .secao:nth-child(n + 5) { animation-delay: 120ms; }
 @keyframes secao-entra {
   from {
     opacity: 0;
-    transform: translateY(10px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .area-corpo .secao {
-    animation: none;
+    transform: translateY(6px);
   }
 }
 .area-corpo .apoio {
@@ -556,8 +532,8 @@ h2 {
   display: flex;
   gap: 10px;
   align-items: baseline;
-  padding: 10px 12px;
-  border-radius: var(--raio-1);
+  padding: 10px var(--e-3);
+  border-radius: var(--raio-2);
   background: var(--superficie-2);
   font-size: var(--t-corpo);
 }
@@ -566,11 +542,11 @@ h2 {
 }
 .recado > div {
   display: grid;
-  gap: 4px;
+  gap: var(--e-1);
   justify-items: start;
 }
 
-/* Interruptor (role="switch"). */
+/* Interruptor (role="switch"). Ligado é cheio na cor do texto, com o botão no avesso: sem verde de enfeite. */
 .interruptor {
   position: relative;
   flex: none;
@@ -579,9 +555,10 @@ h2 {
   padding: 0;
   border: 0;
   border-radius: 12px;
-  background: var(--linha-forte);
+  background: var(--superficie-3);
+  box-shadow: inset 0 0 0 1px var(--linha);
   cursor: pointer;
-  transition: background var(--mov-rapido) ease;
+  transition: background var(--mov-medio) var(--curva-padrao);
 }
 .interruptor::after {
   content: "";
@@ -591,29 +568,39 @@ h2 {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--branco);
   box-shadow: var(--sombra-1);
-  transition: transform var(--mov-rapido) ease;
+  transition:
+    transform var(--mov-medio) var(--curva-padrao),
+    background var(--mov-medio) ease;
 }
 .interruptor[aria-checked="true"] {
   background: var(--ligado, var(--acao));
 }
 .interruptor[aria-checked="true"]::after {
   transform: translateX(16px);
+  background: var(--contra);
 }
 .interruptor:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .campo {
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 var(--e-3);
   border: 1px solid var(--linha-forte);
-  border-radius: var(--raio-1);
+  border-radius: var(--raio-2);
   background: var(--superficie);
   color: var(--tinta);
   user-select: text;
+  transition: border-color var(--mov-rapido) ease;
+}
+.campo:hover:not(:disabled) {
+  border-color: var(--tinta-3);
+}
+.campo::placeholder {
+  color: var(--tinta-3);
 }
 
 /* Linha de uma lista: rótulo à esquerda, valor ou ação à direita. */
@@ -625,14 +612,15 @@ h2 {
 .lista > li {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 0;
+  gap: var(--e-3);
+  padding: var(--e-3) 0;
   border-top: 1px solid var(--linha);
 }
 .lista > li:first-child {
   border-top: 0;
 }
 
+/* Jogo aberto e "reduzir movimento": nada se mexe. */
 .jogo-aberto *,
 .jogo-aberto *::before,
 .jogo-aberto *::after {
@@ -646,10 +634,11 @@ h2 {
   *::after {
     transition: none !important;
     animation: none !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* Controles deslizantes (Mira, Cores, FOV, Rede): a cor de ação do app, não o azul do navegador. */
+/* Controles deslizantes: a cor de ação do app, não o azul do navegador. */
 input[type="range"] {
   accent-color: var(--acao);
   width: 100%;
@@ -685,8 +674,7 @@ details[open] > summary::before {
   transform: rotate(45deg) translate(-1px, -1px);
 }
 
-/* O deslizante fino (Cores, Mira): trilho de 6 px preenchido até o valor (`--pct`, posto pelo componente) e um botão
-   branco. O nativo do Windows é grosso e preto, e brigava com o vidro. */
+/* O deslizante fino (Cores, Mira): trilho de 6 px preenchido até o valor (`--pct`, posto pelo componente). */
 input[type="range"].deslizante {
   --pct: 50%;
   appearance: none;
@@ -702,8 +690,8 @@ input[type="range"].deslizante::-webkit-slider-runnable-track {
   border-radius: 3px;
   background: linear-gradient(
     to right,
-    var(--deslizante-cheio, var(--tinta, #1d1d1f)) var(--pct),
-    var(--deslizante-vazio, rgb(127 127 127 / 0.22)) var(--pct)
+    var(--deslizante-cheio, var(--tinta)) var(--pct),
+    var(--deslizante-vazio, var(--superficie-3)) var(--pct)
   );
 }
 input[type="range"].deslizante::-webkit-slider-thumb {
@@ -712,16 +700,89 @@ input[type="range"].deslizante::-webkit-slider-thumb {
   height: 18px;
   margin-top: -6px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--branco);
   box-shadow:
     0 1px 4px rgb(0 0 0 / 0.3),
     0 0 0 1px rgb(0 0 0 / 0.08);
   transition: transform var(--mov-rapido) ease;
 }
 input[type="range"].deslizante:active::-webkit-slider-thumb {
-  transform: scale(1.15);
+  transform: scale(1.12);
 }
 input[type="range"].deslizante:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Alto Contraste do Windows (`forced-colors`) e "mais contraste" (1.0.12, Frente 1.3). No Alto Contraste o Windows
+   troca as cores pelas do tema dele; aqui o app só garante que nada dependa de sombra, desfoque ou cor de fundo para
+   existir: toda superfície ganha borda, a escolha vira a cor de destaque do sistema e o foco aparece. */
+@media (forced-colors: active) {
+  :root {
+    --desfoque: none;
+  }
+  *,
+  *::before,
+  *::after {
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .btn,
+  .campo,
+  .segmento,
+  .selo,
+  .interruptor,
+  .area-corpo .secao,
+  [role="dialog"],
+  [role="alertdialog"],
+  [role="tooltip"] {
+    border: 1px solid CanvasText;
+  }
+  .btn.primario,
+  .btn.perigo {
+    border-color: ButtonText;
+  }
+  .segmento > button[aria-checked="true"],
+  .segmento > button[aria-selected="true"],
+  [role="tab"][aria-selected="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .interruptor[aria-checked="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .interruptor::after {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+  .interruptor[aria-checked="true"]::after {
+    background: HighlightText;
+  }
+  /* O ponto de estado perde a cor; o texto ao lado já diz o estado. Fica um ponto cheio, que ainda marca a linha. */
+  .ponto {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --linha: rgb(0 0 0 / 0.3);
+    --linha-forte: rgb(0 0 0 / 0.55);
+    --tinta-2: var(--carvao);
+    --tinta-3: #3d3d42;
+  }
+  :root[data-tema="noite"] {
+    --linha: rgb(255 255 255 / 0.32);
+    --linha-forte: rgb(255 255 255 / 0.6);
+    --tinta-2: var(--branco);
+    --tinta-3: var(--cinza-300);
+  }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   // "No jogo" (trazido do Boost da 3.3, `src/v33/app.ts`: `cartaoJogoLiso`, `cartaoMemoria`, `cartaoConfigDosJogos`):
   // - Jogo liso: mede 20 s e propõe travar o FPS num ritmo constante (o que o olho sente, mais que o número).
   // - Memória para o jogo: quanto está livre e o que pesa, com "Fechar" para cada programa.
@@ -41,7 +42,7 @@
       }
       liso = p;
     } catch (e) {
-      lisoRecado = String(e);
+      lisoRecado = explicarErro(e);
     } finally {
       medindo = false;
     }
@@ -53,7 +54,7 @@
       await ferramentas.jogoLisoAplicar(liso.teto, liso.hz);
       travado = true;
     } catch (e) {
-      lisoRecado = String(e);
+      lisoRecado = explicarErro(e);
     }
   }
 
@@ -63,7 +64,7 @@
     try {
       memoria = await ferramentas.memoriaFechar(nome);
     } catch (e) {
-      memRecado = String(e);
+      memRecado = explicarErro(e);
     } finally {
       fechando = null;
     }

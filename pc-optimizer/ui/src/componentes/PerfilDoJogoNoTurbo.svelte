@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O perfil gráfico do GTA/FiveM pelo Turbo (trazido da interface 3.3/3.6, `perfilDoJogoNoTurbo`). O jogo reescreve a
@@ -35,7 +36,7 @@
     try {
       p = noTauri ? await como<Perfil>(commands.turboPerfilDoJogoPedir(perfil)) : { oferece: true, pendente: perfil, aplicado: null };
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = false;
     }

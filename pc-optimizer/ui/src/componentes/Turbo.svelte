@@ -1,9 +1,11 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import { explicarErro } from "../lib/erros";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Turbo: mede o jogo aberto por 10 s, monta a receita pelo gargalo (escala, Frame Boost, energia), liga e
   // lembra. A prova A-B (uns 5 minutos) é o que diz se ganhou de verdade; o antes × depois de uma sessão NÃO é prova e
   // a tela diz isso. Receita reprovada na prova não volta a ligar neste jogo.
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import DriverDaPlaca from "./DriverDaPlaca.svelte";
   import FrameBoost from "./FrameBoost.svelte";
   import NoJogo from "./NoJogo.svelte";
@@ -41,8 +43,8 @@
   let ocupado = $state<"" | "medindo" | "ligando" | "desligando" | "provando">("");
   let passou = $state(0);
   let copiado = $state(false);
-  let relogio: ReturnType<typeof setInterval> | undefined;
-  let laco: ReturnType<typeof setTimeout> | undefined;
+  let pararContador = () => {};
+  let pararVigia = () => {};
 
   const prova = $derived<ProvaDoTurbo | null>(painel?.prova ?? null);
   const receita = $derived(painel?.perfil?.receita ?? null);
@@ -53,17 +55,21 @@
       painel = await ponte.turbo();
       erro = null;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
   // Enquanto a prova roda (inclusive a automática, que começa sozinha), relê o painel devagar.
   function vigiar() {
-    clearTimeout(laco);
-    laco = setTimeout(async () => {
-      await ler();
-      if (painel?.provando) vigiar();
-    }, 3000);
+    pararVigia();
+    pararVigia = relogio.cada(
+      3000,
+      async () => {
+        await ler();
+        if (!painel?.provando) pararVigia();
+      },
+      { aoVoltar: true },
+    );
   }
 
   onMount(async () => {
@@ -84,14 +90,14 @@
     }
   });
   onDestroy(() => {
-    clearInterval(relogio);
-    clearTimeout(laco);
+    pararContador();
+    pararVigia();
   });
 
   function contar() {
     passou = 0;
-    clearInterval(relogio);
-    relogio = setInterval(() => (passou += 1), 1000);
+    pararContador();
+    pararContador = relogio.cada(1000, () => (passou += 1), { escondida: true });
   }
 
   async function ligar(lembrado: boolean) {
@@ -102,9 +108,9 @@
       painel = await ponte.ligarTurbo(lembrado);
       if (painel.provando) vigiar();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
-      clearInterval(relogio);
+      pararContador();
       ocupado = "";
     }
   }
@@ -115,7 +121,7 @@
     try {
       painel = await ponte.desligarTurbo();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = "";
     }
@@ -129,9 +135,9 @@
     try {
       await ponte.provarTurbo();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
-      clearInterval(relogio);
+      pararContador();
       ocupado = "";
       await ler();
     }
@@ -141,7 +147,7 @@
     try {
       painel = await ponte.atrasoDoTurbo(menor);
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -149,7 +155,7 @@
     try {
       painel = await ponte.esquecerTurbo();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -159,7 +165,7 @@
       copiado = true;
       setTimeout(() => (copiado = false), 2500);
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -467,7 +473,7 @@
     padding: 16px 18px;
     border: 1px solid var(--linha);
     border-radius: var(--raio-3);
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
   }
   .veredito {
     display: flex;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // Diagnóstico (trazido da interface antiga, `src/main.ts` e `src/travadas.ts`): "pronto para jogar?" antes da
@@ -38,7 +39,7 @@
         ? await commands.testarCausaDaTravada(travadas.teste_possivel)
         : { processo: travadas.teste_possivel, mantido: true, aviso: null };
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = null;
     }
@@ -50,7 +51,7 @@
       teste = null;
       erro = r;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -93,7 +94,7 @@
         ? await como<Investigacao>(commands.porQueOFpsEstaBaixo())
         : { suspeitos: [{ id: "vram", titulo: "Pouca memória de vídeo para servidor de RP", medido: "A placa tem 4 GB e o jogo usou 3,9 GB na última partida.", porque: "Sem memória de vídeo, a textura vem da RAM e o FPS cai conforme o lugar do mapa.", como_confirmar: "Jogue com texturas em Normal e compare a última partida." }], lacunas: ["Sem leitura da temperatura do processador."] };
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = null;
     }
@@ -107,7 +108,7 @@
         ? await como<Travadas>(commands.investigarTravadas(30))
         : await new Promise((r) => setTimeout(() => r({ jogo: "FiveM", investigacao: { suspeitos: [], lacunas: [] }, teste_possivel: null, motivo_sem_teste: null }), 1200));
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       ocupado = null;
     }

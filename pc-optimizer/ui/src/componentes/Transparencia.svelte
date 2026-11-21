@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // Suporte e transparência (trazido da interface antiga, `src/main.ts`): o modo seguro (o Otimiza parou o que é
@@ -48,7 +49,7 @@
         : { path: "Documentos\\Otimiza-relatorio.pdf", note: "" };
       recado = `Relatório salvo em ${r.path}. Mande ao suporte pelo Discord.${r.note ? ` ${r.note}` : ""}`;
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       gerando = false;
     }
@@ -66,7 +67,7 @@
         ? await como<string>(commands.relatorioDeCompatibilidade())
         : "Relatório de compatibilidade (demonstração)\nPlano de energia: 12 já certos, 3 mudariam, 1 não existe neste Windows.";
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     } finally {
       gerandoCompat = false;
     }
@@ -85,7 +86,7 @@
     try {
       recado = `Planilha salva em ${noTauri ? await como<string>(commands.exportarAlteracoes()) : "Documentos\\Otimiza-alteracoes.csv"}.`;
     } catch (e) {
-      recado = String(e);
+      recado = explicarErro(e);
     }
   }
 </script>

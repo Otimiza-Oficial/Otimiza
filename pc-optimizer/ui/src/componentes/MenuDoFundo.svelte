@@ -136,18 +136,15 @@
     gap: 8px;
     width: 340px;
     padding: 14px;
-    border-radius: 20px;
-    border: 1px solid var(--vidro-borda);
-    background: rgb(250 250 252 / 0.98);
-    box-shadow: 0 24px 60px rgb(0 0 0 / 0.4);
-    color: var(--texto);
-  }
-  :global(:root[data-tema="noite"]) .menu {
-    background: rgb(26 26 30 / 0.98);
+    border-radius: var(--raio-3);
+    border: 1px solid var(--linha-forte);
+    background: var(--superficie-menu);
+    box-shadow: var(--fio), var(--sombra-3);
+    color: var(--tinta);
   }
   .rotulo {
     margin: 2px 2px 0;
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -178,7 +175,7 @@
     background-size: cover;
     background-position: center;
     overflow: hidden;
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    transition: transform var(--mov-medio) var(--curva-padrao), box-shadow var(--mov-medio) ease;
   }
   .opcao:hover .mini {
     transform: translateY(-2px);
@@ -200,7 +197,7 @@
     border-radius: 50%;
     background: var(--marca);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 800;
   }
   .nome {
@@ -263,7 +260,7 @@
     padding: 0 14px;
     border: 1px solid var(--linha-forte);
     border-radius: 10px;
-    background: var(--bloco-2);
+    background: var(--superficie-2);
     color: inherit;
     font: inherit;
     font-size: 12px;
@@ -286,7 +283,7 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
-    transition: border-color 0.18s ease, background 0.18s ease;
+    transition: border-color var(--mov-medio) ease, background var(--mov-medio) ease;
   }
   .enviar:hover:not(:disabled) {
     border-color: var(--marca);
@@ -307,7 +304,7 @@
     font-size: 13px;
   }
   .dica {
-    font-size: 11.5px;
+    font-size: var(--t-apoio);
     opacity: 0.7;
   }
   .erro {

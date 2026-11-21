@@ -1,5 +1,7 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import { explicarErro } from "../lib/erros";
+  import Esqueleto from "./base/Esqueleto.svelte";
+  import Abas from "./base/Abas.svelte";
   // A área Sistema: todos os ajustes do catálogo por grupo (cada um com o efeito honesto, aplicar e desfazer), o que
   // abre junto com o Windows, a limpeza de temporários e o ponto de restauração. Ajuste que pode custar FPS diz quando;
   // ajuste que não deu para verificar diz isso, em vez de fingir "já está bom".
@@ -50,6 +52,15 @@
 
   // svelte-ignore state_referenced_locally
   let aba = $state<Aba>(abaInicial);
+  const PARTES: { id: Aba; rotulo: string }[] = [
+    { id: "agora", rotulo: "Agora" },
+    { id: "ajustes", rotulo: "Ajustes" },
+    { id: "inicializacao", rotulo: "Inicialização" },
+    { id: "limpeza", rotulo: "Limpeza" },
+    { id: "restauracao", rotulo: "Restauração" },
+    { id: "bios", rotulo: "BIOS" },
+    { id: "avancado", rotulo: "Avançado" },
+  ];
   let catalogo = $state<AjusteDoCatalogo[] | null>(null);
   let inicializacao = $state<StartupEntry[] | null>(null);
   let limpeza = $state<ItemDaLimpeza[] | null>(null);
@@ -79,7 +90,7 @@
       if (a === "limpeza" && !limpeza) limpeza = await ponte.medirLimpeza();
       if (a === "restauracao" && !restauracao) restauracao = await ponte.restauracao();
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -98,7 +109,7 @@
         : { tom: "perigo", texto: `${a.name}: ${r.message}` };
       catalogo = await ponte.catalogo();
     } catch (e) {
-      recado = { tom: "perigo", texto: `${a.name}: ${String(e)}` };
+      recado = { tom: "perigo", texto: `${a.name}: ${explicarErro(e)}` };
     } finally {
       ocupado = null;
     }
@@ -130,7 +141,7 @@
       };
       limpeza = await ponte.medirLimpeza();
     } catch (e) {
-      recado = { tom: "perigo", texto: `${item.nome}: ${String(e)}` };
+      recado = { tom: "perigo", texto: `${item.nome}: ${explicarErro(e)}` };
     } finally {
       ocupado = null;
     }
@@ -143,7 +154,7 @@
       recado = { tom: "ok", texto: await ponte.criarPontoDeRestauracao() };
       restauracao = await ponte.restauracao();
     } catch (e) {
-      recado = { tom: "perigo", texto: String(e) };
+      recado = { tom: "perigo", texto: explicarErro(e) };
     } finally {
       ocupado = null;
     }
@@ -157,10 +168,15 @@
 </script>
 
 <div class="sistema">
-  <div class="segmento abas-internas" role="tablist" aria-label="Partes do Sistema">
-    {#each [["agora", "Agora"], ["ajustes", "Ajustes"], ["inicializacao", "Inicialização"], ["limpeza", "Limpeza"], ["restauracao", "Restauração"], ["bios", "BIOS"], ["avancado", "Avançado"]] as [id, nome] (id)}
-      <button role="tab" aria-selected={aba === id} onclick={() => (aba = id as Aba)}>{nome}</button>
-    {/each}
+  <div class="abas-internas">
+    <Abas
+      abas={PARTES}
+      ativa={aba}
+      rotulo="Partes do Sistema"
+      prefixo="sistema"
+      idDoPainel="painel-do-sistema"
+      onmudar={(id) => (aba = id)}
+    />
   </div>
 
   {#if erro}
@@ -170,6 +186,7 @@
     <div class="recado" role="status"><span class="ponto" data-tom={recado.tom}></span><div><span>{recado.texto}</span></div></div>
   {/if}
 
+  <div id="painel-do-sistema" class="painel-do-sistema" role="tabpanel" aria-labelledby={`sistema-aba-${aba}`}>
   {#if aba === "agora"}
     <AoVivo />
   {:else if aba === "ajustes"}
@@ -299,6 +316,7 @@
       </section>
     {/if}
   {/if}
+  </div>
 </div>
 
 <style>
@@ -306,6 +324,10 @@
     display: grid;
     gap: 8px;
     padding-top: 10px;
+  }
+  .painel-do-sistema {
+    display: grid;
+    gap: 8px;
   }
   .vazio {
     padding: 20px 0;

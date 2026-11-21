@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { explicarErro } from "../lib/erros";
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   // O jogo está esperando o disco? (trazido da interface 3.6, `analyzeStreaming`): cruza os trancos da última partida
@@ -44,7 +45,7 @@
     try {
       r = noTauri ? await como<Laboratorio>(commands.laboratorioDeStreaming()) : DEMO;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     } finally {
       lendo = false;
     }

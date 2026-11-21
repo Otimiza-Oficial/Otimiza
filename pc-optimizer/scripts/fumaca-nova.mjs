@@ -230,8 +230,34 @@ const r = await cdp("Runtime.evaluate", {
     await pausa(400);
     if (document.querySelectorAll('.grade .bloco').length < 6) falhas.push('voltar à Visão geral não remontou a grade');
 
-    // Com tudo recusado, nenhuma folha (feedback) pode ter aberto por cima.
-    if (document.querySelector('.veu')) falhas.push('uma folha abriu por cima da tela sem motivo');
+    // Teclado (1.0.12, Frente 1.3): as abas de baixo e o trilho andam pelas setas, com o foco indo junto.
+    const tecla = (alvo, key) => alvo.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    const escolhida = () => document.querySelector('nav.abas [role=tab][aria-selected=true]');
+    const antesDaSeta = escolhida()?.textContent.trim();
+    escolhida()?.focus();
+    tecla(escolhida(), 'ArrowRight');
+    await pausa(400);
+    const depoisDaSeta = escolhida()?.textContent.trim();
+    if (!depoisDaSeta || depoisDaSeta === antesDaSeta) falhas.push('a seta para a direita não trocou a aba de baixo');
+    if (document.activeElement !== escolhida()) falhas.push('o foco não foi junto com a aba escolhida pela seta');
+    const trilhoAntes = document.querySelector('.trilho-botao[aria-selected=true]')?.getAttribute('aria-label');
+    tecla(document.querySelector('.trilho-botao[aria-selected=true]'), 'ArrowDown');
+    await pausa(400);
+    const trilhoDepois = document.querySelector('.trilho-botao[aria-selected=true]')?.getAttribute('aria-label');
+    if (!trilhoDepois || trilhoDepois === trilhoAntes) falhas.push('a seta para baixo não trocou a aba do trilho');
+    for (const t of document.querySelectorAll('[role=tab]')) {
+      if (!t.hasAttribute('aria-selected')) falhas.push('aba sem aria-selected: ' + t.textContent.trim());
+      if (!t.closest('[role=tablist]')) falhas.push('aba fora de um tablist: ' + t.textContent.trim());
+    }
+    const noTab = [...document.querySelectorAll('nav.abas [role=tab]')].filter((t) => t.tabIndex === 0).length;
+    if (noTab !== 1) falhas.push('as abas de baixo deixam ' + noTab + ' no Tab (deve ser só a escolhida)');
+    document.querySelector('.trilho-botao[aria-label="Jogar"]')?.click();
+    await pausa(300);
+    [...document.querySelectorAll('nav.abas .aba')].find((b) => b.textContent.trim() === 'Visão geral')?.click();
+    await pausa(400);
+
+    // Com tudo recusado, nenhuma folha (feedback, confirmação) pode ter aberto por cima.
+    if (document.querySelector('.veu, dialog[open]')) falhas.push('uma folha abriu por cima da tela sem motivo');
     return { visitadas, falhas };
   })()`,
   awaitPromise: true,

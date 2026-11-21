@@ -1,10 +1,12 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import { explicarErro } from "../lib/erros";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Tela: o Hz que cada monitor aguenta e o que está usando. A troca é em dois tempos, como o Windows faz:
   // aplica sem gravar, pergunta "Manter?" e, sem resposta no prazo, o Rust volta sozinho. A tela só conta o prazo;
   // quem decide a volta é o Rust, então o fim da contagem só relê o diagnóstico.
 
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import VrrDosMonitores from "./VrrDosMonitores.svelte";
   import { ponte, type DiagnosticoDaTela, type TrocaAplicada } from "../lib/ponte";
 
@@ -18,7 +20,7 @@
   let troca = $state<TrocaAplicada | null>(null);
   let restam = $state(0);
   let aviso = $state<Aviso | null>(null);
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
 
   async function carregar() {
     try {
@@ -26,7 +28,7 @@
       for (const t of telas) if (t.atual) aoMudarHz?.(t.dispositivo, t.atual.hz);
       erro = null;
     } catch (e) {
-      erro = String(e);
+      erro = explicarErro(e);
     }
   }
 
@@ -40,21 +42,25 @@
     }
   });
 
-  onDestroy(() => clearInterval(relogio));
+  onDestroy(() => pararRelogio());
 
   function contar(t: TrocaAplicada) {
-    clearInterval(relogio);
+    pararRelogio();
     restam = Math.ceil(t.prazo_ms / 1000);
-    relogio = setInterval(() => {
+    pararRelogio = relogio.cada(
+      1000,
+      () => {
       restam -= 1;
       if (restam <= 0) {
-        clearInterval(relogio);
+        pararRelogio();
         troca = null;
         aviso = { tipo: "atencao", texto: `Sem confirmação: a tela voltou para ${t.hz_anterior} Hz.` };
         // A volta do Rust acontece no mesmo prazo: um respiro antes de reler.
         setTimeout(carregar, 1500);
       }
-    }, 1000);
+      },
+      { escondida: true },
+    );
   }
 
   async function trocar(t: DiagnosticoDaTela, hz: number) {
@@ -64,7 +70,7 @@
       troca = await ponte.trocarHz(t.dispositivo, hz);
       contar(troca);
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       ocupado = null;
     }
@@ -73,7 +79,7 @@
   async function manter() {
     if (!troca) return;
     const t = troca;
-    clearInterval(relogio);
+    pararRelogio();
     troca = null;
     try {
       const fim = await ponte.confirmarTroca(t.token);
@@ -82,7 +88,7 @@
           ? { tipo: "ok", texto: `Pronto: ${fim.hz} Hz. Para voltar, use o Histórico.` }
           : { tipo: "atencao", texto: `A tela voltou para ${fim.hz} Hz.` };
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       await carregar();
     }
@@ -91,13 +97,13 @@
   async function voltar() {
     if (!troca) return;
     const t = troca;
-    clearInterval(relogio);
+    pararRelogio();
     troca = null;
     try {
       const fim = await ponte.voltarTroca(t.token);
       aviso = { tipo: "ok", texto: `Voltou para ${fim.hz} Hz.` };
     } catch (e) {
-      aviso = { tipo: "erro", texto: String(e) };
+      aviso = { tipo: "erro", texto: explicarErro(e) };
     } finally {
       await carregar();
     }
@@ -240,16 +246,16 @@
   .cheio-hz {
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--atencao), color-mix(in srgb, var(--atencao) 70%, #fff));
+    background: var(--atencao);
     transition: width var(--mov-entrar) var(--curva-saida);
   }
   .medidor.cheio .cheio-hz {
-    background: linear-gradient(90deg, var(--ok), color-mix(in srgb, var(--ok) 70%, #fff));
+    background: var(--ok);
   }
   .marcas {
     display: flex;
     justify-content: space-between;
-    font-size: 11px;
+    font-size: var(--t-apoio);
     color: var(--tinta-3);
   }
   .marcas span:nth-child(2) {
