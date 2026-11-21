@@ -13,7 +13,7 @@ O Otimiza é um otimizador de PC para Windows que se diferencia por:
 ## Stack Tecnológico
 
 - **Backend:** Rust + Tauri 2
-- **Frontend:** TypeScript + Vite (sem framework)
+- **Frontend:** Svelte 5 + TypeScript + Vite (`pc-optimizer/ui`)
 - **Leitura do sistema:** Registro do Windows e WMI (não parsing de comandos)
 
 ## Como Começar
