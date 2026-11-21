@@ -1,1 +1,1 @@
-Otimiza 1.0.11 Frame Boost liso de verdade e mais leve na placa (4.0.11)
+Otimiza 1.0.12 Visual novo com o Oti e telas redesenhadas (4.0.12)

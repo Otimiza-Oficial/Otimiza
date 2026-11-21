@@ -8,13 +8,55 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.11_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.11_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.12_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.12_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.12: Visual novo com o Oti, telas redesenhadas e correções de estabilidade
+
+Atualização da 1.0 (número interno 4.0.12).
+
+## O que muda na tela
+
+- **Visual novo com o Oti:** o Otimiza inteiro ganhou a identidade nova, com o Oti redesenhado e o ícone novo do app.
+  Fundo escuro (ou claro, se você preferir), cartões sólidos e cor só onde ela quer dizer alguma coisa: o estado de
+  cada item.
+- **Telas redesenhadas:** Início, Otimizar agora, Prova, Frame Boost, Jogos e Ativar licença foram refeitas. No Frame
+  Boost, a tela agora mostra o multiplicador de verdade (o FPS na tela dividido pelo FPS do jogo), por que ele está
+  assim e o que fazer agora.
+- **Primeira execução guiada:** quem instala pela primeira vez é levado passo a passo: ativar a licença, medir o PC
+  antes, aplicar o primeiro ajuste e provar o resultado.
+- **Mensagens de erro que dizem o que fazer:** quando algo dá errado, o aviso diz o que aconteceu e o próximo passo,
+  em vez de um texto técnico.
+- **Acessibilidade:** dá para navegar pelas abas com as setas do teclado, o contraste das cores foi conferido para
+  ficar legível, nenhum texto fica menor que 12 px, e o Otimiza respeita o modo de Alto Contraste e a opção do Windows
+  de reduzir animações.
+- **Os temas de época agora vêm desligados.** Quem quiser pode ligar nos Ajustes.
+
+## Correções
+
+- **Mais leve com a janela escondida:** com o Otimiza minimizado ou na bandeja, a tela não fica mais perguntando ao
+  Windows a cada poucos segundos se há um jogo aberto. Ela é avisada quando o jogo abre e só volta a ler tudo quando
+  você abre a janela.
+- **"Desfazer" que podia sumir:** duas mudanças gravadas ao mesmo tempo podiam apagar parte do Histórico. Agora o
+  Histórico é gravado de um jeito só, e os arquivos que o Otimiza usa para se recuperar de uma queda de energia não
+  ficam pela metade.
+- **Teto de FPS:** o limite de FPS que você colocou (no Otimiza ou no app da NVIDIA) agora vence o "Jogo liso".
+- **Prioridade do jogo:** o Otimiza parou de regravar a prioridade dos jogos no registro do Windows a cada vez que abre.
+
+Se você foi afetado por algum desses problemas, não precisa fazer nada: é só atualizar. Se quiser conferir um ajuste
+antigo, ele continua no Histórico, de onde dá para desfazer.
+
+## Licença
+
+O Otimiza passa a ter licença própria, e o instalador mostra o contrato de uso (em português) antes de instalar. A sua
+chave continua valendo do mesmo jeito.
 
 ---
 
