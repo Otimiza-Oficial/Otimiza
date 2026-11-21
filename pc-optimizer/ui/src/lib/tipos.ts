@@ -423,7 +423,10 @@ export const commands = {
 	/**  As mudanças vêm do `changelog` na hora: duas listas do mesmo fato discordam. */
 	historicoDeDesempenho: () => __TAURI_INVOKE<HistoricoNaTelaMonitor_Serialize>("historico_de_desempenho"),
 	gameModeStatus: () => __TAURI_INVOKE<GameModeStatus_Serialize>("game_mode_status"),
-	/**  `EXIGEM_LICENCA`: volta a travar o FPS base do jogo aberto (desfaz o Destravar), com o Frame Boost ligado. */
+	/**
+	 *  `EXIGEM_LICENCA`: volta a travar o FPS base do jogo aberto (desfaz o Destravar). Ligado, trava agora; desligado, o
+	 *  próximo ligar passa pelo portão de novo (1.0.14: antes só aparecia ligado, e com a base solta não ligava).
+	 */
 	frameBoostTravarBase: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_travar_base"),
 	/**
 	 *  O Frame Boost do jogo aberto: o gerador que o automático escolhe, os multiplicadores que cabem no monitor dele, a
