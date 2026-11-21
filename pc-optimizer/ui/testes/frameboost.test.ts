@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { lerFrameBoost, multiplicadorReal, type LigadoAgora } from "../src/lib/frameboost.ts";
+import { erroDaAcao, lerFrameBoost, multiplicadorReal, type LigadoAgora } from "../src/lib/frameboost.ts";
 
 const base: LigadoAgora = {
   multiplicador: 1,
@@ -62,4 +62,17 @@ test("pelo driver, sem medida, pede para medir", () => {
   const l = lerFrameBoost({ ...base, pelo_driver: true, fps_na_tela: null, fps_do_jogo: null });
   assert.equal(l.multiplicador, null);
   assert.match(l.proximo, /Medir agora/);
+});
+
+test("1.0.14: o erro do ligar mostra o motivo do Rust como próximo passo, não 'não respondeu'", () => {
+  const volte = "Para travar o FPS base, o Otimiza mede o jogo por 15 s com ele na frente. Ligue o Frame Boost e volte para o jogo em seguida (você tem 20 s).";
+  const e = erroDaAcao("ligar", volte);
+  assert.equal(e.titulo, "O Frame Boost não ligou");
+  assert.equal(e.fazer, volte);
+  assert.ok(!e.titulo.includes("respondeu"));
+  // Erro vazio ou com o prefixo do JS: nunca uma linha em branco.
+  assert.equal(erroDaAcao("ligar", "").fazer, "Tente de novo.");
+  assert.equal(erroDaAcao("base", "Error: Abra o jogo primeiro.").fazer, "Abra o jogo primeiro.");
+  // Desligar que falhou sempre lembra a saída de dentro do jogo.
+  assert.ok(erroDaAcao("desligar", "x").fazer.includes("Ctrl+Alt+G"));
 });

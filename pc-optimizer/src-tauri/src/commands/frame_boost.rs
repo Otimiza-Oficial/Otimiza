@@ -287,7 +287,8 @@ pub async fn frame_boost_destravar_base(
     }
 }
 
-/// `EXIGEM_LICENCA`: volta a travar o FPS base do jogo aberto (desfaz o Destravar), com o Frame Boost ligado.
+/// `EXIGEM_LICENCA`: volta a travar o FPS base do jogo aberto (desfaz o Destravar). Ligado, trava agora; desligado, o
+/// próximo ligar passa pelo portão de novo (1.0.14: antes só aparecia ligado, e com a base solta não ligava).
 #[tauri::command]
 #[cfg_attr(test, specta::specta)]
 pub async fn frame_boost_travar_base(
