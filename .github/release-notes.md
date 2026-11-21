@@ -8,13 +8,38 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.13_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.13_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.14_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.14_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.14: Frame Boost volta a ligar e o feedback não trava mais
+
+Atualização da 1.0 (número interno 4.0.14). Correção de bugs.
+
+## Frame Boost
+
+- **Liga de novo com o FPS base destravado:** quem tinha tocado em "Destravar" no FPS base de um jogo não conseguia mais
+  ligar o Frame Boost nele: aparecia "O Frame Boost não respondeu". Agora ele liga sem travar a base, como a tela já
+  dizia.
+- **"Travar de novo" sempre à mão:** o botão para voltar a travar o FPS base aparece também com o Frame Boost
+  desligado. Antes ele só aparecia ligado, e com a base solta o Frame Boost não ligava.
+- **O erro diz o motivo:** quando o Frame Boost não liga, a tela mostra o motivo e o que fazer (por exemplo, voltar
+  para o jogo logo depois de ligar, ou abrir o Otimiza como administrador), em vez de só "não respondeu". A mensagem
+  também não some mais sozinha depois de um instante.
+
+## Pedido de opinião
+
+- **Servidor fora do ar não trava as correções:** se o nosso servidor estiver fora do ar quando você toca em "Já
+  mandei", as correções continuam liberadas e o Otimiza confere a sua opinião sozinho quando o servidor voltar. O erro
+  era nosso, e quem ficava travado era você.
+
+Se você foi afetado, não precisa fazer nada: é só atualizar e ligar o Frame Boost de novo com o jogo aberto.
 
 ---
 

@@ -1,1 +1,1 @@
-Otimiza 1.0.13 Temas de época com cena própria e o Oti enfeitado (4.0.13)
+Otimiza 1.0.14 Frame Boost volta a ligar e feedback sem travar (4.0.14)
