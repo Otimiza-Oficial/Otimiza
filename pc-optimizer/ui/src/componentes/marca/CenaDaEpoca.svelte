@@ -5,8 +5,8 @@
   // e, no canto de baixo à esquerda, o Oti da marca com o enfeite da época olhando o brilho.
   //
   // É um SVG só, desenhado uma vez, com semente fixa (nada de `Math.random`, nada de canvas): não custa nada parado. O
-  // que se mexe é pouco e por CSS (luzes que piscam devagar, a cena que aparece ao abrir) e para com "reduzir movimento"
-  // e com o jogo aberto (regras globais do `tokens.css`). As partículas que caem continuam no `EfeitoDeEpoca`.
+  // que se mexe é só a entrada (a cena aparece ao abrir), e para com "reduzir movimento" e com o jogo aberto (regras
+  // globais do `tokens.css`). O movimento contínuo é das partículas do `EfeitoDeEpoca`, que são camadas próprias.
   //
   // A composição respeita onde a cena aparece: a faixa de baixo (atrás das abas), a coluna da esquerda (abaixo do
   // trilho) e o céu de cima (atrás da barra, sem nada claro sob o texto). Ancorada embaixo (`xMidYMax slice`).
@@ -268,7 +268,7 @@
       <g>
         {#each anoNovo.bokeh as b, i (i)}<circle cx={f(b.x)} cy={f(b.y)} r={f(b.r)} fill="#f2c14e" opacity={b.o.toFixed(2)} />{/each}
         {#each anoNovo.fogos as fg, i (i)}
-          <g class="pisca" style:animation-delay={`${-i * 0.9}s`}>
+          <g>
             <circle cx={fg.cx} cy={fg.cy} r={fg.r * 1.2} fill={fg.cor} opacity="0.06" />
             {#each fg.raios as r, k (k)}
               <line x1={f(r.x1)} y1={f(r.y1)} x2={f(r.x2)} y2={f(r.y2)} stroke={fg.cor} stroke-width="1.6" stroke-linecap="round" opacity="0.8" />
@@ -288,7 +288,7 @@
     {:else if temporada.id === "festa-junina"}
       <g>
         {#each junina.baloes as b, i (i)}
-          <g transform="translate({b.x} {b.y}) scale({b.s})" class="pisca" style:animation-delay={`${-i * 0.7}s`}>
+          <g transform="translate({b.x} {b.y}) scale({b.s})">
             <circle cx="0" cy="10" r="46" fill="url(#cena-quente)" opacity="0.6" />
             <path d="M-14 -22 L14 -22 L22 18 Q0 30 -22 18 Z" fill={b.cor} />
             <path d="M-14 -22 L14 -22 L22 18 Q0 30 -22 18 Z" fill="white" opacity="0.15" transform="translate(4 0) scale(0.5 1)" />
@@ -331,7 +331,7 @@
     {#if temporada.id === "natal"}
       <path class="s-neve" d={crista(LONGE.base, LONGE.amp, LONGE.fase)} fill="none" stroke-width="3" opacity="0.7" />
       {#each natal.longe as p, i (i)}<path class="f-pinheiro" d={p.arvore} />{/each}
-      {#each natal.luzes as l, i (i)}<circle cx={f(l.x)} cy={f(l.y)} r="1.9" fill={l.cor} class="pisca" style:animation-delay={`${-l.d}s`} />{/each}
+      {#each natal.luzes as l, i (i)}<circle cx={f(l.x)} cy={f(l.y)} r="1.9" fill={l.cor} />{/each}
       <!-- A casinha com a janela acesa -->
       <g transform="translate(1500 {f(noLonge(1500) - 2)})">
         <path class="f-silhueta" d="M-22 0 V-24 L0 -42 L22 -24 V0 Z" />
@@ -386,7 +386,7 @@
         <circle cx="0" cy="-26" r="120" fill="url(#cena-quente)" opacity="0.7" />
         <path d="M-34 0 L30 -14 M-30 -14 L34 0" stroke="#5b3a1e" stroke-width="9" stroke-linecap="round" />
         {#each junina.chamas as c, i (i)}
-          <path d="M{c.dx - 9} -6 Q{c.dx - 6} {-c.h * 0.6} {c.dx} {-c.h} Q{c.dx + 6} {-c.h * 0.6} {c.dx + 9} -6 Z" fill={c.cor} class="pisca" style:animation-delay={`${-i * 0.4}s`} />
+          <path d="M{c.dx - 9} -6 Q{c.dx - 6} {-c.h * 0.6} {c.dx} {-c.h} Q{c.dx + 6} {-c.h * 0.6} {c.dx + 9} -6 Z" fill={c.cor} />
         {/each}
         {#each junina.brasas as b, i (i)}<circle cx={f(b.dx)} cy={f(b.dy)} r={b.r.toFixed(2)} fill="#ffd36b" opacity="0.8" />{/each}
       </g>
@@ -405,7 +405,7 @@
           <ellipse cx="10" cy="-15" rx="12" ry="15" fill="#e8741c" />
           <ellipse cx="0" cy="-15" rx="12" ry="16" fill="#f97316" />
           <path d="M-1 -30 q2 -8 7 -10" stroke="#3f6212" stroke-width="3" fill="none" stroke-linecap="round" />
-          <path d="M-11 -19 l4 -5 l4 5 Z M3 -19 l4 -5 l4 5 Z M-10 -9 q10 6 20 0 l-3 3 l-3 -3 l-4 3 l-4 -3 l-3 3 Z" fill="#ffd36b" class="pisca" style:animation-delay={`${-i * 0.6}s`} />
+          <path d="M-11 -19 l4 -5 l4 5 Z M3 -19 l4 -5 l4 5 Z M-10 -9 q10 6 20 0 l-3 3 l-3 -3 l-4 3 l-4 -3 l-3 3 Z" fill="#ffd36b" />
         </g>
       {/each}
     {/if}
@@ -620,18 +620,8 @@
     left: 40px;
     bottom: 128px;
   }
-  /* As luzes da cena piscam devagar; param com o jogo aberto e com "reduzir movimento" (regras globais). */
-  .pisca {
-    animation: pisca 3.2s ease-in-out infinite alternate;
-  }
-  @keyframes pisca {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0.45;
-    }
-  }
+  /* A cena não pisca: animar algo dentro deste SVG repintaria a paisagem inteira a cada quadro. O movimento das épocas
+     fica com as partículas do EfeitoDeEpoca (camadas próprias, só transform). */
   @keyframes cena-aparece {
     from {
       opacity: 0;
