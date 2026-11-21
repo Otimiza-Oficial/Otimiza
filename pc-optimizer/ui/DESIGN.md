@@ -17,13 +17,31 @@ degradê ou enfeite.
   encurtado, cortado pela borda. No escuro, o original (disco branco); no claro, o negativo (disco carvão, olhos
   brancos). Até 32 px, os olhos da versão pequena (`simbolo-16`).
 - **O único movimento é o olhar**: os olhos giram em volta do centro. Cada "humor" do código (`OLHAR` em `Oti.svelte`)
-  é só uma direção. Sem boca, brilho, reflexo, sombra, cor, pose, gesto ou acessório (os enfeites de época saíram).
+  é só uma direção. Sem boca, brilho, reflexo, sombra, cor, pose ou gesto. A única exceção são as épocas do ano (abaixo):
+  aí ele usa o enfeite da época, posto de lado para não cobrir os olhos.
 - Aparece como elemento de marca: no Início (a cena com o brilho), na primeira execução, nos estados vazios de
   primeira vez (`Estado` com `oti`), no balão da conversa e na busca. Nunca em erro.
 - **A cena**: o Oti olha para onde as partículas de luz se juntam (`marca/Brilho.svelte`, semente fixa, estático). O
   fundo "Limpo" (`marca/CeuDePoeira.svelte`) espalha poeira de luz mais densa no alto à direita, para onde ele olha.
 - O logotipo é o SVG da entrega (`marca/Logo.svelte`): nunca se digita "Otimiza" com a fonte no lugar dele.
 - Os ícones da bandeja saem de `brand/gerar_bandeja.py`, com a mesma geometria e os mesmos olhares.
+
+## Épocas do ano (decisão do dono, 1.0.13)
+Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween vêm **ligadas por padrão** (desligam em
+Ajustes › Temas de época). Em cada uma:
+- **A cena** (`marca/CenaDaEpoca.svelte`, no fundo Limpo): paisagem noturna em camadas (céu e luz da época, estrelas e
+  brilhos da marca, relevo em dois planos e os objetos da época) e o Oti com o enfeite, olhando o brilho, no canto de
+  baixo à esquerda. Composta para onde ela aparece: a faixa de baixo, a coluna abaixo do trilho e um céu escuro sob a
+  barra. Tem versão de dia no tema claro. É um SVG estático com semente fixa: **nada se anima dentro dela** (repintaria
+  a paisagem a cada quadro); só a entrada ao abrir.
+- **O movimento** fica com o `EfeitoDeEpoca` (varal e partículas, camadas próprias por transform e opacidade). Para com
+  "reduzir movimento" e com o jogo aberto.
+- **A interface acompanha com detalhe**: o filete colorido no alto dos cartões (`--epoca-cor`), a geada no Natal, o traço
+  da época no trilho, e no Início a saudação da época com o ornamento dela (`marca/OrnamentoDaEpoca.svelte`) na cor de
+  texto da época (`--epoca-texto`, com AA medido nos dois temas) e uma luz baixa atrás do Oti. Texto e cor de ação
+  continuam os da marca.
+- **Prévia**: Ajustes › Temas de época › "Ver uma época agora" mostra qualquer época na hora, até fechar o app.
+- Prints: `node scripts/prints-epocas.mjs <pasta> [largura] [altura]`.
 
 ## Tokens (`src/tokens.css`)
 - **Cor**: primitivas da marca (preto, carvão, grafite, cinzas, papel, branco) e semânticas que os componentes usam:
@@ -60,8 +78,9 @@ Toda tela usa estes antes de inventar o seu:
 - **Microtexto** (pt-BR, frases curtas): todo estado e todo erro diz o que aconteceu e o que fazer. Erros passam por
   `explicarErro` (`lib/erros.ts`); o caminho do suporte é "Ajustes › Versão e suporte". Termo técnico ganha meia
   frase de explicação.
-- **Primeira execução** (`BoasVindas.svelte`): um fluxo só com progresso: Licença → Medir antes → Primeiro ajuste →
-  Provar, usando as peças de verdade (ativação, laboratório, Otimizar agora). Dá para pular e voltar.
+- **Primeira execução** (`BoasVindas.svelte`): um fluxo só com progresso em seis etapas: Conhecer (a história do tempo
+  de cada quadro, marcada como ilustração) → Licença → Medir antes → Primeiro ajuste → Provar → Aparência (Escuro, Claro
+  ou Sem fundo), usando as peças de verdade (ativação, laboratório, Otimizar agora). Dá para pular e voltar.
 
 ## Acessibilidade
 - Abas de verdade: `tablist`/`tab`/`aria-selected`, setas (o trilho com as de cima e de baixo), Home, End e só a

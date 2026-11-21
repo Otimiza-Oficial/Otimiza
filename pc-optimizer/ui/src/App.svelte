@@ -26,7 +26,7 @@
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
   import EfeitoDeEpoca from "./componentes/EfeitoDeEpoca.svelte";
-  import { porId, temporadaDe } from "./lib/temporadas";
+  import { CHAVE_DA_PREVIA, EVENTO_DA_PREVIA, porId, temporadaDe, type Temporada } from "./lib/temporadas";
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
   import { ABRIR_AREA, areas, type Grupo, type IdDaArea } from "./lib/areas";
@@ -65,6 +65,7 @@
   import PapelDeFundo from "./componentes/PapelDeFundo.svelte";
   import CeuDePoeira from "./componentes/marca/CeuDePoeira.svelte";
   import Logo from "./componentes/marca/Logo.svelte";
+  import CenaDaEpoca from "./componentes/marca/CenaDaEpoca.svelte";
   import { duracao, movimentoParado } from "./lib/movimento";
   import { relogio } from "./lib/relogio";
   import MenuDoFundo from "./componentes/MenuDoFundo.svelte";
@@ -135,20 +136,30 @@
 
   let jogoNaTela = $state(false);
 
-  // A época do ano (Natal, Páscoa…): vem desligada (marca v2) e liga nos Ajustes ("otimiza.epoca" = "ligada"); aí muda
-  // sozinha pela data.
+  // A época do ano (Natal, Páscoa…): muda sozinha pela data; desliga nos Ajustes ("otimiza.epoca" = "desligada").
+  // Decisão do dono (21/11/2026): continua ligada por padrão, com o Oti enfeitado.
   // `?temporada=natal` na URL mostra uma época fora da data, para conferir o visual.
   const CHAVE_DA_EPOCA = "otimiza.epoca";
   const previa = porId(new URLSearchParams(location.search).get("temporada"));
   let hoje = $state(new Date());
   let epocaLigada = $state(lerEpoca());
-  const temporada = $derived(previa ?? (epocaLigada ? temporadaDe(hoje) : null));
+  /** A prévia escolhida nos Ajustes (vale até fechar o app): mostra a época mesmo fora da data. */
+  let previaDosAjustes = $state<Temporada | null>(lerPreviaDosAjustes());
+  const temporada = $derived(previaDosAjustes ?? (epocaLigada ? (previa ?? temporadaDe(hoje)) : null));
+
+  function lerPreviaDosAjustes() {
+    try {
+      return porId(sessionStorage.getItem(CHAVE_DA_PREVIA));
+    } catch {
+      return null;
+    }
+  }
 
   function lerEpoca() {
     try {
-      return localStorage.getItem("otimiza.epoca") === "ligada";
+      return localStorage.getItem("otimiza.epoca") !== "desligada";
     } catch {
-      return false;
+      return true;
     }
   }
 
@@ -299,7 +310,15 @@
     }
   }
 
+  /** O fundo que volta quando a primeira execução desliga o "Sem fundo" (a área de trabalho). */
+  let fundoAntes: Fundo = "limpo";
+  /** A primeira execução só liga e desliga a área de trabalho. */
+  function alternarFundo() {
+    escolherFundo(fundo === "area" ? fundoAntes : "area");
+  }
+
   function escolherFundo(f: Fundo) {
+    if (f !== "area") fundoAntes = f;
     fundo = f;
     // As fotos pedem o ajuste à mão: o menu fica aberto nelas. Os outros fecham na hora.
     if (opcaoDo(f).tipo !== "foto") menuDoFundo = false;
@@ -695,6 +714,8 @@
     const pararEpoca = relogio.cada(60 * 60 * 1000, () => (hoje = new Date()), { aoVoltar: true });
     const aoMudarEpoca = () => (epocaLigada = lerEpoca());
     window.addEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
+    const aoMudarPrevia = () => (previaDosAjustes = lerPreviaDosAjustes());
+    window.addEventListener(EVENTO_DA_PREVIA, aoMudarPrevia);
 
     // Guarda térmica: o Oti avisa quando o PC começa a ser freado por calor no jogo.
     let deixarCalor: (() => void) | undefined;
@@ -766,13 +787,17 @@
       pararMetricas();
       pararMaquina();
       window.removeEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
+      window.removeEventListener(EVENTO_DA_PREVIA, aoMudarPrevia);
       pararEpoca();
     };
   });
 </script>
 
 <!-- O fundo "Limpo" da marca v2: preto (papel no claro) com poeira de luz para onde o Oti olha. -->
-{#if fundo === "limpo"}<CeuDePoeira />{/if}
+<!-- Com época e o fundo Limpo, a cena da época (paisagem em camadas, com o Oti enfeitado); sem época, a poeira de luz. -->
+{#if fundo === "limpo" && temporada}<CenaDaEpoca {temporada} />{:else if fundo === "limpo"}<CeuDePoeira />{/if}
+<!-- Nos outros fundos, a luz da época: a cor de cada uma, baixa, por trás de tudo. -->
+<div class="luz-da-epoca" data-epoca={fundo !== "limpo" ? (temporada?.id ?? null) : null} aria-hidden="true"></div>
 <!-- O cômodo desfocado (fundo "Cômodo"). Feito em CSS: parede, janela com luz, chão, sofá e luminária. -->
 <div class="comodo" aria-hidden="true">
   <div class="parede"></div>
@@ -850,7 +875,7 @@
   <!-- O balão do Oti -->
   {#if fala}
     <div class="balao superficie-flutuante" role="status" in:entrar>
-      <span class="balao-oti"><Oti {humor} tamanho={40} rotulo="" /></span>
+      <span class="balao-oti"><Oti acessorio={temporada?.acessorio ?? null} {humor} tamanho={40} rotulo="" /></span>
       <div class="balao-texto">
         <p class="balao-fala">{digitado}</p>
         {#if fala.detalhe && !digitando}<p class="balao-detalhe">{fala.detalhe}</p>{/if}
@@ -957,7 +982,7 @@
                 <Turbo jogo={jogo?.nome ?? null} />
               {:else}
                 <div class="em-breve">
-                  <Oti humor="dormindo" tamanho={64} rotulo="" />
+                  <Oti acessorio={temporada?.acessorio ?? null} humor="dormindo" tamanho={64} rotulo="" />
                   <p>{nav.area.nome} chega na Onda {nav.area.onda}. Até lá, ela continua no Otimiza de sempre.</p>
                   <ul class="lista">
                     {#each nav.area.vai_ter as item (item)}<li>{item}</li>{/each}
@@ -986,6 +1011,8 @@
       {licenca}
       {tema}
       onescolherTema={escolherTema}
+      {semFundo}
+      onalternarFundo={alternarFundo}
       onlicenca={(l) => (licenca = l)}
       onfim={fecharBoasVindas}
     />
@@ -1099,6 +1126,59 @@
   }
   .sec {
     color: var(--tinta-2);
+  }
+
+  /* ---------- A luz da época ---------- */
+  .luz-da-epoca {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.2s ease;
+  }
+  .luz-da-epoca[data-epoca] {
+    opacity: 0.55;
+  }
+  :global(:root[data-tema="dia"]) .luz-da-epoca[data-epoca] {
+    opacity: 0.35;
+  }
+  .luz-da-epoca[data-epoca="natal"] {
+    background:
+      radial-gradient(ellipse 40% 50% at 12% 70%, rgb(214 47 58 / 0.35), transparent 70%),
+      radial-gradient(ellipse 35% 45% at 88% 30%, rgb(34 139 84 / 0.3), transparent 70%),
+      radial-gradient(ellipse 30% 30% at 60% 85%, rgb(255 210 120 / 0.35), transparent 70%);
+  }
+  .luz-da-epoca[data-epoca="ano-novo"] {
+    background:
+      radial-gradient(ellipse 45% 50% at 80% 25%, rgb(230 180 34 / 0.35), transparent 70%),
+      radial-gradient(ellipse 40% 40% at 20% 80%, rgb(255 255 255 / 0.35), transparent 70%);
+  }
+  .luz-da-epoca[data-epoca="carnaval"] {
+    background:
+      radial-gradient(ellipse 40% 45% at 15% 30%, rgb(122 43 214 / 0.3), transparent 70%),
+      radial-gradient(ellipse 40% 45% at 85% 70%, rgb(255 79 154 / 0.3), transparent 70%),
+      radial-gradient(ellipse 30% 35% at 55% 20%, rgb(46 196 182 / 0.25), transparent 70%);
+  }
+  .luz-da-epoca[data-epoca="pascoa"] {
+    background:
+      radial-gradient(ellipse 45% 50% at 20% 30%, rgb(255 182 200 / 0.4), transparent 70%),
+      radial-gradient(ellipse 45% 50% at 80% 75%, rgb(190 230 200 / 0.4), transparent 70%);
+  }
+  .luz-da-epoca[data-epoca="festa-junina"] {
+    background:
+      radial-gradient(ellipse 50% 45% at 50% 95%, rgb(255 140 40 / 0.4), transparent 70%),
+      radial-gradient(ellipse 35% 35% at 15% 20%, rgb(250 204 21 / 0.3), transparent 70%);
+  }
+  .luz-da-epoca[data-epoca="dia-das-criancas"] {
+    background:
+      radial-gradient(ellipse 40% 45% at 20% 25%, rgb(59 130 246 / 0.3), transparent 70%),
+      radial-gradient(ellipse 40% 45% at 80% 75%, rgb(250 204 21 / 0.3), transparent 70%);
+  }
+  .luz-da-epoca[data-epoca="halloween"] {
+    background:
+      radial-gradient(ellipse 45% 50% at 20% 75%, rgb(249 115 22 / 0.4), transparent 70%),
+      radial-gradient(ellipse 45% 45% at 85% 25%, rgb(88 28 135 / 0.4), transparent 70%);
   }
 
   /* ---------- Barra de cima: o logotipo, a pergunta ao Oti e os controles. Sem caixa: é a borda da janela. ---------- */

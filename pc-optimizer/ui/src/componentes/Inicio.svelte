@@ -14,6 +14,7 @@
   import Icone from "./Icone.svelte";
   import Oti, { type Humor } from "./Oti.svelte";
   import Brilho from "./marca/Brilho.svelte";
+  import OrnamentoDaEpoca from "./marca/OrnamentoDaEpoca.svelte";
   import Botao from "./base/Botao.svelte";
   import Interruptor from "./base/Interruptor.svelte";
   import type { Temporada } from "../lib/temporadas";
@@ -119,11 +120,17 @@
   <!-- Pronto pra jogar: o Oti olhando o brilho, a prontidão lida neste PC e as duas ações da tela -->
   <section class="bloco b-heroi" aria-labelledby="inicio-titulo">
     <div class="cena" aria-hidden="true">
-      <span class="cena-oti"><Oti humor={tudoPronto ? "feliz" : humor} tamanho={72} rotulo="" /></span>
+      <span class="cena-oti"><Oti acessorio={temporada?.acessorio ?? null} humor={tudoPronto ? "feliz" : humor} tamanho={72} rotulo="" /></span>
       <span class="cena-brilho"><Brilho tamanho={120} densidade={tudoPronto ? 1.3 : 0.8} /></span>
     </div>
     <div class="heroi-texto">
-      <p class="rotulo">{temporada?.saudacao ?? saudacaoDaHora}</p>
+      {#if temporada}
+        {#key temporada.id}
+          <p class="rotulo saudacao-da-epoca"><OrnamentoDaEpoca epoca={temporada.id} />{temporada.saudacao}</p>
+        {/key}
+      {:else}
+        <p class="rotulo">{saudacaoDaHora}</p>
+      {/if}
       <h2 id="inicio-titulo" class="heroi-titulo">{titulo}</h2>
       <div class="progresso" role="img" aria-label={`${prontidao.ok} de ${prontidao.total} itens em ordem`}>
         {#each prontidao.itens as it, i (it.id)}<span class="degrau" class:cheio={i < prontidao.ok}></span>{/each}
@@ -411,6 +418,28 @@
     position: absolute;
     left: 4px;
     bottom: 2px;
+  }
+  /* Na época, uma luz baixa na cor dela atrás do Oti enfeitado. */
+  :global(:root[data-epoca]) .cena::before {
+    content: "";
+    position: absolute;
+    inset: -30px -10px -20px -30px;
+    background: radial-gradient(closest-side, color-mix(in srgb, var(--epoca-cor) 26%, transparent), transparent);
+    pointer-events: none;
+  }
+  /* A saudação da época: o ornamento e o texto na cor de texto da época, entrando de leve ao abrir. */
+  .saudacao-da-epoca {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--epoca-texto);
+    animation: saudacao-entra var(--mov-lento) var(--curva-saida) both;
+  }
+  @keyframes saudacao-entra {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
   }
   .cena-brilho {
     position: absolute;

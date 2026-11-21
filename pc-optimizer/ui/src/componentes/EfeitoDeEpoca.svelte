@@ -97,11 +97,6 @@
 </div>
 
 <style>
-  /* Marca v2: cor só para estado. O clima da época entra em tons de cinza, como poeira de luz. */
-  .fundo-epoca,
-  .varal-epoca {
-    filter: grayscale(1);
-  }
   .fundo-epoca {
     position: fixed;
     inset: 0;
@@ -183,9 +178,9 @@
   /* O varal: uma faixa de 34 px logo abaixo da barra de cima (que vai de 14 a 68 px). */
   .varal-epoca {
     position: fixed;
-    left: 110px;
-    right: 40px;
-    top: 66px;
+    left: 100px;
+    right: 28px;
+    top: 50px;
     height: 34px;
     /* Abaixo da casca (que vem depois no DOM, com o mesmo z): o menu do Fundo e o balão do Oti passam por cima do varal. */
     z-index: 1;

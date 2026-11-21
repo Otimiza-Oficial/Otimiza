@@ -69,3 +69,16 @@ test("a fórmula confere com os pares do MARCA.md", () => {
   // O MARCA.md diz 18,9:1 para carvão no papel; a fórmula dá 18,2:1. Os dois passam muito do AA.
   assert.equal(contraste("#0a0a0b", "#f5f5f7").toFixed(1), "18.2");
 });
+
+test("a cor de texto de cada época passa no AA sobre as superfícies, nos dois temas", () => {
+  const falhas: string[] = [];
+  for (const m of css.matchAll(/:root(\[data-tema="noite"\])?\[data-epoca="([\w-]+)"\] \{\s*--epoca-texto: (#[0-9a-f]{6});/gi)) {
+    const tema = m[1] ? escuro : claro;
+    for (const f of FUNDOS) {
+      const r = contraste(m[3], cor(tema, f));
+      if (r < 4.5) falhas.push(`${m[2]} (${m[1] ? "escuro" : "claro"}) sobre ${f}: ${r.toFixed(2)}:1`);
+    }
+  }
+  assert.deepEqual(falhas, []);
+  assert.equal([...css.matchAll(/--epoca-texto: #/g)].length, 14, "as 7 épocas nos 2 temas");
+});

@@ -36,3 +36,10 @@ test("as regras que param tudo com jogo aberto e com reduzir movimento estão no
   assert.match(css, /\.jogo-aberto \*,[\s\S]*?animation: none !important/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none !important/);
 });
+
+test("a cena da época é estática: nada se anima dentro do SVG grande (repintaria tudo a cada quadro)", () => {
+  const s = readFileSync(path.join(SRC, "componentes", "marca", "CenaDaEpoca.svelte"), "utf8");
+  const estilo = s.slice(s.indexOf("<style>"));
+  const animacoes = [...estilo.matchAll(/animation:\s*([\w-]+)/g)].map((m) => m[1]);
+  assert.deepEqual(animacoes, ["cena-aparece"]);
+});

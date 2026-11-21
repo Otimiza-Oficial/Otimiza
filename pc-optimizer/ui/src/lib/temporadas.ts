@@ -40,6 +40,10 @@ const TEMPORADAS: Record<IdDaTemporada, Temporada> = {
 
 export const TODAS: Temporada[] = Object.values(TEMPORADAS);
 
+/** A prévia de uma época escolhida nos Ajustes: fica só nesta sessão (`sessionStorage`) e a casca escuta o evento. */
+export const CHAVE_DA_PREVIA = "otimiza.epoca-previa";
+export const EVENTO_DA_PREVIA = "otimiza:epoca-previa";
+
 /** Domingo de Páscoa (calendário gregoriano), à meia-noite local. */
 export function pascoa(ano: number): Date {
   const a = ano % 19;

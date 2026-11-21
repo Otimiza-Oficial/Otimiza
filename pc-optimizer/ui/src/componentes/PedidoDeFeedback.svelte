@@ -389,11 +389,13 @@
     cursor: pointer;
     transition: transform var(--mov-rapido) var(--curva-padrao), filter var(--mov-rapido) ease;
   }
-  /* Marca v2: sem o azul do Discord nem brilho; o botão principal na cor do texto. */
+  /* O azul do Discord (decisão do dono): é a marca do lugar para onde o botão leva, e o branco sobre ele passa no AA
+     (4,6:1). */
   .botao-discord {
     border: 0;
-    background: var(--acao);
-    color: var(--contra);
+    background: #5865f2;
+    color: #fff;
+    box-shadow: 0 10px 24px -8px rgb(88 101 242 / 0.7);
   }
   .botao-discord svg {
     width: 20px;
