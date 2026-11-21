@@ -8,13 +8,41 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.12_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.12_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.13_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.13_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.13: Temas de época com cena própria e o Oti enfeitado
+
+Atualização da 1.0 (número interno 4.0.13).
+
+## O que muda na tela
+
+- **Temas de época de volta, ligados:** Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween
+  voltam a enfeitar o Otimiza na data certa. Se preferir sem eles, é só desligar em Ajustes › Temas de época.
+- **Cada época com a sua cena:** um fundo desenhado para cada uma (pinheiros com neve no Natal, fogos no Ano Novo,
+  confete no Carnaval, fogueira e balões na Festa Junina, abóboras acesas no Halloween e assim por diante), com
+  versão de dia no tema claro. O fundo é uma imagem parada: não pesa no PC, e as animações param com o jogo aberto ou
+  com a opção do Windows de reduzir animações.
+- **O Oti enfeitado:** em cada época o Oti ganha o seu enfeite (gorro, cartola, máscara, orelhas, chapéu de palha, boné
+  ou chapéu de bruxa), sem cobrir os olhos.
+- **A tela acompanha a época:** a saudação do Início, a luz atrás do Oti e a marca da aba em que você está ganham a cor
+  da época, sempre com contraste conferido para continuar legível.
+- **Prévia das épocas:** em Ajustes › Temas de época › "Ver uma época agora" dá para ver qualquer época na hora, sem
+  esperar a data. A prévia vale até fechar o Otimiza.
+- **Primeira execução com a história e o fundo:** quem instala pela primeira vez volta a ver o "Como eu trabalho" e a
+  escolher o fundo (Escuro, Claro ou Sem fundo), com a barra de progresso mostrando as seis etapas.
+- **Botão do Discord azul:** o botão que leva ao Discord para deixar a sua opinião voltou
+  a ser azul, a cor do Discord.
+
+Esta versão muda só a aparência: os ajustes do Windows, o Frame Boost e as medições continuam os mesmos da 1.0.12.
+Não precisa fazer nada: é só atualizar.
 
 ---
 
