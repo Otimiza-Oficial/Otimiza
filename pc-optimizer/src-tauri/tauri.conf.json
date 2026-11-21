@@ -29,7 +29,7 @@
       "csp": {
         "default-src": "'self' ipc: http://ipc.localhost",
         "script-src": "'self'",
-        "style-src": "'self' 'unsafe-inline'",
+        "style-src": "'self'",
         "img-src": "'self' data: blob: https://cdn.cloudflare.steamstatic.com https://images.rbxcdn.com https://cdn2.unrealengine.com",
         "font-src": "'self' data:",
         "connect-src": "'self' ipc: http://ipc.localhost",

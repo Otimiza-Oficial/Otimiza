@@ -8,6 +8,7 @@
 // Precisa do Google Chrome ou do Microsoft Edge instalado.
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -40,11 +41,41 @@ const TIPOS = {
   ".png": "image/png",
   ".woff2": "font/woff2",
 };
+// A CSP de PRODUÇÃO (`app.security.csp` do tauri.conf.json), do jeito que o Tauri 2 a entrega (`manager::set_csp`):
+// em página com <style>/<script> em linha, ele carimba um nonce em cada um e soma o nonce e o hash SHA-256 deles à
+// diretiva. Sem isto a fumaça rodava sem CSP nenhuma, e um estilo bloqueado só aparecia na máquina do cliente.
+const CSP = JSON.parse(
+  await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "src-tauri", "tauri.conf.json"), "utf8")
+).app.security.csp;
+const NONCE = "fumaca";
+function comCsp(html) {
+  const diretivas = { ...CSP };
+  const regras = [
+    ["style-src", /<style\b[^>]*>([\s\S]*?)<\/style>/g, /<style\b/g, "<style"],
+    // Só o <script> sem `src`: o de arquivo entra pelo 'self'.
+    ["script-src", /<script\b(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g, /<script\b(?![^>]*\ssrc=)/g, "<script"],
+  ];
+  for (const [diretiva, bloco, abertura, tag] of regras) {
+    const emLinha = [...html.matchAll(bloco)].map((m) => m[1]);
+    if (!emLinha.length) continue;
+    html = html.replace(abertura, `${tag} nonce="${NONCE}"`);
+    const hashes = emLinha.map((c) => `'sha256-${createHash("sha256").update(c).digest("base64")}'`);
+    diretivas[diretiva] = [diretivas[diretiva], `'nonce-${NONCE}'`, ...hashes].join(" ");
+  }
+  return { html, politica: Object.entries(diretivas).map(([k, v]) => `${k} ${v}`).join("; ") };
+}
+
 const servidor = createServer(async (req, res) => {
   const pedido = decodeURIComponent(new URL(req.url, "http://x").pathname);
   const arquivo = path.join(RAIZ, pedido === "/" ? "index.html" : pedido);
   try {
     const corpo = await readFile(arquivo);
+    if (path.extname(arquivo) === ".html") {
+      const { html, politica } = comCsp(corpo.toString("utf8"));
+      res.writeHead(200, { "content-type": "text/html", "content-security-policy": politica });
+      res.end(html);
+      return;
+    }
     res.writeHead(200, { "content-type": TIPOS[path.extname(arquivo)] ?? "application/octet-stream" });
     res.end(corpo);
   } catch {
@@ -121,8 +152,18 @@ await cdp("Page.addScriptToEvaluateOnNewDocument", {
       },
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
     };
-    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };`,
+    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
+    window.__violacoesCsp = [];
+    document.addEventListener('securitypolicyviolation', (e) => {
+      window.__violacoesCsp.push(e.effectiveDirective + ' bloqueou ' + (e.blockedURI || 'em linha') + (e.sample ? ' (' + e.sample + ')' : ''));
+    });`,
 });
+const violacoesCsp = async (pagina) => {
+  const v = await cdp("Runtime.evaluate", { expression: "window.__violacoesCsp ?? null", returnByValue: true });
+  const lista = v.result?.result?.value;
+  if (!Array.isArray(lista)) return [`${pagina}: não consegui ler as violações da CSP`];
+  return lista.map((x) => `CSP de produção na ${pagina}: ${x}`);
+};
 // Primeira abertura: a apresentação aparece sozinha, com o botão de começar.
 await cdp("Page.navigate", { url: `http://127.0.0.1:${porta}/` });
 await espera(3000);
@@ -246,6 +287,14 @@ const notebook = await cdp("Runtime.evaluate", {
   returnByValue: true,
 });
 erros.push(...(notebook.result?.result?.value ?? ["a conferência do notebook a 125% não retornou"]));
+erros.push(...(await violacoesCsp("janela principal")));
+
+// As outras duas páginas (FPS por cima do jogo e mira): só a CSP. Elas têm <style> em linha, que entra por nonce/hash.
+for (const pagina of ["overlay.html", "mira.html"]) {
+  await cdp("Page.navigate", { url: `http://127.0.0.1:${porta}/${pagina}` });
+  await espera(1500);
+  erros.push(...(await violacoesCsp(pagina)));
+}
 
 if (r.result?.exceptionDetails) erros.push(r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text);
 const resultado = r.result?.result?.value;
