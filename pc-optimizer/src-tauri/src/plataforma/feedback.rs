@@ -8,6 +8,12 @@
 //
 // Sem rede o atestado bom vale 7 dias: ficar offline um fim de semana não pode trancar quem já mandou o feedback.
 // Sem `api` publicada em `.github/convite.json` o pedido fica DESLIGADO: não haveria como liberar ninguém.
+//
+// Erro NOSSO não trava o cliente (visto em 21/11/2026: a API do bot desligada respondia 503 e o cliente que já tinha
+// mandado o feedback ficava com as correções pausadas). Se o "Já mandei" esbarra em rede ou servidor fora do ar, o
+// pedido fica PROVISÓRIO: as correções seguem liberadas e o programa confere sozinho a cada 15 minutos. A resposta de
+// verdade do bot decide (achou: liberado; não achou: volta o pedido). O provisório vale 7 dias, abre uma vez só e
+// não se renova enquanto o bot não responder: bloquear o endereço no firewall não vira passe livre.
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -26,6 +32,12 @@ pub const VALIDADE_DIAS: i64 = 7;
 
 /// Rechecagem de fundo: no máximo uma por dia, para não pesar no bot nem na abertura.
 pub const RECHECAR_HORAS: i64 = 24;
+
+/// Com o pedido provisório, o programa volta a perguntar ao bot neste intervalo, em segundo plano.
+pub const RECHECAR_PROVISORIO_MIN: i64 = 15;
+
+/// Por quanto tempo o "Já mandei" vale sem o bot confirmar (o mesmo prazo de um atestado sem rede).
+pub const PROVISORIO_DIAS: i64 = VALIDADE_DIAS;
 
 /// Tolerância para relógio adiantado no bot ou atrasado aqui.
 const FUTURO_TOLERADO_MIN: i64 = 10;
@@ -126,6 +138,8 @@ pub struct Guardado {
     /// A última `api` publicada que conhecemos: sem ela o pedido não liga.
     pub api: Option<String>,
     pub canal: Option<String>,
+    /// Quando o cliente disse "Já mandei" e o NOSSO servidor não respondeu (RFC 3339). Só a resposta do bot limpa.
+    pub provisorio_desde: Option<String>,
 }
 
 impl Guardado {
@@ -178,19 +192,25 @@ pub enum Situacao {
     Liberado {
         verificado_em: String,
     },
+    /// O cliente disse "Já mandei" e o nosso servidor não respondeu: correções liberadas enquanto conferimos sozinhos.
+    Provisorio {
+        desde: String,
+    },
     /// `apagado`: havia feedback e o bot avisou que a mensagem sumiu.
     Exigido {
         apagado: bool,
     },
 }
 
-/// Pura. A ordem importa: atestado bom libera mesmo dentro dos dez minutos; atestado de mensagem apagada só pesa
-/// depois deles (quem apagou e reinstalou ainda tem os minutos de quem nunca mandou).
+/// Pura. A ordem importa: atestado bom libera mesmo dentro dos dez minutos; o provisório vale por cima de um atestado
+/// de mensagem apagada (o cliente mandou de novo e o servidor caiu); atestado de mensagem apagada só pesa depois dos
+/// minutos livres (quem apagou e reinstalou ainda tem os minutos de quem nunca mandou).
 pub fn decidir(
     licenca_ativa: bool,
     pedido_ligado: bool,
     uso_segundos: u64,
     atestado: Option<&Atestado>,
+    provisorio: Option<&str>,
 ) -> Situacao {
     if !licenca_ativa || !pedido_ligado {
         return Situacao::NaoSeAplica;
@@ -199,6 +219,12 @@ pub fn decidir(
     if let Some(a) = atestado.filter(|a| a.ok) {
         return Situacao::Liberado {
             verificado_em: a.verificado_em.clone(),
+        };
+    }
+
+    if let Some(desde) = provisorio {
+        return Situacao::Provisorio {
+            desde: desde.to_string(),
         };
     }
 
@@ -222,16 +248,32 @@ fn atestado_valido(g: &Guardado, maquina: &str, agora: DateTime<Utc>) -> Option<
     conferir_atestado(g.atestado.as_deref()?, maquina, agora).ok()
 }
 
+/// Pura: o provisório guardado, se ainda vale agora. Data quebrada, no futuro ou vencida não vale.
+pub fn provisorio_valido(g: &Guardado, agora: DateTime<Utc>) -> Option<&str> {
+    let texto = g.provisorio_desde.as_deref()?;
+    let desde = DateTime::parse_from_rfc3339(texto).ok()?.with_timezone(&Utc);
+
+    if desde > agora + Duration::minutes(FUTURO_TOLERADO_MIN)
+        || agora - desde > Duration::days(PROVISORIO_DIAS)
+    {
+        return None;
+    }
+
+    Some(texto)
+}
+
 pub fn situacao() -> Situacao {
     let g = Guardado::load();
     let quem = maquina();
-    let atestado = atestado_valido(&g, &quem, Utc::now());
+    let agora = Utc::now();
+    let atestado = atestado_valido(&g, &quem, agora);
 
     decidir(
         crate::modules::licenca::liberado(),
         g.api.is_some(),
         g.uso_segundos,
         atestado.as_ref(),
+        provisorio_valido(&g, agora),
     )
 }
 
@@ -261,6 +303,7 @@ pub fn somar_uso(segundos: u64) -> Option<Situacao> {
         g.api.is_some(),
         g.uso_segundos,
         atestado_valido(&g, &quem, agora).as_ref(),
+        provisorio_valido(&g, agora),
     );
 
     if matches!(antes, Situacao::Contando { .. }) || g.api.is_none() {
@@ -273,6 +316,7 @@ pub fn somar_uso(segundos: u64) -> Option<Situacao> {
         g.api.is_some(),
         g.uso_segundos,
         atestado_valido(&g, &quem, agora).as_ref(),
+        provisorio_valido(&g, agora),
     );
     Some(depois)
 }
@@ -378,6 +422,7 @@ pub async fn verificar() -> Estado {
             Ok(a) => {
                 g.atestado = Some(texto);
                 g.checado_em = Some(agora.to_rfc3339());
+                g.provisorio_desde = None;
                 let _ = g.save();
 
                 if a.ok {
@@ -390,6 +435,7 @@ pub async fn verificar() -> Estado {
         },
         Resposta::NaoEncontrado => {
             g.checado_em = Some(agora.to_rfc3339());
+            g.provisorio_desde = None;
             let _ = g.save();
             Some(
                 "Ainda não achamos a sua mensagem no canal. Ela precisa ter pelo menos 30 caracteres e um print \
@@ -397,27 +443,63 @@ pub async fn verificar() -> Estado {
                     .to_string(),
             )
         }
-        Resposta::SemRede(motivo) => Some(format!(
-            "Não deu para conferir agora ({}). Tente de novo.",
-            motivo
-        )),
+        Resposta::SemRede(motivo) => {
+            aceitar_provisorio(&mut g, agora);
+            let _ = g.save();
+            Some(aviso_sem_rede(&motivo, provisorio_valido(&g, agora).is_some()))
+        }
     };
 
     estado(aviso)
 }
 
-/// Na abertura: só pergunta se já passou dos minutos livres e se a última pergunta tem mais de um dia.
+/// Pura: o "Já mandei" (ou a rechecagem) que esbarrou no nosso servidor. Abre o provisório uma vez só: se já existe,
+/// valendo ou vencido, não renova. Marca a tentativa em `checado_em` para a rechecagem de fundo esperar o intervalo.
+pub fn aceitar_provisorio(g: &mut Guardado, agora: DateTime<Utc>) {
+    if g.provisorio_desde.is_none() {
+        g.provisorio_desde = Some(agora.to_rfc3339());
+    }
+    g.checado_em = Some(agora.to_rfc3339());
+}
+
+/// A frase quando o servidor não respondeu: deixa claro que o problema é nosso, não do cliente.
+pub fn aviso_sem_rede(motivo: &str, liberado: bool) -> String {
+    if liberado {
+        format!(
+            "O problema é do nosso lado ({}), não seu. As correções continuam liberadas e o Otimiza confere o seu \
+             feedback sozinho assim que o servidor voltar.",
+            motivo
+        )
+    } else {
+        format!(
+            "O problema é do nosso lado ({}), não seu. Faz dias que o servidor não confirma o seu feedback: tente de \
+             novo mais tarde ou chame a gente no Discord.",
+            motivo
+        )
+    }
+}
+
+/// Na abertura: só pergunta se já passou dos minutos livres e se a última pergunta tem mais de um dia. Com o pedido
+/// provisório, pergunta a cada 15 minutos, mesmo dentro dos minutos livres: é o "conferimos sozinhos" prometido.
 pub fn precisa_rechecar(g: &Guardado, agora: DateTime<Utc>) -> bool {
-    if g.api.is_none() || g.uso_segundos < SEGUNDOS_LIVRES {
+    let provisorio = g.provisorio_desde.is_some();
+
+    if g.api.is_none() || (g.uso_segundos < SEGUNDOS_LIVRES && !provisorio) {
         return false;
     }
+
+    let intervalo = if provisorio {
+        Duration::minutes(RECHECAR_PROVISORIO_MIN)
+    } else {
+        Duration::hours(RECHECAR_HORAS)
+    };
 
     match g
         .checado_em
         .as_deref()
         .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
     {
-        Some(quando) => agora - quando.with_timezone(&Utc) > Duration::hours(RECHECAR_HORAS),
+        Some(quando) => agora - quando.with_timezone(&Utc) > intervalo,
         None => true,
     }
 }
@@ -426,6 +508,15 @@ pub async fn rechecar_na_abertura() {
     atualizar_configuracao().await;
 
     if precisa_rechecar(&Guardado::load(), Utc::now()) {
+        let _ = verificar().await;
+    }
+}
+
+/// A cada 30 s, junto com a contagem de uso: só pergunta ao bot com o pedido provisório e o intervalo vencido.
+pub async fn rechecar_provisorio() {
+    let g = Guardado::load();
+
+    if g.provisorio_desde.is_some() && precisa_rechecar(&g, Utc::now()) {
         let _ = verificar().await;
     }
 }
@@ -446,30 +537,30 @@ mod tests {
 
     #[test]
     fn sem_licenca_o_pedido_nao_se_aplica() {
-        assert_eq!(decidir(false, true, 99_999, None), Situacao::NaoSeAplica);
+        assert_eq!(decidir(false, true, 99_999, None, None), Situacao::NaoSeAplica);
     }
 
     #[test]
     fn sem_api_publicada_ninguem_fica_trancado() {
-        assert_eq!(decidir(true, false, 99_999, None), Situacao::NaoSeAplica);
+        assert_eq!(decidir(true, false, 99_999, None, None), Situacao::NaoSeAplica);
     }
 
     #[test]
     fn os_dez_minutos_contam_antes_do_pedido() {
         assert_eq!(
-            decidir(true, true, 0, None),
+            decidir(true, true, 0, None, None),
             Situacao::Contando {
                 restante_segundos: 600
             }
         );
         assert_eq!(
-            decidir(true, true, 599, None),
+            decidir(true, true, 599, None, None),
             Situacao::Contando {
                 restante_segundos: 1
             }
         );
         assert_eq!(
-            decidir(true, true, 600, None),
+            decidir(true, true, 600, None, None),
             Situacao::Exigido { apagado: false }
         );
     }
@@ -477,11 +568,11 @@ mod tests {
     #[test]
     fn atestado_bom_libera_mesmo_dentro_dos_dez_minutos() {
         assert!(matches!(
-            decidir(true, true, 10, Some(&atestado(true))),
+            decidir(true, true, 10, Some(&atestado(true)), None),
             Situacao::Liberado { .. }
         ));
         assert!(matches!(
-            decidir(true, true, 9_000, Some(&atestado(true))),
+            decidir(true, true, 9_000, Some(&atestado(true)), None),
             Situacao::Liberado { .. }
         ));
     }
@@ -489,7 +580,7 @@ mod tests {
     #[test]
     fn mensagem_apagada_volta_a_pedir_e_diz_por_que() {
         assert_eq!(
-            decidir(true, true, 900, Some(&atestado(false))),
+            decidir(true, true, 900, Some(&atestado(false)), None),
             Situacao::Exigido { apagado: true }
         );
     }
@@ -497,7 +588,7 @@ mod tests {
     #[test]
     fn mensagem_apagada_ainda_respeita_os_minutos_livres() {
         assert!(matches!(
-            decidir(true, true, 100, Some(&atestado(false))),
+            decidir(true, true, 100, Some(&atestado(false)), None),
             Situacao::Contando { .. }
         ));
     }
@@ -593,6 +684,118 @@ mod tests {
 
         Guardado::gravar(&caminho, &g).unwrap();
         assert_eq!(Guardado::ler(&caminho), g);
+    }
+
+    fn instante(t: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(t).unwrap().with_timezone(&Utc)
+    }
+
+    #[test]
+    fn servidor_fora_do_ar_nao_trava_quem_disse_ja_mandei() {
+        // 21/11/2026: a API do bot desligada respondia 503 e o cliente ficava com as correções pausadas.
+        assert!(matches!(interpretar(503, String::new()), Resposta::SemRede(_)));
+
+        let agora = instante("2026-11-21T12:00:00Z");
+        let mut g = Guardado {
+            uso_segundos: 900,
+            api: Some("https://bot.exemplo.com".to_string()),
+            ..Guardado::default()
+        };
+        assert_eq!(
+            decidir(true, true, g.uso_segundos, None, provisorio_valido(&g, agora)),
+            Situacao::Exigido { apagado: false }
+        );
+
+        aceitar_provisorio(&mut g, agora);
+        assert!(matches!(
+            decidir(true, true, g.uso_segundos, None, provisorio_valido(&g, agora)),
+            Situacao::Provisorio { .. }
+        ));
+    }
+
+    #[test]
+    fn provisorio_vale_por_cima_de_mensagem_apagada_mas_atestado_bom_manda() {
+        let p = Some("2026-11-21T12:00:00Z");
+        assert!(matches!(
+            decidir(true, true, 900, Some(&atestado(false)), p),
+            Situacao::Provisorio { .. }
+        ));
+        assert!(matches!(
+            decidir(true, true, 900, Some(&atestado(true)), p),
+            Situacao::Liberado { .. }
+        ));
+        assert_eq!(decidir(false, true, 900, None, p), Situacao::NaoSeAplica);
+    }
+
+    #[test]
+    fn provisorio_vence_em_sete_dias_e_nao_se_renova() {
+        let inicio = instante("2026-11-21T12:00:00Z");
+        let mut g = Guardado::default();
+        aceitar_provisorio(&mut g, inicio);
+        assert!(provisorio_valido(&g, inicio + Duration::days(6)).is_some());
+
+        let depois = inicio + Duration::days(8);
+        assert!(provisorio_valido(&g, depois).is_none());
+
+        // Outro "Já mandei" com o servidor ainda fora não reabre: só a resposta do bot limpa o provisório.
+        aceitar_provisorio(&mut g, depois);
+        assert_eq!(g.provisorio_desde.as_deref(), Some(inicio.to_rfc3339().as_str()));
+        assert!(provisorio_valido(&g, depois).is_none());
+        assert_eq!(
+            decidir(true, true, 900, None, provisorio_valido(&g, depois)),
+            Situacao::Exigido { apagado: false }
+        );
+    }
+
+    #[test]
+    fn provisorio_com_data_quebrada_ou_no_futuro_nao_vale() {
+        let agora = instante("2026-11-21T12:00:00Z");
+        let quebrado = Guardado {
+            provisorio_desde: Some("ontem".to_string()),
+            ..Guardado::default()
+        };
+        let futuro = Guardado {
+            provisorio_desde: Some("2026-11-22T12:00:00Z".to_string()),
+            ..Guardado::default()
+        };
+        assert!(provisorio_valido(&quebrado, agora).is_none());
+        assert!(provisorio_valido(&futuro, agora).is_none());
+    }
+
+    #[test]
+    fn com_provisorio_a_rechecagem_de_fundo_e_a_cada_quinze_minutos() {
+        let agora = instante("2026-11-21T12:00:00Z");
+        let g = Guardado {
+            uso_segundos: 100,
+            api: Some("https://bot.exemplo.com".to_string()),
+            provisorio_desde: Some("2026-11-21T11:00:00Z".to_string()),
+            checado_em: Some("2026-11-21T11:50:00Z".to_string()),
+            ..Guardado::default()
+        };
+        assert!(!precisa_rechecar(&g, agora), "10 minutos atrás: ainda não");
+        assert!(precisa_rechecar(
+            &Guardado {
+                checado_em: Some("2026-11-21T11:40:00Z".to_string()),
+                ..g.clone()
+            },
+            agora
+        ));
+    }
+
+    #[test]
+    fn a_frase_diz_que_o_problema_e_nosso() {
+        let liberado = aviso_sem_rede("o servidor respondeu 503", true);
+        assert!(liberado.contains("nosso lado") && liberado.contains("não seu") && liberado.contains("503"));
+        assert!(liberado.contains("continuam liberadas"));
+        assert!(aviso_sem_rede("x", false).contains("nosso lado"));
+    }
+
+    #[test]
+    fn guardado_antigo_sem_provisorio_continua_lendo() {
+        let antigo = r#"{"uso_segundos":700,"atestado":null,"checado_em":null,"api":"https://a.b","canal":null}"#;
+        let g: Guardado = serde_json::from_str(antigo).unwrap();
+        assert_eq!(g.provisorio_desde, None);
+        assert_eq!(g.uso_segundos, 700);
     }
 
     #[test]

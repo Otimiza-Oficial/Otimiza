@@ -602,7 +602,8 @@ pub fn run() {
                 });
             }
 
-            // O pedido de feedback: confere na abertura (no máximo uma vez por dia) e soma o tempo de uso a cada 30 s.
+            // O pedido de feedback: confere na abertura (no máximo uma vez por dia; a cada 15 min com o pedido
+            // provisório) e soma o tempo de uso a cada 30 s.
             // Avisa a tela só quando a situação muda, para ela abrir ou fechar o pedido sem consultar sem parar.
             {
                 let handle = app.handle().clone();
@@ -618,6 +619,9 @@ pub fn run() {
 
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+
+                        // Com o pedido provisório (o nosso servidor não respondeu), confere sozinho a cada 15 min.
+                        plataforma::feedback::rechecar_provisorio().await;
 
                         let Ok(Some(agora)) =
                             tokio::task::spawn_blocking(|| plataforma::feedback::somar_uso(30)).await

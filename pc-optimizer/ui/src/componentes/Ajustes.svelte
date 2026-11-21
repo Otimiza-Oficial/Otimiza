@@ -10,6 +10,7 @@
   import { onMount } from "svelte";
   import Transparencia from "./Transparencia.svelte";
   import { ABRIR_FEEDBACK } from "./PedidoDeFeedback.svelte";
+  import { resumoDoFeedback, type SituacaoDoFeedback } from "../lib/feedback";
   import AtivarLicenca from "./AtivarLicenca.svelte";
   import { ABRIR_BOAS_VINDAS } from "./BoasVindas.svelte";
     import { noTauri } from "../lib/ponte";
@@ -68,9 +69,7 @@
   }
 
   /** Só a situação do pedido de feedback (a folha que resolve mora em `PedidoDeFeedback`). */
-  let feedback = $state<
-    { situacao: "NaoSeAplica" } | { situacao: "Contando"; restante_segundos: number } | { situacao: "Liberado"; verificado_em: string } | { situacao: "Exigido"; apagado: boolean } | null
-  >(null);
+  let feedback = $state<SituacaoDoFeedback | null>(null);
   let aviso = $state<AvisoDeVersao | null>(null);
   let versao = $state<VersaoDoApp | null>(null);
   let recado = $state<{ tom: "ok" | "perigo" | "atencao"; texto: string } | null>(null);
@@ -446,11 +445,7 @@
             <span class="info" class:atencao={feedback.situacao === "Exigido"}>
               Feedback
               <span class="apoio">
-                {feedback.situacao === "Liberado"
-                  ? "Recebido. Obrigado."
-                  : feedback.situacao === "Exigido"
-                    ? "As correções estão pausadas até chegar o seu feedback."
-                    : `O pedido aparece em ${Math.max(1, Math.ceil(feedback.restante_segundos / 60))} min.`}
+                {resumoDoFeedback(feedback)}
               </span>
             </span>
             {#if feedback.situacao === "Exigido"}<button class="btn" onclick={() => window.dispatchEvent(new Event(ABRIR_FEEDBACK))}>Enviar feedback</button>{/if}
