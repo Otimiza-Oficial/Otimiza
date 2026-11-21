@@ -8,13 +8,34 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_4.0.14_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_4.0.14_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
+| `Otimiza_4.0.15_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_4.0.15_x64_pt-BR.msi` | Para instalação em rede ou por política de empresa (agora em português) |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 1.0.15: Frame Boost sem o mouse sumindo, sem microtravadas e com a mesma nitidez
+
+Atualização da 1.0 (número interno 4.0.15). Correção de bugs.
+
+## Frame Boost
+
+- **O mouse não some mais:** com a escala ligada (o jeito Desempenho), o cursor podia sumir dentro do jogo, por
+  exemplo no celular ou no inventário do FiveM. Agora ele aparece e acompanha o mouse. Se o Frame Boost demorar para
+  desligar, o cursor volta ao normal e fica solto na hora.
+- **Sem microtravadas ao girar a câmera:** com o FPS base destravado e o jogo perto dos Hz do monitor (por exemplo,
+  120 a 140 FPS num monitor de 144 Hz), o Frame Boost colocava quadros gerados aqui e ali, e a imagem dava pequenos
+  trancos ao virar. Agora, nessa faixa, ele sai da frente e o jogo aparece direto; ele só gera quando o jogo está
+  bem abaixo dos Hz e o ritmo fica regular. A tela avisa quando isso acontece.
+- **2× e Auto com a mesma cara:** a nitidez que só a escala aplicava vale agora em qualquer modo. Quem preferir a
+  imagem sem nitidez escolhe "Desligada" em Nitidez, na tela do Frame Boost.
+
+Se você foi afetado, não precisa fazer nada: é só atualizar. Para o Frame Boost dobrar liso de verdade, deixe o FPS
+base travado (toque em "Travar de novo" com o Otimiza aberto como administrador).
 
 ---
 
