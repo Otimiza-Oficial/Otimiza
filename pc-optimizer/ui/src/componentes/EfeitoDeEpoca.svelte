@@ -97,6 +97,11 @@
 </div>
 
 <style>
+  /* Marca v2: cor só para estado. O clima da época entra em tons de cinza, como poeira de luz. */
+  .fundo-epoca,
+  .varal-epoca {
+    filter: grayscale(1);
+  }
   .fundo-epoca {
     position: fixed;
     inset: 0;

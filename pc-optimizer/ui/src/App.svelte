@@ -62,6 +62,8 @@
     type Fundo,
   } from "./lib/fundos";
   import PapelDeFundo from "./componentes/PapelDeFundo.svelte";
+  import CeuDePoeira from "./componentes/marca/CeuDePoeira.svelte";
+  import Logo from "./componentes/marca/Logo.svelte";
   import MenuDoFundo from "./componentes/MenuDoFundo.svelte";
 
   type Tema = "claro" | "escuro";
@@ -132,19 +134,20 @@
 
   let jogoNaTela = $state(false);
 
-  // A época do ano (Natal, Páscoa…): muda sozinha pela data; desliga nos Ajustes ("otimiza.epoca" = "desligada").
+  // A época do ano (Natal, Páscoa…): vem desligada (marca v2) e liga nos Ajustes ("otimiza.epoca" = "ligada"); aí muda
+  // sozinha pela data.
   // `?temporada=natal` na URL mostra uma época fora da data, para conferir o visual.
   const CHAVE_DA_EPOCA = "otimiza.epoca";
   const previa = porId(new URLSearchParams(location.search).get("temporada"));
   let hoje = $state(new Date());
   let epocaLigada = $state(lerEpoca());
-  const temporada = $derived(epocaLigada ? (previa ?? temporadaDe(hoje)) : null);
+  const temporada = $derived(previa ?? (epocaLigada ? temporadaDe(hoje) : null));
 
   function lerEpoca() {
     try {
-      return localStorage.getItem("otimiza.epoca") !== "desligada";
+      return localStorage.getItem("otimiza.epoca") === "ligada";
     } catch {
-      return true;
+      return false;
     }
   }
 
@@ -347,6 +350,15 @@
     }
   }
 
+  /** Setas no Claro/Escuro (grupo de rádio): trocam o tema e levam o foco junto. */
+  function teclaDoTema(e: KeyboardEvent) {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+    e.preventDefault();
+    const outro: Tema = tema === "claro" ? "escuro" : "claro";
+    escolherTema(outro);
+    (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`[aria-checked="false"]`)?.focus();
+  }
+
   function escolherTema(t: Tema) {
     tema = t;
     try {
@@ -362,6 +374,7 @@
     document.documentElement.classList.toggle("janela-transparente", semFundo);
     document.documentElement.classList.toggle("fundo-limpo", fundo === "limpo");
     document.documentElement.classList.toggle("fundo-papel", fundoPapel);
+    document.documentElement.dataset.fundo = fundo;
     // A época na raiz: os tokens (cor da marca, filete dos cartões, geada do Natal) mudam o app inteiro.
     if (temporada) document.documentElement.dataset.epoca = temporada.id;
     else delete document.documentElement.dataset.epoca;
@@ -569,11 +582,14 @@
     mostrarAvisos = false;
   }
 
+  /** A troca de área: sobe 6 px e aparece, sem desfoque nem escala (movimento sóbrio, 1.0.12 Frente 1.6). Parada com
+   *  jogo aberto e com "reduzir movimento". */
   function entrar(_no: HTMLElement) {
+    const parado = jogoNaTela || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     return {
-      duration: 420,
+      duration: parado ? 0 : 280,
       easing: cubicOut,
-      css: (t: number, u: number) => `opacity: ${t}; transform: scale(${0.97 + 0.03 * t}); filter: blur(${u * 8}px)`,
+      css: (t: number, u: number) => `opacity: ${t}; transform: translateY(${u * 6}px)`,
     };
   }
 
@@ -755,9 +771,10 @@
   });
 </script>
 
-<!-- O cômodo desfocado atrás do vidro. Feito em CSS: parede, janela com luz, chão, sofá e luminária. -->
-<div class="limpo" data-epoca={temporada?.id ?? null} aria-hidden="true"></div>
-<div class="comodo" data-epoca={temporada?.id ?? null} aria-hidden="true">
+<!-- O fundo "Limpo" da marca v2: preto (papel no claro) com poeira de luz para onde o Oti olha. -->
+{#if fundo === "limpo"}<CeuDePoeira />{/if}
+<!-- O cômodo desfocado (fundo "Cômodo"). Feito em CSS: parede, janela com luz, chão, sofá e luminária. -->
+<div class="comodo" aria-hidden="true">
   <div class="parede"></div>
   <div class="janela-luz"></div>
   <div class="chao"></div>
@@ -773,17 +790,14 @@
 
 <div class="casca">
   <!-- Barra de cima -->
-  <header class="topo vidro" data-tauri-drag-region>
-    <div class="boas-vindas" data-tauri-drag-region>
-      <span class="avatar"><Oti humor={humor} tamanho={30} segueCursor={false} /></span>
-      <div class="ola">
-        <strong>{temporada?.saudacao ?? "Bem-vindo de volta"}</strong>
-        <span class="sec">Otimiza {versao?.exibida ?? ""}{versao && !versao.oficial ? " · compilação local" : ""}{hardware ? ` · ${nomeCurto(hardware.processador)}` : ""}</span>
-      </div>
+  <header class="topo" data-tauri-drag-region>
+    <div class="marca-do-topo" data-tauri-drag-region>
+      <Logo altura={19} />
+      <span class="versao" data-tauri-drag-region>{versao?.exibida ?? ""}{versao && !versao.oficial ? " · compilação local" : ""}{hardware ? ` · ${nomeCurto(hardware.processador)}` : ""}</span>
     </div>
 
     <form class="busca" onsubmit={perguntar}>
-      <span class="orbe"><Oti {humor} tamanho={22} /></span>
+      <span class="orbe"><Oti {humor} tamanho={20} segueCursor rotulo="" /></span>
       <input bind:value={busca} placeholder="Pergunte ao Oti… por que meu ping pula?" aria-label="Pergunte ao Oti" />
     </form>
 
@@ -791,11 +805,12 @@
       {#if !noTauri}
         <button class="link-demo" onclick={alternarJogoDeDemonstracao}>{jogo ? "Fechar jogo de teste" : "Simular jogo"}</button>
       {/if}
-      <div class="segmento" role="radiogroup" aria-label="Tema">
-        <button role="radio" aria-checked={tema === "claro"} onclick={() => escolherTema("claro")}>
+      <!-- svelte-ignore a11y_interactive_supports_focus -->
+      <div class="segmento tema" role="radiogroup" aria-label="Tema" onkeydown={teclaDoTema}>
+        <button role="radio" aria-checked={tema === "claro"} tabindex={tema === "claro" ? 0 : -1} onclick={() => escolherTema("claro")}>
           <Icone nome="sol" tamanho={14} /> Claro
         </button>
-        <button role="radio" aria-checked={tema === "escuro"} onclick={() => escolherTema("escuro")}>
+        <button role="radio" aria-checked={tema === "escuro"} tabindex={tema === "escuro" ? 0 : -1} onclick={() => escolherTema("escuro")}>
           <Icone nome="lua" tamanho={14} /> Escuro
         </button>
       </div>
@@ -834,8 +849,8 @@
 
   <!-- O balão do Oti -->
   {#if fala}
-    <div class="balao vidro-forte" role="status" in:entrar>
-      <span class="balao-oti"><Oti {humor} tamanho={44} /></span>
+    <div class="balao superficie-flutuante" role="status" in:entrar>
+      <span class="balao-oti"><Oti {humor} tamanho={40} rotulo="" /></span>
       <div class="balao-texto">
         <p class="balao-fala">{digitado}</p>
         {#if fala.detalhe && !digitando}<p class="balao-detalhe">{fala.detalhe}</p>{/if}
@@ -854,7 +869,7 @@
   {/if}
 
   {#if mostrarAvisos}
-    <div class="avisos vidro-forte" in:entrar>
+    <div class="avisos superficie-flutuante" in:entrar>
       <h3>Avisos</h3>
       {#if lista.length === 0}
         <p class="sec">Nada atrapalhando no que eu sei olhar.</p>
@@ -870,14 +885,14 @@
   {/if}
 
   <!-- Trilho -->
-  <nav class="trilho vidro" aria-label="Abas">
+  <nav class="trilho" aria-label="Seções">
     <Trilho ativo={nav.grupoAtivo.id} onabrir={abrirGrupo} />
   </nav>
 
   <!-- Painel -->
-  <main id="painel-da-area" class="painel vidro" class:solto={nav.aberta === "inicio"} role="tabpanel" aria-labelledby={`areas-aba-${nav.aberta}`}>
+  <main class="painel" class:inicio={nav.aberta === "inicio"}>
     {#key nav.aberta}
-      <div class="conteudo" in:entrar>
+      <div id="painel-da-area" class="conteudo" role="tabpanel" aria-labelledby={`areas-aba-${nav.aberta}`} in:entrar>
         {#if nav.aberta === "inicio"}
           <Inicio
             {temporada}
@@ -942,7 +957,7 @@
                 <Turbo jogo={jogo?.nome ?? null} />
               {:else}
                 <div class="em-breve">
-                  <Oti humor="dormindo" tamanho={90} segueCursor={false} />
+                  <Oti humor="dormindo" tamanho={64} rotulo="" />
                   <p>{nav.area.nome} chega na Onda {nav.area.onda}. Até lá, ela continua no Otimiza de sempre.</p>
                   <ul class="lista">
                     {#each nav.area.vai_ter as item (item)}<li>{item}</li>{/each}
@@ -957,7 +972,7 @@
   </main>
 
   <!-- As áreas da aba ativa -->
-  <nav class="abas vidro" aria-label={`Áreas de ${nav.grupoAtivo.nome}`}>
+  <nav class="abas superficie-flutuante" aria-label={`Áreas de ${nav.grupoAtivo.nome}`}>
     <BarraDeAbas grupo={nav.grupoAtivo} aberta={nav.aberta} onabrir={(id) => abrir(id)} />
   </nav>
 
@@ -979,112 +994,25 @@
   {/if}
 
   {#if jogoNaTela && jogo}
-    <p class="pausado">{jogo.nome} aberto · interface pausada para não pesar no jogo</p>
+    <p class="pausado" role="status"><span class="ponto" data-tom="ok"></span>{jogo.nome} aberto · a interface parou de se mexer para não pesar no jogo</p>
   {/if}
 </div>
 
 <style>
-  /* ---------- O fundo limpo (padrão): grafite com uma luz de cima e um respiro da marca embaixo ---------- */
-  .limpo {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    display: none;
-    background:
-      radial-gradient(70% 55% at 50% -10%, rgb(255 255 255 / 0.07), transparent 70%),
-      radial-gradient(60% 40% at 50% 115%, color-mix(in srgb, var(--marca) 14%, transparent), transparent 70%),
-      linear-gradient(180deg, #121215 0%, #0b0b0d 100%);
-  }
-  :global(:root[data-tema="dia"]) .limpo {
-    background:
-      radial-gradient(70% 55% at 50% -10%, rgb(255 255 255 / 0.95), transparent 70%),
-      radial-gradient(60% 40% at 50% 115%, color-mix(in srgb, var(--marca) 8%, transparent), transparent 70%),
-      linear-gradient(180deg, #f3f4f7 0%, #e6e8ee 100%);
-  }
-  :global(:root.fundo-limpo) .limpo {
-    display: block;
-  }
-  :global(:root.fundo-limpo) .comodo,
-  :global(:root.fundo-papel) .comodo {
-    display: none;
-  }
-  /* A luz da época também entra no fundo limpo, bem mais baixa que no cômodo (lá ela passa pelo desfoque). */
-  .limpo::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    transition: opacity 1.2s ease;
-  }
-  .limpo[data-epoca]::after {
-    opacity: 0.55;
-  }
-
-  /* ---------- O cômodo atrás do vidro ---------- */
+  /* ---------- O cômodo (fundo "Cômodo"): só aparece quando escolhido ---------- */
   .comodo {
     position: fixed;
     inset: -40px;
     z-index: 0;
-    filter: blur(16px) saturate(1.05);
+    display: none;
+    filter: blur(16px) saturate(0.4);
     background: #c9c3bb;
   }
-  /* A cor da época no cômodo, por baixo do desfoque: luz ambiente, não papel de parede. */
-  .comodo::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    transition: opacity 1.2s ease;
-  }
-  .comodo[data-epoca]::after {
-    opacity: 1;
-  }
-  .comodo[data-epoca="natal"]::after,
-  .limpo[data-epoca="natal"]::after {
-    background:
-      radial-gradient(ellipse 40% 50% at 12% 70%, rgb(214 47 58 / 0.35), transparent 70%),
-      radial-gradient(ellipse 35% 45% at 88% 30%, rgb(34 139 84 / 0.3), transparent 70%),
-      radial-gradient(ellipse 30% 30% at 60% 85%, rgb(255 210 120 / 0.35), transparent 70%);
-  }
-  .comodo[data-epoca="ano-novo"]::after,
-  .limpo[data-epoca="ano-novo"]::after {
-    background:
-      radial-gradient(ellipse 45% 50% at 80% 25%, rgb(230 180 34 / 0.35), transparent 70%),
-      radial-gradient(ellipse 40% 40% at 20% 80%, rgb(255 255 255 / 0.35), transparent 70%);
-  }
-  .comodo[data-epoca="carnaval"]::after,
-  .limpo[data-epoca="carnaval"]::after {
-    background:
-      radial-gradient(ellipse 40% 45% at 15% 30%, rgb(122 43 214 / 0.3), transparent 70%),
-      radial-gradient(ellipse 40% 45% at 85% 70%, rgb(255 79 154 / 0.3), transparent 70%),
-      radial-gradient(ellipse 30% 35% at 55% 20%, rgb(46 196 182 / 0.25), transparent 70%);
-  }
-  .comodo[data-epoca="pascoa"]::after,
-  .limpo[data-epoca="pascoa"]::after {
-    background:
-      radial-gradient(ellipse 45% 50% at 20% 30%, rgb(255 182 200 / 0.4), transparent 70%),
-      radial-gradient(ellipse 45% 50% at 80% 75%, rgb(190 230 200 / 0.4), transparent 70%);
-  }
-  .comodo[data-epoca="festa-junina"]::after,
-  .limpo[data-epoca="festa-junina"]::after {
-    background:
-      radial-gradient(ellipse 50% 45% at 50% 95%, rgb(255 140 40 / 0.4), transparent 70%),
-      radial-gradient(ellipse 35% 35% at 15% 20%, rgb(250 204 21 / 0.3), transparent 70%);
-  }
-  .comodo[data-epoca="dia-das-criancas"]::after,
-  .limpo[data-epoca="dia-das-criancas"]::after {
-    background:
-      radial-gradient(ellipse 40% 45% at 20% 25%, rgb(59 130 246 / 0.3), transparent 70%),
-      radial-gradient(ellipse 40% 45% at 80% 75%, rgb(250 204 21 / 0.3), transparent 70%);
-  }
-  .comodo[data-epoca="halloween"]::after,
-  .limpo[data-epoca="halloween"]::after {
-    background:
-      radial-gradient(ellipse 45% 50% at 20% 75%, rgb(249 115 22 / 0.4), transparent 70%),
-      radial-gradient(ellipse 45% 45% at 85% 25%, rgb(88 28 135 / 0.4), transparent 70%);
+  :global(:root[data-fundo="comodo"]) .comodo {
+    display: block;
   }
   :global(:root[data-tema="noite"]) .comodo {
-    filter: blur(16px) brightness(0.38) saturate(0.9);
+    filter: blur(16px) brightness(0.32) saturate(0.3);
   }
   .parede {
     position: absolute;
@@ -1141,147 +1069,66 @@
     right: 30%;
     bottom: 8%;
     height: 16%;
-    background:
-      linear-gradient(90deg, transparent 6%, #9a7a58 6% 8%, transparent 8% 92%, #9a7a58 92% 94%, transparent 94%),
-      transparent;
+    background: linear-gradient(90deg, transparent 6%, #9a7a58 6% 8%, transparent 8% 92%, #9a7a58 92% 94%, transparent 94%);
   }
 
-  /* ---------- Vidro ---------- */
+  /* ---------- A casca ----------
+     Marca v2: fundo preto (papel no claro), superfícies sólidas em grafite com borda fina e o fio de luz no alto. Sem
+     vidro: o desfoque só volta quando há uma foto ou uma cena atrás, e para com o jogo aberto. */
   .casca {
-    --vidro-fundo: rgb(255 255 255 / 0.26);
-    --vidro-borda: rgb(255 255 255 / 0.5);
-    --bloco: rgb(255 255 255 / 0.36);
-    --bloco-solto: rgb(255 255 255 / 0.5);
-    --bloco-2: rgb(255 255 255 / 0.55);
-    --ativo: #ffffff;
-    --ativo-texto: #1d1d1f;
-    --verde: #34c759;
-    /* Barra que pede atenção (memória cheia, tela abaixo do máximo). */
-    --laranja: #c2730f;
-    /* O interruptor das áreas (`tokens.css`) fica verde aqui, como os blocos. */
-    --ligado: #34c759;
     position: relative;
     z-index: 1;
     height: 100vh;
-    color: var(--texto);
+    color: var(--tinta);
     font-family: var(--fonte-texto);
+    --superficie-casca: var(--superficie);
   }
-  :global(:root[data-tema="noite"]) .casca {
-    --vidro-fundo: rgb(40 40 44 / 0.42);
-    --vidro-borda: rgb(255 255 255 / 0.14);
-    --bloco: rgb(255 255 255 / 0.08);
-    --bloco-solto: rgb(38 38 42 / 0.62);
-    --bloco-2: rgb(255 255 255 / 0.14);
-    --ativo: #f5f5f7;
-    --ativo-texto: #1d1d1f;
-    --laranja: #ffa53a;
-  }
-  /* Janela transparente: o cômodo some e a área de trabalho aparece entre os cards. O desfoque não alcança o que
-     está fora da janela, então o vidro fica mais firme (e sem desfoque, que ali só gastaria placa). */
-  :global(:root.janela-transparente) .comodo {
-    display: none;
+  :global(:root.fundo-papel) .casca,
+  :global(:root[data-fundo="comodo"]) .casca {
+    --superficie-casca: color-mix(in srgb, var(--superficie) 86%, transparent);
   }
   :global(:root.janela-transparente) .casca {
-    --vidro-fundo: rgb(246 244 241 / 0.9);
-    --vidro-borda: rgb(255 255 255 / 0.75);
-    --bloco-solto: rgb(250 249 247 / 0.92);
+    --superficie-casca: color-mix(in srgb, var(--superficie) 96%, transparent);
   }
-  :global(:root.janela-transparente[data-tema="noite"]) .casca {
-    --vidro-fundo: rgb(34 34 38 / 0.92);
-    --vidro-borda: rgb(255 255 255 / 0.12);
-    --bloco-solto: rgb(38 38 42 / 0.94);
+  .superficie-flutuante {
+    border: 1px solid var(--linha);
+    background: var(--superficie-casca);
+    box-shadow: var(--fio), var(--sombra-2);
   }
-  /* Fundo limpo: o vidro vira grafite firme (o desfoque não tem o que desfocar e só gastaria placa). */
-  :global(:root.fundo-limpo) .casca {
-    --vidro-fundo: rgb(250 250 252 / 0.82);
-    --vidro-borda: rgb(255 255 255 / 0.9);
-    --bloco: rgb(0 0 0 / 0.035);
-    --bloco-solto: rgb(255 255 255 / 0.92);
-    --bloco-2: rgb(0 0 0 / 0.06);
-  }
-  :global(:root.fundo-limpo[data-tema="noite"]) .casca {
-    --vidro-fundo: rgb(24 24 27 / 0.86);
-    --vidro-borda: rgb(255 255 255 / 0.08);
-    --bloco: rgb(255 255 255 / 0.045);
-    --bloco-solto: rgb(26 26 30 / 0.96);
-    --bloco-2: rgb(255 255 255 / 0.09);
-  }
-  :global(:root.fundo-limpo) .vidro,
-  :global(:root.fundo-limpo) .vidro-forte,
-  :global(:root.janela-transparente) .vidro,
-  :global(:root.janela-transparente) .vidro-forte {
-    backdrop-filter: none;
-  }
-  .vidro,
-  .vidro-forte {
-    background: var(--vidro-fundo);
-    border: 1px solid var(--vidro-borda);
-    backdrop-filter: blur(34px) saturate(1.5);
-    box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.35) inset,
-      0 20px 50px rgb(40 30 20 / 0.18);
-  }
-  .vidro-forte {
-    background: color-mix(in srgb, var(--vidro-fundo) 40%, rgb(250 250 250 / 0.75));
-  }
-  :global(:root[data-tema="noite"]) .vidro-forte {
-    background: rgb(44 44 48 / 0.88);
-  }
-  :global(:root.jogo-aberto) .vidro,
-  :global(:root.jogo-aberto) .vidro-forte {
-    backdrop-filter: none;
-    background: rgb(220 214 206 / 0.97);
-  }
-  :global(:root.jogo-aberto[data-tema="noite"]) .vidro,
-  :global(:root.jogo-aberto[data-tema="noite"]) .vidro-forte {
-    background: rgb(36 36 40 / 0.98);
+  :global(:root.fundo-papel) .superficie-flutuante,
+  :global(:root[data-fundo="comodo"]) .superficie-flutuante {
+    backdrop-filter: var(--desfoque);
   }
   .sec {
-    color: var(--sec);
+    color: var(--tinta-2);
   }
 
-  /* ---------- Barra de cima ---------- */
+  /* ---------- Barra de cima: o logotipo, a pergunta ao Oti e os controles. Sem caixa: é a borda da janela. ---------- */
   .topo {
     position: absolute;
-    /* Acima do painel: o menu do Fundo abre por cima dos blocos. */
     z-index: 5;
-    left: 96px;
-    right: 24px;
-    top: 14px;
-    height: 54px;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 64px;
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 0 8px 0 10px;
-    border-radius: 27px;
+    gap: var(--e-4);
+    padding: 0 var(--e-3) 0 28px;
   }
-  .boas-vindas {
+  .marca-do-topo {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding-right: 8px;
-  }
-  .avatar {
-    display: grid;
-    place-items: center;
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    background: #1d1d1f;
-    box-shadow: 0 0 0 2px rgb(255 255 255 / 0.7);
-  }
-  .ola {
-    display: grid;
-    line-height: 1.2;
+    gap: var(--e-3);
+    min-width: 0;
     white-space: nowrap;
   }
-  .ola strong {
-    font-family: var(--fonte-titulo);
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .ola span {
-    font-size: 12px;
+  .versao {
+    padding-top: 3px;
+    color: var(--tinta-3);
+    font-size: var(--t-apoio);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .busca {
     flex: 1;
@@ -1291,18 +1138,22 @@
     align-items: center;
     gap: 10px;
     height: 38px;
-    padding: 0 14px 0 8px;
-    border-radius: 19px;
-    background: var(--bloco);
-    border: 1px solid var(--vidro-borda);
+    padding: 0 14px 0 10px;
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-pilula);
+    background: var(--superficie-casca);
+    box-shadow: var(--fio);
+    transition: border-color var(--mov-rapido) ease;
+  }
+  .busca:hover {
+    border-color: var(--linha-forte);
+  }
+  .busca:focus-within {
+    border-color: var(--foco);
   }
   .orbe {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #3a3a3f, #0e0e10);
   }
   .busca input {
     flex: 1;
@@ -1311,128 +1162,114 @@
     border: 0;
     outline: none;
     background: none;
-    color: var(--texto);
-    font-size: 13px;
+    color: var(--tinta);
+    font-size: var(--t-linha);
     user-select: text;
   }
   .busca input::placeholder {
-    color: var(--sec);
+    color: var(--tinta-3);
   }
   .direita {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--e-2);
   }
   .link-demo {
     border: 0;
     background: none;
-    color: var(--sec);
-    font-size: 12px;
+    color: var(--tinta-3);
+    font-size: var(--t-apoio);
     cursor: pointer;
+  }
+  .link-demo:hover {
+    color: var(--tinta);
   }
   /* Sem licença, o caminho para ativar fica à vista na barra: escondido nos Ajustes, ninguém achava. */
   .ativar-botao {
-    height: 36px;
-    padding: 0 15px;
+    height: 34px;
+    padding: 0 var(--e-4);
     border: 0;
-    border-radius: 18px;
-    background: var(--texto);
-    color: var(--contra, #fff);
-    font: inherit;
-    font-size: 13px;
+    border-radius: var(--raio-pilula);
+    background: var(--acao);
+    color: var(--contra);
+    font-size: var(--t-linha);
     font-weight: 600;
     cursor: pointer;
-    animation: chamar 2.4s ease-in-out 3;
   }
-  @keyframes chamar {
-    50% {
-      box-shadow: 0 0 0 6px color-mix(in srgb, var(--texto) 14%, transparent);
-    }
+  .ativar-botao:hover {
+    background: var(--acao-forte);
   }
-  @media (prefers-reduced-motion: reduce) {
-    .ativar-botao {
-      animation: none;
-    }
-  }
-  /* Liga e desliga o fundo: apertado, o fundo sumiu. */
   .fundo-botao {
-    height: 36px;
-    padding: 0 13px;
-    border-radius: 18px;
-    border: 1px solid var(--vidro-borda);
-    background: var(--bloco);
-    color: var(--texto);
-    font: inherit;
-    font-size: 13px;
+    height: 34px;
+    padding: 0 var(--e-3);
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-pilula);
+    background: transparent;
+    color: var(--tinta-2);
+    font-size: var(--t-linha);
     cursor: pointer;
+  }
+  .fundo-botao:hover {
+    border-color: var(--linha-forte);
+    color: var(--tinta);
   }
   .fundo-escolha {
     position: relative;
   }
-  .segmento {
-    display: flex;
-    padding: 3px;
-    border-radius: 18px;
-    background: var(--bloco);
-    border: 1px solid var(--vidro-borda);
+  .segmento.tema {
+    border-radius: var(--raio-pilula);
   }
-  .segmento button {
+  .segmento.tema button {
     display: flex;
     align-items: center;
     gap: 5px;
     height: 28px;
-    padding: 0 11px;
-    border: 0;
-    border-radius: 14px;
-    background: transparent;
-    color: var(--sec);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background var(--mov-medio) ease, color var(--mov-medio) ease;
-  }
-  .segmento button[aria-checked="true"] {
-    background: var(--ativo);
-    color: var(--ativo-texto);
-    box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+    border-radius: var(--raio-pilula);
+    font-size: var(--t-apoio);
   }
   .redondo {
     position: relative;
     display: grid;
     place-items: center;
-    width: 38px;
-    height: 38px;
-    border: 1px solid var(--vidro-borda);
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--linha);
     border-radius: 50%;
-    background: var(--bloco);
-    color: var(--texto);
+    background: transparent;
+    color: var(--tinta-2);
     cursor: pointer;
   }
+  .redondo:hover {
+    border-color: var(--linha-forte);
+    color: var(--tinta);
+  }
+  /* O número de avisos: o único lugar da barra com cor, porque é estado. */
   .contador {
     position: absolute;
-    top: -2px;
-    right: -2px;
-    min-width: 16px;
-    height: 16px;
+    top: -4px;
+    right: -4px;
+    min-width: 17px;
+    height: 17px;
     padding: 0 4px;
-    border-radius: 8px;
-    background: #ff3b30;
-    color: #fff;
+    border-radius: 9px;
+    background: var(--atencao);
+    color: var(--contra);
     font-size: var(--t-apoio);
     font-weight: 700;
-    line-height: 16px;
+    line-height: 17px;
+    box-shadow: 0 0 0 2px var(--fundo);
   }
   .controles {
     display: flex;
-    margin-left: 4px;
+    margin-left: var(--e-1);
   }
   .controles button {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     border: 0;
-    border-radius: 50%;
+    border-radius: var(--raio-1);
     background: transparent;
-    color: var(--sec);
+    color: var(--tinta-3);
     cursor: pointer;
   }
   .controles svg,
@@ -1442,12 +1279,13 @@
     stroke-width: 1.5;
   }
   .controles button:hover {
-    background: var(--bloco-2);
-    color: var(--texto);
+    background: var(--acao-suave);
+    color: var(--tinta);
   }
+  /* Fechar a janela: o vermelho é estado ("isto fecha"), não enfeite. */
   .controles .x:hover {
-    background: #ff3b30;
-    color: #fff;
+    background: var(--perigo);
+    color: var(--contra);
   }
 
   /* ---------- Balão do Oti e avisos ---------- */
@@ -1455,16 +1293,20 @@
     position: absolute;
     z-index: 20;
     left: 50%;
-    top: 78px;
+    top: 68px;
     width: min(520px, calc(100% - 48px));
     margin-left: calc(min(520px, calc(100% - 48px)) / -2);
     display: flex;
-    gap: 14px;
-    padding: 16px 16px 16px 14px;
-    border-radius: 24px;
+    gap: var(--e-3);
+    padding: var(--e-4);
+    border-radius: var(--raio-4);
+    border-color: var(--linha-forte);
+    background: var(--superficie-menu);
+    box-shadow: var(--fio), var(--sombra-3);
   }
   .balao-oti {
     flex: none;
+    padding-top: 2px;
   }
   .balao-texto {
     flex: 1;
@@ -1474,146 +1316,137 @@
   .balao-fala {
     min-height: 1.4em;
     font-family: var(--fonte-titulo);
-    font-size: 16px;
+    font-size: var(--t-subtitulo);
     font-weight: 600;
+    letter-spacing: var(--rastreio-subtitulo);
     line-height: 1.35;
   }
   .balao-detalhe {
-    color: var(--sec);
-    font-size: 13px;
+    color: var(--tinta-2);
+    font-size: var(--t-linha);
     line-height: 1.5;
   }
   .balao-acoes {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: 4px;
+    margin-top: var(--e-1);
   }
   .pilula {
     height: 32px;
     padding: 0 14px;
-    border: 1px solid var(--vidro-borda);
-    border-radius: 16px;
-    background: var(--bloco);
-    color: var(--texto);
-    font-size: 13px;
+    border: 1px solid var(--linha-forte);
+    border-radius: var(--raio-pilula);
+    background: transparent;
+    color: var(--tinta);
+    font-size: var(--t-linha);
     font-weight: 500;
     cursor: pointer;
   }
+  .pilula:hover {
+    background: var(--acao-suave);
+  }
   .pilula.principal {
     border-color: transparent;
-    background: #1d1d1f;
-    color: #fff;
-  }
-  :global(:root[data-tema="noite"]) .pilula.principal {
-    background: #f5f5f7;
-    color: #1d1d1f;
+    background: var(--acao);
+    color: var(--contra);
+    font-weight: 600;
   }
   .fechar-balao {
     align-self: flex-start;
-    width: 26px;
-    height: 26px;
+    flex: none;
+    width: 28px;
+    height: 28px;
     border: 0;
     border-radius: 50%;
-    background: var(--bloco);
-    color: var(--sec);
+    background: transparent;
+    color: var(--tinta-3);
     cursor: pointer;
+  }
+  .fechar-balao:hover {
+    background: var(--acao-suave);
+    color: var(--tinta);
   }
   .avisos {
     position: absolute;
     z-index: 21;
     right: 70px;
-    top: 74px;
-    width: 320px;
+    top: 60px;
+    width: 340px;
     display: grid;
-    gap: 6px;
-    padding: 14px;
-    border-radius: 20px;
+    gap: var(--e-1);
+    padding: var(--e-3);
+    border-radius: var(--raio-3);
+    background: var(--superficie-menu);
+    box-shadow: var(--fio), var(--sombra-3);
   }
   .avisos h3 {
-    margin: 0 0 4px;
-    font-size: 13px;
+    margin: 0 0 var(--e-1);
+    padding: var(--e-1) var(--e-2) 0;
+    font-size: var(--t-rotulo);
+    font-weight: 500;
+    letter-spacing: var(--rastreio-rotulo);
+    text-transform: uppercase;
+    color: var(--tinta-2);
+  }
+  .avisos > .sec {
+    padding: 0 var(--e-2) var(--e-2);
+    font-size: var(--t-linha);
   }
   .aviso {
     display: flex;
     gap: 10px;
     align-items: baseline;
-    padding: 8px;
+    padding: var(--e-2);
     border: 0;
-    border-radius: 12px;
-    background: var(--bloco);
-    color: var(--texto);
+    border-radius: var(--raio-2);
+    background: transparent;
+    color: var(--tinta);
     text-align: left;
-    font-size: 13px;
+    font-size: var(--t-linha);
     cursor: pointer;
   }
+  .aviso:hover {
+    background: var(--acao-suave);
+  }
 
-  /* ---------- Trilho ---------- */
+  /* ---------- Trilho: a coluna da esquerda, sem caixa ---------- */
   .trilho {
     position: absolute;
-    left: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: grid;
-    gap: 6px;
-    padding: 7px;
-    border-radius: 27px;
+    left: 14px;
+    top: 80px;
   }
 
-  /* ---------- Painel e grade ---------- */
+  /* ---------- Painel: as áreas ficam direto no fundo; cada seção é o seu cartão (`tokens.css`) ---------- */
   .painel {
     position: absolute;
-    left: 96px;
-    right: 24px;
-    top: 80px;
-    bottom: 84px;
-    border-radius: 32px;
-    overflow: hidden;
-  }
-  /* Na tela inicial o painel some e só os cards ficam sobre o céu: cada um leva o próprio vidro. */
-  .painel.solto {
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-  }
-  :global(:root.jogo-aberto) .painel.solto {
-    background: transparent;
+    left: 92px;
+    right: 16px;
+    top: 64px;
+    bottom: 76px;
   }
   .conteudo {
     height: 100%;
     overflow: auto;
     /* O espaço da barra fica reservado: a página não pula de lado quando uma sub-aba é curta e a outra rola. */
     scrollbar-gutter: stable;
-    padding: 16px;
+    padding: var(--e-4) var(--e-3) var(--e-5);
   }
 
-
-  /* ---------- Área aberta dentro do painel ---------- */
+  /* ---------- Área aberta ---------- */
   .area-aberta {
     display: grid;
-    gap: 14px;
-    max-width: 1000px;
+    gap: var(--e-4);
+    max-width: 1040px;
     margin: 0 auto;
-    padding: 10px 14px 24px;
-    /* As áreas usam os tokens de `tokens.css` (os mesmos tons da casca); aqui só as superfícies viram vidro. */
-    --superficie: rgb(255 255 255 / 0.4);
-    --superficie-2: rgb(255 255 255 / 0.5);
-    --acao: #1d1d1f;
-    --acao-forte: #000;
-  }
-  :global(:root[data-tema="noite"]) .area-aberta {
-    --superficie: rgb(255 255 255 / 0.08);
-    --superficie-2: rgb(255 255 255 / 0.12);
-    --acao: #f5f5f7;
-    --acao-forte: #fff;
+    padding: var(--e-2) var(--e-2) var(--e-5);
   }
   /* O cabeçalho da área: o nome grande, a pergunta embaixo e o estado lido à direita. */
   .area-topo {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 4px 4px 6px;
+    align-items: flex-end;
+    gap: var(--e-4);
+    padding: var(--e-1) var(--e-1) var(--e-2);
   }
   .area-nome {
     flex: 1;
@@ -1621,71 +1454,71 @@
   }
   .area-topo h2 {
     font-family: var(--fonte-titulo);
-    font-size: 30px;
+    font-size: var(--t-titulo-area);
     font-weight: 700;
-    letter-spacing: -0.025em;
-    line-height: 1.15;
+    letter-spacing: var(--rastreio-titulo);
+    line-height: 1.1;
   }
   .area-topo .area-nome .sec {
-    margin-top: 2px;
-    font-size: 14px;
+    margin-top: var(--e-1);
+    font-size: var(--t-corpo);
   }
   .area-topo .contexto {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--e-2);
     flex: none;
     max-width: 46%;
     margin: 0;
-    padding: 8px 14px;
-    border-radius: 999px;
-    background: var(--bloco);
-    border: 1px solid var(--vidro-borda);
-    font-size: 13px;
+    padding: 6px 14px;
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-pilula);
+    background: var(--superficie-casca);
+    font-size: var(--t-linha);
     font-weight: 500;
-    color: var(--texto);
+    color: var(--tinta);
   }
-  /* O corpo não é mais uma caixa: cada seção vira o seu cartão (`tokens.css`, `.area-corpo .secao`). */
   .area-corpo {
     display: grid;
-    gap: 12px;
+    gap: var(--e-3);
   }
   .em-breve {
     display: grid;
     justify-items: start;
-    gap: 12px;
-    padding: 16px 0;
+    gap: var(--e-3);
+    padding: var(--e-4) 0;
   }
 
-  /* ---------- Abas ---------- */
+  /* ---------- Abas de baixo ---------- */
   .abas {
     position: absolute;
     left: 50%;
-    bottom: 20px;
+    bottom: 18px;
     transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px;
-    border-radius: 26px;
+    padding: 4px;
+    border-radius: var(--raio-pilula);
   }
 
   .pausado {
     position: absolute;
     left: 50%;
-    bottom: 76px;
+    bottom: 70px;
     transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: var(--e-2);
+    margin: 0;
     padding: 4px 12px;
-    border-radius: 12px;
-    background: rgb(0 0 0 / 0.5);
-    color: #fff;
-    font-size: 12px;
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-pilula);
+    background: var(--superficie);
+    color: var(--tinta-2);
+    font-size: var(--t-apoio);
   }
 
-  /* Janela estreita: a saudação sai da barra. A grade estreita fica na regra de cima ("a grade vira uma coluna
-     dupla que rola"); a que morava aqui usava os blocos de um desenho antigo e escondia três cards. */
+  /* Janela estreita: a versão sai da barra. */
   @media (max-width: 1100px) {
-    .ola {
+    .versao {
       display: none;
     }
   }
