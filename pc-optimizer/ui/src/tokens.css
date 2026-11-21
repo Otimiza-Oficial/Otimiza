@@ -191,6 +191,53 @@
   --epoca-cor: #ff8a1f;
   --epoca-luz: #a855f7;
 }
+/* A cor de texto da época (saudação e ornamento): passa no AA sobre as superfícies nos dois temas. */
+:root[data-epoca="natal"] {
+  --epoca-texto: #b3261e;
+}
+:root[data-epoca="ano-novo"] {
+  --epoca-texto: #7a5600;
+}
+:root[data-epoca="carnaval"] {
+  --epoca-texto: #a3195f;
+}
+:root[data-epoca="pascoa"] {
+  --epoca-texto: #5f3fb8;
+}
+:root[data-epoca="festa-junina"] {
+  --epoca-texto: #9a4500;
+}
+:root[data-epoca="dia-das-criancas"] {
+  --epoca-texto: #1d5bb8;
+}
+:root[data-epoca="halloween"] {
+  --epoca-texto: #9a4500;
+}
+:root[data-tema="noite"][data-epoca="natal"] {
+  --epoca-texto: #ff7a7a;
+}
+:root[data-tema="noite"][data-epoca="ano-novo"] {
+  --epoca-texto: #f2c14e;
+}
+:root[data-tema="noite"][data-epoca="carnaval"] {
+  --epoca-texto: #ff7ab8;
+}
+:root[data-tema="noite"][data-epoca="pascoa"] {
+  --epoca-texto: #c2adff;
+}
+:root[data-tema="noite"][data-epoca="festa-junina"] {
+  --epoca-texto: #ffa04d;
+}
+:root[data-tema="noite"][data-epoca="dia-das-criancas"] {
+  --epoca-texto: #7cb2ff;
+}
+:root[data-tema="noite"][data-epoca="halloween"] {
+  --epoca-texto: #ffa04d;
+}
+/* O lugar onde você está, no trilho, ganha um traço na cor da época. */
+:root[data-epoca] .trilho-botao.ativo {
+  box-shadow: var(--fio), inset 0 -2px 0 var(--epoca-cor);
+}
 :root[data-epoca] .bloco::after,
 :root[data-epoca] .area-corpo .secao:not(.secao .secao)::after {
   content: "";

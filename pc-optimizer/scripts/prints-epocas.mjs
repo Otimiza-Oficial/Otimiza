@@ -122,6 +122,16 @@ for (const tema of ["escuro", "claro"]) {
     await abrir("Jogar", "Turbo");
     await fotografar(`${tema}-${epoca}-turbo`);
   }
+  // A prévia nos Ajustes, escolhida pelo próprio seletor (não pela URL).
+  await cdp("Page.navigate", { url: `http://127.0.0.1:${porta}/` });
+  await espera(2200);
+  await abrir("Ajustes", "Ajustes");
+  await clicarTexto(".epoca-op", "Halloween");
+  await espera(900);
+  await rolarAte(".previa-da-epoca");
+  await espera(300);
+  await fotografar(`${tema}-ajustes-previa-da-epoca`);
+  await clicarTexto(".epoca-op", "Pela data");
 }
 
 console.log(`${total} prints em ${SAIDA}${erros.length ? ` · ${erros.length} exceções: ${erros.slice(0, 3).join(" | ")}` : ""}`);

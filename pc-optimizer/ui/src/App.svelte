@@ -26,7 +26,7 @@
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
   import EfeitoDeEpoca from "./componentes/EfeitoDeEpoca.svelte";
-  import { porId, temporadaDe } from "./lib/temporadas";
+  import { CHAVE_DA_PREVIA, EVENTO_DA_PREVIA, porId, temporadaDe, type Temporada } from "./lib/temporadas";
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
   import { ABRIR_AREA, areas, type Grupo, type IdDaArea } from "./lib/areas";
@@ -143,7 +143,17 @@
   const previa = porId(new URLSearchParams(location.search).get("temporada"));
   let hoje = $state(new Date());
   let epocaLigada = $state(lerEpoca());
-  const temporada = $derived(epocaLigada ? (previa ?? temporadaDe(hoje)) : null);
+  /** A prévia escolhida nos Ajustes (vale até fechar o app): mostra a época mesmo fora da data. */
+  let previaDosAjustes = $state<Temporada | null>(lerPreviaDosAjustes());
+  const temporada = $derived(previaDosAjustes ?? (epocaLigada ? (previa ?? temporadaDe(hoje)) : null));
+
+  function lerPreviaDosAjustes() {
+    try {
+      return porId(sessionStorage.getItem(CHAVE_DA_PREVIA));
+    } catch {
+      return null;
+    }
+  }
 
   function lerEpoca() {
     try {
@@ -696,6 +706,8 @@
     const pararEpoca = relogio.cada(60 * 60 * 1000, () => (hoje = new Date()), { aoVoltar: true });
     const aoMudarEpoca = () => (epocaLigada = lerEpoca());
     window.addEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
+    const aoMudarPrevia = () => (previaDosAjustes = lerPreviaDosAjustes());
+    window.addEventListener(EVENTO_DA_PREVIA, aoMudarPrevia);
 
     // Guarda térmica: o Oti avisa quando o PC começa a ser freado por calor no jogo.
     let deixarCalor: (() => void) | undefined;
@@ -767,6 +779,7 @@
       pararMetricas();
       pararMaquina();
       window.removeEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
+      window.removeEventListener(EVENTO_DA_PREVIA, aoMudarPrevia);
       pararEpoca();
     };
   });

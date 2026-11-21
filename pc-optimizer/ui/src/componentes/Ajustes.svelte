@@ -23,7 +23,8 @@
     type Sobreposicao,
     type VersaoDoApp,
   } from "../lib/ponte";
-  import { temporadaDe } from "../lib/temporadas";
+  import { CHAVE_DA_PREVIA, EVENTO_DA_PREVIA, TODAS, temporadaDe, type IdDaTemporada } from "../lib/temporadas";
+  import OrnamentoDaEpoca from "./marca/OrnamentoDaEpoca.svelte";
 
   const MODOS: [ModoDaSobreposicao, string][] = [
     ["Desligado", "Desligado"],
@@ -94,6 +95,27 @@
   }
 
   let epoca = $state(lerEpoca());
+  /** A época em prévia (só nesta sessão), ou `null` para seguir a data. */
+  let previa = $state<IdDaTemporada | null>(lerPrevia());
+
+  function lerPrevia(): IdDaTemporada | null {
+    try {
+      return (sessionStorage.getItem(CHAVE_DA_PREVIA) as IdDaTemporada | null) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  function verEpoca(id: IdDaTemporada | null) {
+    previa = id;
+    try {
+      if (id) sessionStorage.setItem(CHAVE_DA_PREVIA, id);
+      else sessionStorage.removeItem(CHAVE_DA_PREVIA);
+    } catch {
+      // Sem armazenamento da sessão: a prévia não pega; nada quebra.
+    }
+    window.dispatchEvent(new Event(EVENTO_DA_PREVIA));
+  }
   const epocaDeHoje = temporadaDe(new Date());
 
   function lerEpoca() {
@@ -346,6 +368,32 @@
       </div>
       <button class="interruptor" role="switch" aria-checked={epoca} aria-label="Temas de época" onclick={alternarEpoca}></button>
     </div>
+    <div class="previa-da-epoca">
+      <span class="rotulo">Ver uma época agora</span>
+      <!-- svelte-ignore a11y_interactive_supports_focus -->
+      <div
+        class="epocas"
+        role="radiogroup"
+        aria-label="Prévia da época"
+        onkeydown={(e) => {
+          const ids = [null, ...TODAS.map((t) => t.id)];
+          const i = ids.indexOf(previa);
+          const j = e.key === "ArrowRight" || e.key === "ArrowDown" ? (i + 1) % ids.length : e.key === "ArrowLeft" || e.key === "ArrowUp" ? (i - 1 + ids.length) % ids.length : -1;
+          if (j < 0) return;
+          e.preventDefault();
+          verEpoca(ids[j]);
+          (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("[role=radio]")[j]?.focus();
+        }}
+      >
+        <button role="radio" class="epoca-op" aria-checked={previa === null} tabindex={previa === null ? 0 : -1} onclick={() => verEpoca(null)}>Pela data</button>
+        {#each TODAS as t (t.id)}
+          <button role="radio" class="epoca-op" data-epoca-op={t.id} aria-checked={previa === t.id} tabindex={previa === t.id ? 0 : -1} onclick={() => verEpoca(t.id)}>
+            <OrnamentoDaEpoca epoca={t.id} tamanho={14} />{t.nome}
+          </button>
+        {/each}
+      </div>
+      <span class="apoio">A prévia mostra a época na hora, mesmo fora da data, e vale até fechar o Otimiza. "Pela data" volta ao normal.</span>
+    </div>
   </section>
 
   <!-- A resolução do jogo -->
@@ -507,5 +555,41 @@
     width: 34px;
     padding: 0;
     font-size: var(--t-corpo);
+  }
+  /* A prévia da época: as épocas como opções em pílula, cada uma com o seu ornamento. */
+  .previa-da-epoca {
+    display: grid;
+    gap: var(--e-2);
+    margin-top: var(--e-3);
+  }
+  .epocas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .epoca-op {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 var(--e-3);
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-pilula);
+    background: transparent;
+    color: var(--tinta-2);
+    font-size: var(--t-linha);
+    cursor: pointer;
+    transition:
+      border-color var(--mov-rapido) ease,
+      color var(--mov-rapido) ease;
+  }
+  .epoca-op:hover {
+    border-color: var(--linha-forte);
+    color: var(--tinta);
+  }
+  .epoca-op[aria-checked="true"] {
+    border-color: var(--tinta);
+    color: var(--tinta);
+    font-weight: 500;
   }
 </style>
