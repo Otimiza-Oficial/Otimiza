@@ -6,7 +6,7 @@
   // `configExtra` (os gráficos do GTA) e `cacheExtra` (as pastas do FiveM), no mesmo cartão em vez de outra seção.
   import { onMount, type Snippet } from "svelte";
   import Cartao from "./base/Cartao.svelte";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   import type { JogoDoCatalogo } from "../lib/catalogo";
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";

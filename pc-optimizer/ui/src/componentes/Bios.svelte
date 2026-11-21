@@ -2,7 +2,7 @@
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";
   import { commands } from "../lib/tipos";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A BIOS (trazida da interface antiga, `src/bios.ts`). O Otimiza NÃO grava na BIOS: em placa de consumo um erro ali
   // deixa a placa sem ligar. Mostra o que o Windows deixa ler (ficha), os defeitos conhecidos (microcódigo Intel,
   // boot lento), o que olhar na BIOS em ordem de risco, e um "antes e depois": a foto guardada neste PC antes de

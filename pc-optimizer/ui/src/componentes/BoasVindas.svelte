@@ -159,7 +159,7 @@
           {#if passo === "oi"}
             <div class="centro">
               <div class="oti-grande" in:scale={{ duration: dur(700), start: 0.4, delay: dur(200), easing: backOut }}>
-                <Oti tamanho={168} humor="feliz" gesto="acenar" segueCursor={false} />
+                <Oti tamanho={168} humor="feliz" segueCursor={false} />
               </div>
               <h1 in:fly={{ y: 16, duration: dur(500), delay: dur(500) }}>Oi, eu sou o Oti.</h1>
               <p class="lead" in:fly={{ y: 16, duration: dur(500), delay: dur(650) }}>
@@ -245,7 +245,7 @@
           {:else}
             <div class="centro">
               <div class="oti-grande" in:scale={{ duration: dur(700), start: 0.5, delay: dur(150), easing: backOut }}>
-                <Oti tamanho={140} humor="feliz" gesto="comemorar" segueCursor={false} />
+                <Oti tamanho={140} humor="feliz" segueCursor={false} />
               </div>
               <h1 in:fly={{ y: 16, duration: dur(500), delay: dur(400) }}>Tudo pronto.</h1>
               <p class="lead" in:fly={{ y: 16, duration: dur(500), delay: dur(550) }}>

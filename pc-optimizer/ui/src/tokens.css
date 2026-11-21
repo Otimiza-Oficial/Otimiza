@@ -24,6 +24,9 @@
   /* O Oti: disco branco chapado e olhos quase pretos. No claro, o negativo (disco carvão, olhos brancos). */
   --oti-disco: #ffffff;
   --oti-olho: #12121c;
+  /* O Oti no tema: no claro, o negativo; no escuro, o original. */
+  --oti-disco-tema: var(--carvao);
+  --oti-olho-tema: var(--branco);
 
   /* ---- Tema claro (papel). Contrastes medidos em `ui/testes/contraste.test.ts`. ---- */
   --fundo: var(--papel);
@@ -122,6 +125,8 @@
 
 :root[data-tema="noite"] {
   --fundo: var(--preto);
+  --oti-disco-tema: var(--oti-disco);
+  --oti-olho-tema: var(--oti-olho);
   --tinta: var(--branco); /* 21:1 no preto */
   --tinta-2: var(--cinza-300); /* 8,2:1 no preto, 7,2:1 no grafite */
   --tinta-3: var(--cinza-400); /* 6,4:1 no preto, 5,6:1 no grafite */

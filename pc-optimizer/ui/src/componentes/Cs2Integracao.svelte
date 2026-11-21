@@ -1,6 +1,6 @@
 <script lang="ts">
   import Cartao from "./base/Cartao.svelte";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A integração oficial do CS2 (Game State Integration) no destaque do jogo: ligar escreve um arquivo na pasta `cfg`
   // do CS2, e o jogo passa a contar ao Otimiza o momento da partida. Com ela, a medição automática só mede rodada
   // valendo com você vivo. Desligar apaga o arquivo.

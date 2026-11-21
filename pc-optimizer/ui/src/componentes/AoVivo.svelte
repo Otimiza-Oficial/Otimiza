@@ -1,7 +1,7 @@
 <script lang="ts">
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // Sistema › Agora (trazido da interface 3.6, `src/main.ts`: `renderProcesses`, `analyzeBottleneck` e `carregarPlaca`):
   // quem está pesando agora, o que segura a máquina medido por 10 s, e a placa com o driver. A lista se atualiza a cada
   // 3 s só com a aba à vista, e para com jogo aberto (a interface congela: `jogo-aberto` no <html>). Tipos escritos à

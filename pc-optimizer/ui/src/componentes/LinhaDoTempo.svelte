@@ -38,7 +38,7 @@
   // não prova que foi a causa: a queda só é dita quando as partidas de antes e de depois passam da margem de erro.
   import { noTauri } from "../lib/ponte";
   import Cartao from "./base/Cartao.svelte";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
 
   let { jogo }: { jogo: string } = $props();
 

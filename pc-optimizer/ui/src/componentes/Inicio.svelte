@@ -116,7 +116,7 @@
   <!-- Pronto pra jogar: a prontidão lida neste PC, item a item, e as duas ações da tela -->
   <section class="bloco b-heroi" use:brilho>
     <div class="heroi-ola">
-      <span class="heroi-oti"><Oti acessorio={temporada?.acessorio ?? null} humor={prontidao.ok === prontidao.total ? "feliz" : humor} tamanho={64} segueCursor={false} /></span>
+      <span class="heroi-oti"><Oti humor={prontidao.ok === prontidao.total ? "feliz" : humor} tamanho={64} segueCursor={false} /></span>
       <div>
         <p class="sec">{temporada?.saudacao ?? saudacaoDaHora}</p>
         <h2 class="heroi-titulo">{prontidao.ok === prontidao.total ? "Pronto pra jogar" : prontidao.total - prontidao.ok === 1 ? "Quase pronto pra jogar" : "Dá pra deixar melhor"}</h2>

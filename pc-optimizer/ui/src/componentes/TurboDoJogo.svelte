@@ -4,7 +4,7 @@
   // medir continuam no Turbo, com o jogo aberto.
   import { ponte, type TurboDoJogoNaPagina } from "../lib/ponte";
   import Cartao from "./base/Cartao.svelte";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
 
   let { jogo }: { jogo: string } = $props();
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Histórico: tudo o que o Otimiza mudou neste PC, com o valor de antes como foi GRAVADO, e o desfazer um por
   // um ou tudo de uma vez. Lista vazia com histórico ilegível não é "nada mudou": a leitura aparece antes da lista.
   // Onde o Rust manda `null` (item fora do catálogo), a tela não afirma nem nega admin ou reinício.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Jogos: os jogos instalados (Steam, Epic e instaladores) com a capa da Steam deste PC, e, para os que o
   // Otimiza já mediu, a última partida e o ganho. O ganho só aparece como número quando é MEDIDO (os intervalos de
   // antes e depois não se encostam); senão a tela diz que não houve diferença ou quantas partidas faltam.

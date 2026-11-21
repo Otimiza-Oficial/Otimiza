@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // O Frame Boost na interface nova (trazido do painel da 3.3, `src/v33/app.ts`, `painelFrameBoost`). Com o jogo
   // aberto, o Rust escolhe o melhor gerador: o do jogo, o do driver (AFMF, Smooth Motion) ou o do Otimiza. Aqui só se
   // mostra: estimado antes de ligar (pelo último FPS nativo medido) e MEDIDO na tela depois; a prova de custo (quanto do

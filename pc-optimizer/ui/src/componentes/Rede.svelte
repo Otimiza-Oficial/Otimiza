@@ -1,6 +1,6 @@
 <script lang="ts">
   import { notaDaFila, tomDaNota } from "../lib/fila";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Rede: por onde o PC sai (cabo, Wi-Fi, VPN), a rota salto a salto com o dono de cada trecho, e a varredura
   // de Wi-Fi segurada durante o jogo. O veredito e as frases vêm prontos do Rust: a tela não reinterpreta número.
 

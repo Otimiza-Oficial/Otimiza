@@ -775,7 +775,7 @@
   <!-- Barra de cima -->
   <header class="topo vidro" data-tauri-drag-region>
     <div class="boas-vindas" data-tauri-drag-region>
-      <span class="avatar"><Oti acessorio={temporada?.acessorio ?? null} humor={humor} tamanho={30} segueCursor={false} /></span>
+      <span class="avatar"><Oti humor={humor} tamanho={30} segueCursor={false} /></span>
       <div class="ola">
         <strong>{temporada?.saudacao ?? "Bem-vindo de volta"}</strong>
         <span class="sec">Otimiza {versao?.exibida ?? ""}{versao && !versao.oficial ? " · compilação local" : ""}{hardware ? ` · ${nomeCurto(hardware.processador)}` : ""}</span>
@@ -835,7 +835,7 @@
   <!-- O balão do Oti -->
   {#if fala}
     <div class="balao vidro-forte" role="status" in:entrar>
-      <span class="balao-oti"><Oti acessorio={temporada?.acessorio ?? null} {humor} tamanho={44} /></span>
+      <span class="balao-oti"><Oti {humor} tamanho={44} /></span>
       <div class="balao-texto">
         <p class="balao-fala">{digitado}</p>
         {#if fala.detalhe && !digitando}<p class="balao-detalhe">{fala.detalhe}</p>{/if}
@@ -942,7 +942,7 @@
                 <Turbo jogo={jogo?.nome ?? null} />
               {:else}
                 <div class="em-breve">
-                  <Oti acessorio={temporada?.acessorio ?? null} humor="dormindo" tamanho={90} segueCursor={false} />
+                  <Oti humor="dormindo" tamanho={90} segueCursor={false} />
                   <p>{nav.area.nome} chega na Onda {nav.area.onda}. Até lá, ela continua no Otimiza de sempre.</p>
                   <ul class="lista">
                     {#each nav.area.vai_ter as item (item)}<li>{item}</li>{/each}

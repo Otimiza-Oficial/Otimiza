@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Sistema: todos os ajustes do catálogo por grupo (cada um com o efeito honesto, aplicar e desfazer), o que
   // abre junto com o Windows, a limpeza de temporários e o ponto de restauração. Ajuste que pode custar FPS diz quando;
   // ajuste que não deu para verificar diz isso, em vez de fingir "já está bom".

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // O processador no jogo (trazido da interface antiga, `src/main.ts`): núcleos de desempenho e de eficiência (classe
   // dada pelo Windows, não por tabela), prender o jogo aberto nos de desempenho, o teste que mede os dois jeitos
   // alternando e fica com o que rendeu, e o modo jogo. Processador uniforme: NÃO HÁ O QUE FAZER, escrito — um botão ali

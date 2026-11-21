@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Esqueleto from "./Esqueleto.svelte";
+  import Esqueleto from "./base/Esqueleto.svelte";
   // A área Turbo: mede o jogo aberto por 10 s, monta a receita pelo gargalo (escala, Frame Boost, energia), liga e
   // lembra. A prova A-B (uns 5 minutos) é o que diz se ganhou de verdade; o antes × depois de uma sessão NÃO é prova e
   // a tela diz isso. Receita reprovada na prova não volta a ligar neste jogo.
