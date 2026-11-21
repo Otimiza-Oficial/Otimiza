@@ -877,7 +877,8 @@
     color: var(--tinta-3);
   }
   .saltos tr.problema td {
-    background: var(--ambar-fundo);
+    background: var(--superficie-2);
+    color: var(--atencao-texto);
   }
   .servidores {
     width: 100%;
