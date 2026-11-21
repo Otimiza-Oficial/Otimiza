@@ -76,3 +76,8 @@ test("1.0.14: o erro do ligar mostra o motivo do Rust como próximo passo, não 
   // Desligar que falhou sempre lembra a saída de dentro do jogo.
   assert.ok(erroDaAcao("desligar", "x").fazer.includes("Ctrl+Alt+G"));
 });
+
+test("perto dos Hz, o 2× fixo também diz que saiu da frente (o caso do sócio: FiveM a 135 fps em 144 Hz)", () => {
+  const l = lerFrameBoost({ ...base, automatico: false, multiplicador: 2, fps_do_jogo: 135, fps_na_tela: 136 });
+  assert.match(l.motivo, /perto dos 144 Hz.*sai da frente/);
+});

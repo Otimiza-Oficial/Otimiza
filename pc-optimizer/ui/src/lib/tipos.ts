@@ -32,6 +32,11 @@ export const commands = {
 	 *  `LIVRES`: só mexe na imagem que o próprio Otimiza desenha.
 	 */
 	escalaNitidez: (stops: number | null) => __TAURI_INVOKE<number | null>("escala_nitidez", { stops }),
+	/**
+	 *  A nitidez do `Rcas` também sem escala (ligada por padrão desde a 1.0.15): `None` só lê. Vale no próximo quadro,
+	 *  ligado ou não. `LIVRES`: só mexe na imagem que o próprio Otimiza desenha.
+	 */
+	nitidezSemEscala: (ligada: boolean | null) => __TAURI_INVOKE<boolean>("nitidez_sem_escala", { ligada }),
 	/**  A capa do jogo pela Steam deste PC (`data:` URL). `None`: sem Steam ou sem arte; a tela desenha uma. `LIVRES`. */
 	capaDoJogo: (appid: number) => __TAURI_INVOKE<string | null>("capa_do_jogo", { appid }),
 	startMonitoring: () => __TAURI_INVOKE<string>("start_monitoring"),

@@ -271,6 +271,8 @@ export const ferramentas = {
   },
   /** Nitidez da escala (FB6), em "stops" do FSR: 0 a mais forte, 2 a mais suave. Vale no próximo quadro. */
   escalaNitidez: async (stops: number): Promise<number> => (noTauri ? ((await commands.escalaNitidez(stops)) ?? stops) : stops),
+  /** A nitidez da escala também sem escala (1.0.15, ligada por padrão). Vale no próximo quadro. */
+  nitidezSemEscala: async (ligada: boolean): Promise<boolean> => (noTauri ? await commands.nitidezSemEscala(ligada) : ligada),
   frameBoostDesligar: (): Promise<PainelFrameBoost> => {
     if (noTauri) return como<PainelFrameBoost>(commands.frameBoostDesligar());
     fbDemo = {

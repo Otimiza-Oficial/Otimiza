@@ -116,6 +116,22 @@ pub fn nitidez() -> f32 {
     f32::from_bits(NITIDEZ_DA_ESCALA.load(std::sync::atomic::Ordering::Relaxed))
 }
 
+/// A nitidez do `Rcas` também SEM escala (1.0.15). No relato do sócio (FiveM, GTX 1650) o Auto do preset Desempenho
+/// saía "mais nítido e colorido" que o 2×: era a escala, que passa a imagem pelo `Rcas` do FSR (contraste local maior,
+/// que o olho lê como cor mais viva); sem escala a imagem ia para a tela crua. Ligada, a imagem sem escala passa pelo
+/// mesmo `Rcas`, na mesma força escolhida na tela, em qualquer modo (2×, 3×, 4×, Auto). Desligável nos Ajustes do
+/// Frame Boost; lida a cada quadro, muda sem religar.
+static NITIDEZ_SEM_ESCALA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn definir_nitidez_sem_escala(ligada: bool) -> bool {
+    NITIDEZ_SEM_ESCALA.store(ligada, std::sync::atomic::Ordering::Relaxed);
+    ligada
+}
+
+pub fn nitidez_sem_escala() -> bool {
+    NITIDEZ_SEM_ESCALA.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 struct Trabalho {
     largura: u32,
     altura: u32,
@@ -201,6 +217,8 @@ pub struct Gpu {
     /// Só escala, sem geração: o `receber` só copia a imagem (nem luma nem fluxo).
     pub sem_geracao: bool,
     ampliacao: Option<Ampliacao>,
+    /// Sem escala, com a nitidez ligada: o quadro composto no tamanho da sobreposição, antes do `Rcas`.
+    nitido: Option<Alvo>,
     /// Durante a composição no alvo da escala: os passes não passam pela `Sair` (no HDR a imagem segue codificada
     /// até o `Rcas`).
     saida_codificada: std::cell::Cell<bool>,
@@ -510,6 +528,7 @@ impl Gpu {
             niveis_dis: niveis_do_dis(),
             sem_geracao: false,
             ampliacao: None,
+            nitido: None,
             saida_codificada: std::cell::Cell::new(false),
             forma_do_cursor: None,
             mistura: mistura.ok_or("mistura")?,
@@ -1768,6 +1787,58 @@ impl Gpu {
         );
     }
 
+    /// Sem escala: o alvo intermediário da nitidez (`compor_nitido`), no tamanho da sobreposição.
+    pub fn preparar_nitidez(&mut self, largura: u32, altura: u32) -> Result<(), String> {
+        let Some(t) = self.trabalho.as_ref() else {
+            return Err("nitidez antes de preparar o gerador".to_string());
+        };
+        if self.nitido.as_ref().is_some_and(|n| (n.largura, n.altura) == (largura, altura)) {
+            return Ok(());
+        }
+        let formato = if t.hdr {
+            DXGI_FORMAT_R16G16B16A16_FLOAT
+        } else {
+            DXGI_FORMAT_B8G8R8A8_UNORM
+        };
+        self.nitido = Some(self.alvo(largura, altura, formato, true)?);
+        Ok(())
+    }
+
+    /// `compor` sem escala, passando pelo `Rcas` quando a nitidez sem escala está ligada (a mesma do caminho da
+    /// escala, sem ampliar). Desligada, ou sem `preparar_nitidez` no tamanho certo, compõe direto, como antes.
+    pub fn compor_nitido(
+        &self,
+        destino: &ID3D11RenderTargetView,
+        largura: u32,
+        altura: u32,
+        t_gerado: Option<f32>,
+    ) {
+        let Some(n) = self
+            .nitido
+            .as_ref()
+            .filter(|n| nitidez_sem_escala() && (n.largura, n.altura) == (largura, altura))
+        else {
+            self.compor(destino, largura, altura, t_gerado);
+            return;
+        };
+        self.saida_codificada.set(true);
+        self.compor(n.rtv.as_ref().unwrap(), largura, altura, t_gerado);
+        self.saida_codificada.set(false);
+        self.passe(
+            &self.passes.rcas,
+            destino,
+            largura,
+            altura,
+            &[Some(n.srv.clone())],
+            Parametros {
+                tamanho_origem: [largura as i32, altura as i32],
+                lambda: (-nitidez()).exp2(),
+                extra: [0.0, 0.0, 0.0, 0.0],
+                ..Default::default()
+            },
+        );
+    }
+
     /// Escala: o último quadro composto no tamanho do jogo, antes de ampliar (no HDR, ainda codificado com gama).
     pub fn textura_da_origem(&self) -> Option<&ID3D11Texture2D> {
         self.ampliacao.as_ref().map(|a| &a.origem.textura)
@@ -2635,6 +2706,51 @@ mod qualidade {
         assert!(baixo.iter().all(|c| c.abs_diff(128) <= 2), "metade de baixo: a imagem por baixo ({:?})", baixo);
         let fora = em(10, 10);
         assert!(fora.iter().all(|c| c.abs_diff(128) <= 2), "fora do cursor: intacta ({:?})", fora);
+    }
+
+    /// A nitidez sem escala (1.0.15): metade esquerda cinza 96, direita 160. Ligada, a borda ganha contraste (o lado
+    /// escuro fica mais escuro) e o liso fica igual; desligada, sai a cópia exata, como antes.
+    /// `cargo test --lib -- --ignored nitidez_sem_escala_na_placa --nocapture`
+    #[test]
+    #[ignore]
+    fn nitidez_sem_escala_na_placa() {
+        let (l, a) = (64u32, 16u32);
+        let mut px = Vec::with_capacity((l * a * 4) as usize);
+        for _ in 0..a {
+            for x in 0..l {
+                let v = if x < l / 2 { 96 } else { 160 };
+                px.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.unwrap();
+        let adaptador = unsafe { fabrica.EnumAdapters1(0) }.unwrap();
+        let mut gpu = Gpu::novo(&adaptador).unwrap();
+        gpu.sem_geracao = true;
+        gpu.preparar(l, a, false, Giro::Nenhum).unwrap();
+        gpu.preparar_nitidez(l, a).unwrap();
+        let entrada = textura(&gpu, l, a, &px);
+        let tudo = Retangulo {
+            x: 0,
+            y: 0,
+            largura: l as i32,
+            altura: a as i32,
+        };
+        gpu.receber(&entrada, tudo);
+        definir_nitidez(0.0);
+        let mut ler = |ligada: bool| {
+            definir_nitidez_sem_escala(ligada);
+            let (saida, rtv) = alvo_bgra(&gpu, l, a);
+            gpu.compor_nitido(&rtv, l, a, None);
+            ler_de_volta(&gpu, &saida, l, a)
+        };
+        let nitida = ler(true);
+        let crua = ler(false);
+        definir_nitidez_sem_escala(true);
+        definir_nitidez(NITIDEZ_PADRAO);
+        let em = |v: &[u8], x: u32| v[((8 * l + x) * 4) as usize];
+        assert_eq!((em(&crua, 31), em(&crua, 32)), (96, 160), "desligada: a cópia exata");
+        assert!(em(&nitida, 31) < 96 && em(&nitida, 32) > 160, "ligada: a borda ganha contraste ({}, {})", em(&nitida, 31), em(&nitida, 32));
+        assert!(em(&nitida, 8).abs_diff(96) <= 1 && em(&nitida, 56).abs_diff(160) <= 1, "o liso fica igual");
     }
 
     /// Calibra a troca de cena: pares seguidos do FiveM gravado × o mesmo quadro contra ele espelhado (conteúdo

@@ -5,7 +5,9 @@
 
 use windows::Win32::Foundation::RECT;
 use windows::Win32::UI::Magnification::{MagInitialize, MagShowSystemCursor, MagUninitialize};
-use windows::Win32::UI::WindowsAndMessaging::{ClipCursor, GetClipCursor};
+use windows::Win32::UI::WindowsAndMessaging::{
+    ClipCursor, GetClipCursor, GetCursorInfo, CURSORINFO, CURSOR_SHOWING,
+};
 
 use super::ritmo::Retangulo;
 
@@ -92,6 +94,44 @@ pub fn forma_em_bgra(
             })
         }
         _ => None,
+    }
+}
+
+/// O cursor do sistema agora: a ponta (o ponto quente) na tela, se o jogo o mostra. Lido do Windows (`GetCursorInfo`) e
+/// NÃO da Duplicação: com o cursor do sistema escondido pela Lupa (o nosso `CursorDoSistema`), a Duplicação pode
+/// dar o ponteiro como invisível, e o cursor ampliado sumia junto (1.0.15, "meu mouse está sumindo dentro do FiveM").
+/// O `GetCursorInfo` segue o que o JOGO pediu (`ShowCursor`/`SetCursor`), que é o que decide se há cursor.
+pub fn no_sistema() -> Option<(i32, i32)> {
+    let mut ci = CURSORINFO {
+        cbSize: std::mem::size_of::<CURSORINFO>() as u32,
+        ..Default::default()
+    };
+    unsafe { GetCursorInfo(&mut ci) }.ok()?;
+    visivel(ci.flags.0, !ci.hCursor.is_invalid()).then_some((ci.ptScreenPos.x, ci.ptScreenPos.y))
+}
+
+/// Pura: o jogo mostra cursor (o Windows diz "mostrando" e há uma forma escolhida; `SetCursor(NULL)` some).
+pub fn visivel(flags: u32, tem_forma: bool) -> bool {
+    flags & CURSOR_SHOWING.0 != 0 && tem_forma
+}
+
+/// Pura: onde a forma começa (o canto, como a Duplicação dá) na tela do monitor `origem`, pela ponta em coordenadas da
+/// área de trabalho.
+pub fn canto_no_monitor(ponta_na_tela: (i32, i32), ponta_da_forma: (i32, i32), origem: (i32, i32)) -> (i32, i32) {
+    (
+        ponta_na_tela.0 - ponta_da_forma.0 - origem.0,
+        ponta_na_tela.1 - ponta_da_forma.1 - origem.1,
+    )
+}
+
+/// Quando a linha do gerador não termina a tempo (presa na placa ou na troca de modo de vídeo), as guardas dela não
+/// rodam: o cursor ficava escondido e preso no recorte da janela pequena até o Otimiza fechar. No log do sócio
+/// (2026-11-21 16:18): "refazendo (o Windows trocou o modo de vídeo)" com a escala ligada e, 6 s depois, "a linha não
+/// terminou em 5 s". Chamado por quem desliga, de outra linha: mostra o cursor e solta o recorte.
+pub fn devolver_de_fora() {
+    devolver_na_abertura();
+    unsafe {
+        let _ = ClipCursor(None);
     }
 }
 
@@ -220,6 +260,19 @@ mod tests {
         assert_eq!(&f.px[0..4], [10, 20, 30, 255]);
         assert_eq!(&f.px[4..8], [0, 0, 0, 0]);
         assert_eq!(&f.px[8..12], [255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn cursor_some_so_quando_o_jogo_esconde() {
+        assert!(visivel(CURSOR_SHOWING.0, true));
+        assert!(!visivel(0, true), "ShowCursor(FALSE) do jogo");
+        assert!(!visivel(CURSOR_SHOWING.0, false), "SetCursor(NULL) do jogo");
+    }
+
+    #[test]
+    fn a_ponta_vira_o_canto_no_monitor() {
+        // Segundo monitor à direita (origem 1920,0), ponta da seta em (5,3).
+        assert_eq!(canto_no_monitor((2020, 500), (5, 3), (1920, 0)), (95, 497));
     }
 
     #[test]
