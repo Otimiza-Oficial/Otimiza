@@ -226,6 +226,50 @@ pub fn vale_gerar(hz: u32, intervalo_do_jogo: Option<f64>) -> bool {
     intervalo_do_jogo.is_some_and(|i| hz as f64 * i > 1.1)
 }
 
+/// A FAIXA EM QUE VALE GERAR, COM FOLGA PARA NÃO FICAR TROCANDO (1.0.15). `vale_gerar` decidia a cada real com o
+/// limite de 1,1 atualização por real: no log do sócio (FiveM com a base solta, 115 a 138 FPS num monitor de 144 Hz),
+/// cada queda do jogo ao girar a câmera passava do limite e o gerador enfiava um gerado aqui e ali, entre reais que
+/// chegam em qualquer fase da atualização. A tela medida (PresentMon) mostrou o preço: nas janelas sem gerados, 144
+/// quadros novos/s, 0,3% das atualizações repetidas e 0 engasgos; nas com 30 a 60 gerados/s, 10 a 20 engasgos e 10 a
+/// 18% repetidas: as microtravadas "toda hora que viro". Um gerado só deixa o ritmo regular quando cabem pelo menos
+/// ~1,6 atualização por real (base até 90 FPS em 144 Hz; a base travada em 72 dá 2,0). Abaixo disso, mostrar só os
+/// reais é mais liso, e a sobreposição sai da frente.
+pub const FAIXA_ENTRA: f64 = 1.6;
+/// Gerando, só para abaixo disto: a folga entre 1,4 e 1,6 evita ligar e desligar a cada oscilação do jogo.
+pub const FAIXA_SAI: f64 = 1.4;
+/// Quanto tempo o jogo precisa ficar do outro lado da faixa para trocar (sair é mais rápido: metade).
+pub const FAIXA_FIRME: f64 = 1.0;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct FaixaDeGerar {
+    pub gerando: bool,
+    trocar_desde: Option<f64>,
+}
+
+impl FaixaDeGerar {
+    /// Pura: com o intervalo estimado do jogo, se gera nesta volta. Sem intervalo (jogo parado, menu), para na hora.
+    pub fn passo(&mut self, hz: u32, intervalo_do_jogo: Option<f64>, agora: f64) -> bool {
+        let razao = intervalo_do_jogo.filter(|_| hz > 0).map(|i| hz as f64 * i);
+        let quer_trocar = match (self.gerando, razao) {
+            (true, Some(r)) => r < FAIXA_SAI,
+            (true, None) => true,
+            (false, Some(r)) => r >= FAIXA_ENTRA,
+            (false, None) => false,
+        };
+        if !quer_trocar {
+            self.trocar_desde = None;
+            return self.gerando;
+        }
+        let desde = *self.trocar_desde.get_or_insert(agora);
+        let firme = if self.gerando { FAIXA_FIRME * 0.5 } else { FAIXA_FIRME };
+        if razao.is_none() || agora - desde >= firme {
+            self.gerando = !self.gerando;
+            self.trocar_desde = None;
+        }
+        self.gerando
+    }
+}
+
 /// UMA IMAGEM POR ATUALIZAÇÃO, ANCORADA NA ATUALIZAÇÃO DO MONITOR SEM BLOQUEAR NELA.
 ///
 /// - 1.0.8: o laço só esperava a vez da fila, que voltava rápido: 180-274 imagens/s num monitor de 144 Hz e a placa a
@@ -911,6 +955,40 @@ mod tests {
         assert!(!vale_gerar(144, Some(1.0 / 140.0)), "perto dos Hz: não cabe um quadro a mais");
         assert!(!vale_gerar(60, Some(1.0 / 60.0)));
         assert!(!vale_gerar(144, None));
+    }
+
+    #[test]
+    fn a_faixa_do_socio_nao_gera_perto_dos_hz() {
+        // O log do sócio (2026-11-21, FiveM em 144 Hz, base solta): 115 a 138 FPS. Nunca gera.
+        let mut f = FaixaDeGerar::default();
+        let mut agora = 0.0;
+        for fps in [138.0, 125.0, 115.0, 130.0, 119.0, 136.0].iter().cycle().take(600) {
+            agora += 1.0 / fps;
+            assert!(!f.passo(144, Some(1.0 / fps), agora), "{} FPS em 144 Hz não pode gerar", fps);
+        }
+    }
+
+    #[test]
+    fn a_faixa_gera_com_a_base_travada_e_tem_folga() {
+        let mut f = FaixaDeGerar::default();
+        // Base travada em 72 (144 Hz): entra depois de 1 s firme.
+        assert!(!f.passo(144, Some(1.0 / 72.0), 0.0));
+        assert!(!f.passo(144, Some(1.0 / 72.0), 0.5));
+        assert!(f.passo(144, Some(1.0 / 72.0), 1.0));
+        // Oscila para 100 FPS (1,44 atualização por real): dentro da folga, segue gerando.
+        assert!(f.passo(144, Some(1.0 / 100.0), 1.1));
+        assert!(f.passo(144, Some(1.0 / 100.0), 3.0));
+        // Sobe para 130 FPS: sai depois de meio segundo.
+        assert!(f.passo(144, Some(1.0 / 130.0), 3.1));
+        assert!(!f.passo(144, Some(1.0 / 130.0), 3.7));
+        // Um pico curto acima da faixa não liga.
+        assert!(!f.passo(144, Some(1.0 / 72.0), 4.0));
+        assert!(!f.passo(144, Some(1.0 / 130.0), 4.3));
+        assert!(!f.passo(144, Some(1.0 / 72.0), 4.4));
+        assert!(!f.passo(144, Some(1.0 / 72.0), 5.3));
+        assert!(f.passo(144, Some(1.0 / 72.0), 5.4));
+        // Jogo parado: para na hora.
+        assert!(!f.passo(144, None, 5.5));
     }
 
     #[test]

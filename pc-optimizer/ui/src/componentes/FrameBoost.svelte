@@ -27,6 +27,7 @@
   const CHAVE_NITIDEZ = "otimiza-fb-nitidez";
   const CHAVE_PRESET = "otimiza-fb-preset";
   const CHAVE_LEVE = "otimiza-fb-leve";
+  const CHAVE_NITIDEZ_SEM_ESCALA = "otimiza-fb-nitidez-sem-escala";
 
   // Três jeitos prontos (1.0.7, decisão do dono: Equilíbrio é o padrão de quem nunca escolheu). Só mexem no que o
   // gerador já aceita: quadros gerados, FPS alvo e escala. "Personalizado" é qualquer outra combinação do Avançado.
@@ -58,6 +59,8 @@
   let nitidez = $state(Number(ler(CHAVE_NITIDEZ, "0.2")));
   /** O cálculo de movimento leve (menos trabalho para a placa). O gerador também entra leve sozinho com a placa cheia. */
   let leve = $state(ler(CHAVE_LEVE, "0") === "1");
+  /** 1.0.15: a nitidez da escala (o `Rcas` do FSR) também sem escala, para o 2× e o Auto saírem com a mesma cara. */
+  let nitidoSemEscala = $state(ler(CHAVE_NITIDEZ_SEM_ESCALA, "1") === "1");
   /** Com a escala desligada nos Ajustes, as opções dela nem aparecem: o Otimiza não muda a resolução do jogo. */
   let escalaPermitida = $state(true);
   let pararRelogio = () => {};
@@ -95,6 +98,7 @@
     void carregar();
     // A escolha da pessoa vale desde já: o gerador lê a nitidez a cada quadro.
     void ferramentas.escalaNitidez(nitidez).catch(() => {});
+    void ferramentas.nitidezSemEscala(nitidoSemEscala).catch(() => {});
     void ferramentas.escalaPermitida().then((v) => (escalaPermitida = v)).catch(() => {});
     // Ligado pelo gerador do Otimiza o número muda a cada segundo; desligado, basta olhar de vez em quando.
     // Com a janela escondida (o jogo na frente, o Otimiza na bandeja) não pergunta nada: cada pergunta abria a sessão
@@ -232,6 +236,11 @@
     gravar(CHAVE_ESCALA, e);
   }
 
+  function escolherNitidoSemEscala(v: boolean) {
+    nitidoSemEscala = v;
+    gravar(CHAVE_NITIDEZ_SEM_ESCALA, v ? "1" : "0");
+    void ferramentas.nitidezSemEscala(v).catch(() => {});
+  }
   function escolherLeve(v: boolean) {
     leve = v;
     gravar(CHAVE_LEVE, v ? "1" : "0");
@@ -421,14 +430,26 @@
             </details>
           {/if}
 
-          {#if doOtimiza && (escala || a?.escala)}
+          {#if doOtimiza}
+            {@const comEscala = !!(escala || a?.escala)}
+            {@const ligada = comEscala || nitidoSemEscala}
             <div class="escolha">
-              <span class="rotulo">Nitidez da escala</span>
-              <div class="segmento" role="radiogroup" aria-label="Nitidez da escala">
+              <span class="rotulo">Nitidez</span>
+              <div class="segmento" role="radiogroup" aria-label="Nitidez">
+                {#if !comEscala}
+                  <button role="radio" aria-checked={!nitidoSemEscala} onclick={() => escolherNitidoSemEscala(false)}>Desligada</button>
+                {/if}
                 {#each NITIDEZES as o (o.nome)}
-                  <button role="radio" aria-checked={nitidez === o.stops} onclick={() => escolherNitidez(o.stops)}>{o.nome}</button>
+                  <button
+                    role="radio"
+                    aria-checked={ligada && nitidez === o.stops}
+                    onclick={() => {
+                      escolherNitidez(o.stops);
+                      if (!comEscala) escolherNitidoSemEscala(true);
+                    }}>{o.nome}</button>
                 {/each}
               </div>
+              <p class="dica">{comEscala ? "A escala sempre afia a imagem ampliada." : "A mesma nitidez da escala, em qualquer modo: 2× e Auto com a mesma cara."}</p>
             </div>
           {/if}
 

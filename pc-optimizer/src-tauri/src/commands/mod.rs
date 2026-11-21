@@ -370,6 +370,7 @@ mod tests {
         "rede_prioridade_estado",
         "rede_prioridade_desligar",
         "escala_nitidez",
+        "nitidez_sem_escala",
         "rede_historico",
         "energia_calibrar_cancelar",
         "energia_salvar_calibrado_para_o_jogo",

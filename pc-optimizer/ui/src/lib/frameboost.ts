@@ -84,8 +84,9 @@ export function lerFrameBoost(a: LigadoAgora): Leitura {
 
   let motivo: string;
   if (a.degrau) motivo = a.degrau;
-  else if (real != null && real < QUASE_UM && a.automatico)
-    motivo = `O jogo já chega perto dos ${a.hz} Hz do monitor: não há quadro para gerar agora.`;
+  else if (real != null && real < QUASE_UM)
+    // 1.0.15: perto dos Hz o gerador sai da frente em qualquer modo (gerar ali era o que dava as microtravadas).
+    motivo = `O jogo já chega perto dos ${a.hz} Hz do monitor: gerar agora deixaria o ritmo irregular, então o Frame Boost sai da frente e o jogo aparece direto.`;
   else if (a.automatico && a.fps_do_jogo != null)
     motivo = `No Auto: o jogo dá ${n(a.fps_do_jogo)} fps e o monitor mostra até ${a.hz}, então ele gera ${mult ?? "o que falta"}.`;
   else if (!a.automatico) motivo = `Fixo em ${a.multiplicador}×: ${a.multiplicador} quadros na tela para cada um do jogo.`;

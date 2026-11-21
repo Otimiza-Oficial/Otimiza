@@ -218,6 +218,23 @@ pub fn escala_nitidez(stops: f32) -> f32 {
     stops
 }
 
+/// A nitidez do `Rcas` também sem escala (ligada por padrão desde a 1.0.15): `None` só lê. Vale no próximo quadro,
+/// ligado ou não. `LIVRES`: só mexe na imagem que o próprio Otimiza desenha.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn nitidez_sem_escala(ligada: Option<bool>) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::geracao::gpu;
+        return match ligada {
+            Some(v) => gpu::definir_nitidez_sem_escala(v),
+            None => gpu::nitidez_sem_escala(),
+        };
+    }
+    #[cfg(not(target_os = "windows"))]
+    ligada.unwrap_or(true)
+}
+
 /// Pede a comparação da escala: o próximo quadro real com o jogo na frente. `LIVRES`: só lê a tela.
 #[tauri::command(async)]
 #[cfg_attr(test, specta::specta)]

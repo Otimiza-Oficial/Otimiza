@@ -542,9 +542,10 @@ pub fn desligar() {
             let _ = linha.join();
         } else {
             crate::utils::Logger::warn(&format!(
-                "gerador: a linha não terminou em {} s; sigo sem esperar",
+                "gerador: a linha não terminou em {} s; sigo sem esperar (cursor devolvido daqui)",
                 PRAZO_PARA_PARAR.as_secs()
             ));
+            cursor::devolver_de_fora();
         }
     }
     publicar(|e| {
@@ -1208,7 +1209,7 @@ impl Sobreposicao {
                         gpu.desenhar_cursor(rtv, c);
                     }
                 }
-                None => gpu.compor(rtv, self.largura, self.altura, t),
+                None => gpu.compor_nitido(rtv, self.largura, self.altura, t),
             };
             match cronometro {
                 Some(c) => c.medir(gpu, compor),
@@ -1653,6 +1654,12 @@ fn sessao(
     });
     if let Some(a) = ampliada {
         gpu.preparar_ampliacao(a.largura as u32, a.altura as u32)?;
+    } else if giro == ritmo::Giro::Nenhum {
+        // Sem escala, a mesma nitidez do `Rcas` (desligável): o Auto com escala e o 2× sem ela saíam com cara diferente.
+        // Sem memória para o alvo, segue sem nitidez, como antes.
+        if let Err(e) = gpu.preparar_nitidez(recorte.largura as u32, recorte.altura as u32) {
+            crate::utils::Logger::warn(&format!("gerador: sem a nitidez sem escala ({})", e));
+        }
     }
     // O jogo repôs o tamanho do monitor (alguns jogos fazem isso): a escala não ganha nada, e a tela diz o que fazer.
     let aviso_da_escala = config.escala.and_then(|nivel| {
@@ -1674,6 +1681,7 @@ fn sessao(
     let cursor_ampliado = ampliada.is_some() && giro == ritmo::Giro::Nenhum && duplicacao.is_some();
     let mut mouse = cursor::MousePreso::novo();
     let mut cursor_do_sistema = cursor_ampliado.then(cursor::CursorDoSistema::novo);
+    // A ponta do cursor do sistema na área de trabalho, se o jogo mostra cursor (`cursor::no_sistema`).
     let mut ponteiro: Option<(i32, i32)> = None;
     let mut forma: Option<((i32, i32), (i32, i32))> = None;
     let mut sobreposicao = Sobreposicao::nova(
@@ -1744,7 +1752,9 @@ fn sessao(
     let mut escondida_desde: Option<Instant> = None;
     let mut tempo_escondida = Duration::ZERO;
     // Escondida sem quadro novo, pela guarda e com o jogo fora da frente.
-    let mut escondida_por = [Duration::ZERO; 3];
+    let mut escondida_por = [Duration::ZERO; 4];
+    // No ritmo do monitor: se o jogo está numa faixa em que gerar deixa o ritmo regular (`ritmo::FaixaDeGerar`).
+    let mut faixa = ritmo::FaixaDeGerar::default();
     // No ritmo do monitor: atualizações da tela e as que repetiram o quadro (o real seguinte do jogo atrasou).
     let mut exibicao = ritmo::Exibicao::default();
     let mut ultimo_laco = Instant::now();
@@ -1862,7 +1872,10 @@ fn sessao(
             ultimo_real.elapsed() > Duration::from_millis(500)
         };
         let fora_da_frente = !jogo_na_frente(pid);
-        let parado = sem_quadro || pausa_completa || fora_da_frente;
+        // O jogo perto dos Hz (fora da faixa em que gerar é regular): sem gerar, a sobreposição só mostraria os reais
+        // presos à atualização dela, com mais atraso. Sai da frente e o jogo aparece direto. Com escala, ela É a tela.
+        let perto_dos_hz = pelo_monitor && ampliada.is_none() && !faixa.gerando;
+        let parado = sem_quadro || pausa_completa || fora_da_frente || perto_dos_hz;
         // Por que ficou escondida (para o log de 10 s): o primeiro motivo que vale, nesta ordem.
         let dt_do_laco = ultimo_laco.elapsed();
         ultimo_laco = Instant::now();
@@ -1871,8 +1884,10 @@ fn sessao(
                 2
             } else if pausa_completa {
                 1
-            } else {
+            } else if sem_quadro {
                 0
+            } else {
+                3
             };
             escondida_por[i] += dt_do_laco;
         }
@@ -1925,7 +1940,7 @@ fn sessao(
                 _ => "placa sem medida".to_string(),
             };
             crate::utils::Logger::info(&format!(
-"gerador: 10 s · {:.0} reais/s · {:.0} gerados/s · {:.0} iguais/s · {:.0} fora do jogo/s · {} recusados · escondida {:.0}% (sem quadro {:.1} s, guarda {:.1} s, jogo atrás {:.1} s) · {}× · custo {:.1} ms · {} · na tela {:.0}/s, {:.0}% das atualizações repetidas · {:.0} descartados/s ({} sem vez na fila) · atraso até o Present {}, fila da sobreposição até a tela {}",
+"gerador: 10 s · {:.0} reais/s · {:.0} gerados/s · {:.0} iguais/s · {:.0} fora do jogo/s · {} recusados · escondida {:.0}% (sem quadro {:.1} s, guarda {:.1} s, jogo atrás {:.1} s, jogo perto dos Hz {:.1} s) · {}× · custo {:.1} ms · {} · na tela {:.0}/s, {:.0}% das atualizações repetidas · {:.0} descartados/s ({} sem vez na fila) · atraso até o Present {}, fila da sobreposição até a tela {}",
                 (contadores.reais - antes.reais) as f64 / segs,
                 (contadores.gerados - antes.gerados) as f64 / segs,
                 (contadores.iguais - antes.iguais) as f64 / segs,
@@ -1935,6 +1950,7 @@ fn sessao(
                 escondida_por[0].as_secs_f64(),
                 escondida_por[1].as_secs_f64(),
                 escondida_por[2].as_secs_f64(),
+                escondida_por[3].as_secs_f64(),
                 match multiplicador_no_monitor {
                     Some(m) => format!("{:.1}", m),
                     None => cabe_atual.to_string(),
@@ -1965,7 +1981,7 @@ fn sessao(
             }
             exibicao.zerar();
             relatorio = (Instant::now(), contadores, escondida_total);
-            escondida_por = [Duration::ZERO; 3];
+            escondida_por = [Duration::ZERO; 4];
         }
 
         if ultima_checagem.elapsed() > Duration::from_millis(500) {
@@ -2223,15 +2239,23 @@ fn sessao(
                             }
                         }
                         if info.LastMouseUpdateTime != 0 {
-                            let p = info.PointerPosition;
-                            ponteiro = p.Visible.as_bool().then_some((p.Position.x, p.Position.y));
+                            mudou = true;
+                        }
+                        // A posição e se há cursor vêm do Windows, não da Duplicação (`cursor::no_sistema`).
+                        let agora_no_sistema = cursor::no_sistema();
+                        if agora_no_sistema != ponteiro {
+                            ponteiro = agora_no_sistema;
                             mudou = true;
                         }
                         if mudou {
                             let onde = match (ponteiro, forma) {
-                                (Some(p), Some((ponta, tamanho))) => {
-                                    escala::cursor_na_tela(p, ponta, tamanho, recorte, destino)
-                                }
+                                (Some(p), Some((ponta, tamanho))) => escala::cursor_na_tela(
+                                    cursor::canto_no_monitor(p, ponta, (saida.monitor.x, saida.monitor.y)),
+                                    ponta,
+                                    tamanho,
+                                    recorte,
+                                    destino,
+                                ),
                                 _ => None,
                             };
                             if onde != sobreposicao.cursor {
@@ -2293,11 +2317,8 @@ fn sessao(
             let carimbo = carimbo_suave
                 .suavizar(composto_do_real.filter(|c| *c > 0.0).unwrap_or(chegada));
             let anterior = ultimo_carimbo.replace(carimbo);
-            if gpu.tem_par()
-                && intervalo.pode_gerar()
-                && !guarda.pausada()
-                && ritmo::vale_gerar(hz, intervalo.estimado)
-            {
+            let na_faixa = faixa.passo(hz, intervalo.estimado, chegada);
+            if gpu.tem_par() && intervalo.pode_gerar() && !guarda.pausada() && na_faixa {
                 match cronometro.as_mut() {
                     Some(c) => c.medir(&gpu, || gpu.estimar()),
                     None => gpu.estimar(),
