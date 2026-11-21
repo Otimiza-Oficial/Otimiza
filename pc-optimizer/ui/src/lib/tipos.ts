@@ -6157,6 +6157,8 @@ export type Situacao = "Parado" | "ProcurandoJanela" | "Gerando" | "SemQuadros" 
 export type SituacaoFeedback = 
 /**  Sem licença (o portão de compra cuida) ou sem `api` publicada. */
 { situacao: "NaoSeAplica" } | { situacao: "Contando"; restante_segundos: number } | { situacao: "Liberado"; verificado_em: string } | 
+/**  O cliente disse "Já mandei" e o nosso servidor não respondeu: correções liberadas enquanto conferimos sozinhos. */
+{ situacao: "Provisorio"; desde: string } | 
 /**  `apagado`: havia feedback e o bot avisou que a mensagem sumiu. */
 { situacao: "Exigido"; apagado: boolean };
 
