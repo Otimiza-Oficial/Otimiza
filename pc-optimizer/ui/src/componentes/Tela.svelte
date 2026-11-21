@@ -249,7 +249,7 @@
   .marcas {
     display: flex;
     justify-content: space-between;
-    font-size: 11px;
+    font-size: var(--t-apoio);
     color: var(--tinta-3);
   }
   .marcas span:nth-child(2) {

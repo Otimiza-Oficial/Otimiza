@@ -32,7 +32,7 @@
   --fundo: var(--papel);
   --tinta: var(--carvao); /* 18,9:1 no papel */
   --tinta-2: var(--cinza-600); /* apoio: 5,9:1 no papel, 6,4:1 no branco */
-  --tinta-3: #6e6e73; /* terceiro nível: 4,6:1 no papel */
+  --tinta-3: #68686d; /* terceiro nível: 5,1:1 no papel, 4,7:1 na superfície 2 */
   --texto: var(--tinta);
   --sec: var(--tinta-2);
   /* A letra do botão principal: o avesso do texto. */
@@ -49,7 +49,8 @@
 
   /* Estado: só em ponto, ícone pequeno ou texto curto. Todos passam no AA sobre o fundo e a superfície. */
   --ok: #157a5a;
-  --ok-texto: #157a5a;
+  /* O verde da marca dá 4,5:1 raspando na superfície 2; o texto desce um tom para passar com folga. */
+  --ok-texto: #126e51;
   --atencao: #8a5410;
   --atencao-texto: #8a5410;
   --perigo: #b8322f;
@@ -710,4 +711,77 @@ input[type="range"].deslizante:active::-webkit-slider-thumb {
 input[type="range"].deslizante:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Alto Contraste do Windows (`forced-colors`) e "mais contraste" (1.0.12, Frente 1.3). No Alto Contraste o Windows
+   troca as cores pelas do tema dele; aqui o app só garante que nada dependa de sombra, desfoque ou cor de fundo para
+   existir: toda superfície ganha borda, a escolha vira a cor de destaque do sistema e o foco aparece. */
+@media (forced-colors: active) {
+  :root {
+    --desfoque: none;
+  }
+  *,
+  *::before,
+  *::after {
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .btn,
+  .campo,
+  .segmento,
+  .selo,
+  .interruptor,
+  .area-corpo .secao,
+  [role="dialog"],
+  [role="alertdialog"],
+  [role="tooltip"] {
+    border: 1px solid CanvasText;
+  }
+  .btn.primario,
+  .btn.perigo {
+    border-color: ButtonText;
+  }
+  .segmento > button[aria-checked="true"],
+  .segmento > button[aria-selected="true"],
+  [role="tab"][aria-selected="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .interruptor[aria-checked="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .interruptor::after {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+  .interruptor[aria-checked="true"]::after {
+    background: HighlightText;
+  }
+  /* O ponto de estado perde a cor; o texto ao lado já diz o estado. Fica um ponto cheio, que ainda marca a linha. */
+  .ponto {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --linha: rgb(0 0 0 / 0.3);
+    --linha-forte: rgb(0 0 0 / 0.55);
+    --tinta-2: var(--carvao);
+    --tinta-3: #3d3d42;
+  }
+  :root[data-tema="noite"] {
+    --linha: rgb(255 255 255 / 0.32);
+    --linha-forte: rgb(255 255 255 / 0.6);
+    --tinta-2: var(--branco);
+    --tinta-3: var(--cinza-300);
+  }
 }

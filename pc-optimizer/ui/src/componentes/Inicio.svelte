@@ -523,7 +523,7 @@
     border-radius: 999px;
     background: rgb(0 0 0 / 0.55);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--t-apoio);
   }
   .fps-na-capa strong {
     font-family: var(--fonte-titulo);

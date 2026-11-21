@@ -147,7 +147,7 @@
   }
   .rotulo {
     margin: 2px 2px 0;
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -200,7 +200,7 @@
     border-radius: 50%;
     background: var(--marca);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 800;
   }
   .nome {
@@ -307,7 +307,7 @@
     font-size: 13px;
   }
   .dica {
-    font-size: 11.5px;
+    font-size: var(--t-apoio);
     opacity: 0.7;
   }
   .erro {

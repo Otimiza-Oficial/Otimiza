@@ -1,5 +1,6 @@
 <script lang="ts">
   import Esqueleto from "./base/Esqueleto.svelte";
+  import Abas from "./base/Abas.svelte";
   // A área Jogos: os jogos instalados (Steam, Epic e instaladores) com a capa da Steam deste PC, e, para os que o
   // Otimiza já mediu, a última partida e o ganho. O ganho só aparece como número quando é MEDIDO (os intervalos de
   // antes e depois não se encostam); senão a tela diz que não houve diferença ou quantas partidas faltam.
@@ -55,22 +56,6 @@
     ).filter(([id]) => id !== "ferramentas" || (doJogo?.extras.length ?? 0) > 0),
   );
   const abaAtual = $derived(abasDoJogo.some(([id]) => id === aba) ? aba : "resumo");
-
-  /** Setas, Home e End entre as sub-abas (o padrão de abas do WAI-ARIA), com o foco indo junto. */
-  function teclaNaAba(e: KeyboardEvent) {
-    const ids = abasDoJogo.map(([id]) => id);
-    const i = ids.indexOf(abaAtual);
-    const j =
-      e.key === "ArrowRight" ? (i + 1) % ids.length
-      : e.key === "ArrowLeft" ? (i - 1 + ids.length) % ids.length
-      : e.key === "Home" ? 0
-      : e.key === "End" ? ids.length - 1
-      : -1;
-    if (j < 0) return;
-    e.preventDefault();
-    aba = ids[j];
-    document.getElementById(`aba-do-jogo-${ids[j]}`)?.focus();
-  }
 
   /** Mesmo jogo, mesma chave: a biblioteca medida e a lista de instalados vêm de fontes com nomes diferentes. */
   const chave = chaveDoJogo;
@@ -198,12 +183,15 @@
       </section>
 
       <section class="secao pagina-do-jogo">
-        <div class="segmento" role="tablist" tabindex="-1" aria-label={`Página do ${atual.jogo.nome}`} onkeydown={teclaNaAba}>
-          {#each abasDoJogo as [id, nome] (id)}
-            <button role="tab" id={`aba-do-jogo-${id}`} tabindex={abaAtual === id ? 0 : -1} aria-selected={abaAtual === id} aria-controls="painel-do-jogo" onclick={() => (aba = id)}>{nome}</button>
-          {/each}
-        </div>
-        <div id="painel-do-jogo" class="grade-cartoes" class:coluna={abaAtual === "historico"} class:otimizar={abaAtual === "otimizar"} role="tabpanel" aria-labelledby={`aba-do-jogo-${abaAtual}`}>
+        <Abas
+          abas={abasDoJogo.map(([id, rotulo]) => ({ id, rotulo }))}
+          ativa={abaAtual}
+          rotulo={`Página do ${atual.jogo.nome}`}
+          prefixo="jogo"
+          idDoPainel="painel-do-jogo"
+          onmudar={(id) => (aba = id)}
+        />
+        <div id="painel-do-jogo" class="grade-cartoes" class:coluna={abaAtual === "historico"} class:otimizar={abaAtual === "otimizar"} role="tabpanel" aria-labelledby={`jogo-aba-${abaAtual}`}>
           {#key `${atual.jogo.nome}|${abaAtual}`}
             {#if abaAtual === "resumo"}
               <div class="largura-toda"><TurboDoJogo jogo={atual.jogo.nome} /></div>

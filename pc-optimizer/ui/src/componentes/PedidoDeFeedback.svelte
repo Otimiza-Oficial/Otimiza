@@ -269,7 +269,7 @@
     border-radius: 999px;
     background: var(--marca-suave);
     color: var(--marca);
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;

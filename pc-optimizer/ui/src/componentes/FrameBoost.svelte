@@ -592,7 +592,7 @@
     justify-items: start;
   }
   .rotulo {
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -631,7 +631,7 @@
     border: 1px solid var(--linha-forte);
     border-bottom-width: 2px;
     font-family: var(--fonte-texto);
-    font-size: 11px;
+    font-size: var(--t-apoio);
     font-weight: 600;
     color: var(--tinta);
   }

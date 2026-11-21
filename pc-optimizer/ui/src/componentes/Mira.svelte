@@ -523,7 +523,7 @@
     background: var(--superficie-2);
     color: var(--tinta);
     font: inherit;
-    font-size: 10.5px;
+    font-size: var(--t-apoio);
     cursor: pointer;
   }
   .estilos svg {

@@ -875,7 +875,7 @@
   </nav>
 
   <!-- Painel -->
-  <main class="painel vidro" class:solto={nav.aberta === "inicio"}>
+  <main id="painel-da-area" class="painel vidro" class:solto={nav.aberta === "inicio"} role="tabpanel" aria-labelledby={`areas-aba-${nav.aberta}`}>
     {#key nav.aberta}
       <div class="conteudo" in:entrar>
         {#if nav.aberta === "inicio"}
@@ -1418,7 +1418,7 @@
     border-radius: 8px;
     background: #ff3b30;
     color: #fff;
-    font-size: 10px;
+    font-size: var(--t-apoio);
     font-weight: 700;
     line-height: 16px;
   }
