@@ -2,11 +2,12 @@
   import { como } from "../lib/contrato";
   import { commands } from "../lib/tipos";
   import Esqueleto from "./base/Esqueleto.svelte";
+  import Botao from "./base/Botao.svelte";
   // Ativar a licença, em três passos que dizem o caminho inteiro: o código desta máquina vai para o bot, o bot devolve a
   // chave, a chave é colada aqui (`bot/README.md`). O campo entende a chave como ela chega do Discord e avisa quando
-  // colaram o código da máquina no lugar dela. Serve à apresentação (`BoasVindas`) e aos Ajustes.
-    import { scale } from "svelte/transition";
-  import { backOut } from "svelte/easing";
+  // colaram o código da máquina no lugar dela. Serve à primeira execução (`BoasVindas`) e aos Ajustes. Marca v2
+  // (1.0.12, Frente 1.4): números na cor do texto, código num campo de leitura, recusa que diz o que fazer.
+  import { fade } from "svelte/transition";
   import { noTauri, ponte, type EstadoDaLicenca } from "../lib/ponte";
   import { lerCampo, limparChave } from "../lib/chave";
 
@@ -26,6 +27,7 @@
 
   const leitura = $derived(lerCampo(texto));
   const atual = $derived(ativada ?? licenca);
+  const parado = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   async function copiar() {
     if (!atual) return;
@@ -67,9 +69,9 @@
 </script>
 
 {#if atual?.ativa}
-  <div class="ativa" in:scale={{ duration: 520, start: 0.85, easing: backOut }}>
+  <div class="ativa" role="status" in:fade={{ duration: parado ? 0 : 240 }}>
     <span class="selo-ok" aria-hidden="true">
-      <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg>
+      <svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" /></svg>
     </span>
     <div>
       <strong>Licença ativa</strong>
@@ -79,49 +81,57 @@
     </div>
   </div>
 {:else if atual}
-  <div class="caixa"><ol class="passos">
-    <li>
-      <span class="n">1</span>
-      <div class="corpo">
-        <strong>Copie o código desta máquina</strong>
-        <div class="codigo">
-          <span class="numero">{atual.maquina}</span>
-          <button class="btn" type="button" onclick={copiar}>{copiado ? "Copiado" : "Copiar"}</button>
+  <div class="caixa">
+    <ol class="passos">
+      <li>
+        <span class="n" aria-hidden="true">1</span>
+        <div class="corpo">
+          <strong>Copie o código desta máquina</strong>
+          <div class="codigo">
+            <span class="numero" aria-label="Código da máquina">{atual.maquina}</span>
+            <Botao pequeno onclick={copiar}>{copiado ? "Copiado" : "Copiar"}</Botao>
+          </div>
+          <span class="apoio">{atual.origem}.</span>
         </div>
-        <span class="apoio">{atual.origem}.</span>
-      </div>
-    </li>
-    <li>
-      <span class="n">2</span>
-      <div class="corpo">
-        <strong>Mande no Discord</strong>
-        <span class="apoio">Ao comprar, o bot pede esse código e devolve a sua chave, um texto longo com um ponto no meio.</span>
-        <button class="btn" type="button" onclick={abrirDiscord}>Abrir o Discord</button>
-      </div>
-    </li>
-    <li>
-      <span class="n">3</span>
-      <form class="corpo" onsubmit={ativar}>
-        <strong>Cole a chave aqui</strong>
-        <textarea
-          class="campo"
-          bind:value={texto}
-          rows="2"
-          spellcheck="false"
-          autocomplete="off"
-          placeholder="Cole a chave que o bot mandou"
-          aria-label="Chave da licença"
-        ></textarea>
-        {#if leitura === "codigo-da-maquina"}
-          <span class="dica">Esse é o código da máquina, o do passo 1. Aqui vai a chave que o bot devolveu.</span>
-        {:else if leitura === "incompleta"}
-          <span class="dica">A chave parece cortada: ela tem duas partes longas separadas por um ponto.</span>
-        {/if}
-        {#if recusa}<span class="recusa" role="alert">{recusa}</span>{/if}
-        <button class="btn primario" disabled={leitura !== "pronta" || ativando}>{ativando ? "Conferindo…" : "Ativar"}</button>
-      </form>
-    </li>
-  </ol></div>
+      </li>
+      <li>
+        <span class="n" aria-hidden="true">2</span>
+        <div class="corpo">
+          <strong>Mande no Discord</strong>
+          <span class="apoio">Ao comprar, o bot pede esse código e devolve a sua chave: um texto longo com um ponto no meio.</span>
+          <Botao pequeno onclick={abrirDiscord}>Abrir o Discord</Botao>
+        </div>
+      </li>
+      <li>
+        <span class="n" aria-hidden="true">3</span>
+        <form class="corpo" onsubmit={ativar}>
+          <label for="chave-da-licenca"><strong>Cole a chave aqui</strong></label>
+          <textarea
+            id="chave-da-licenca"
+            class="campo chave"
+            class:com-erro={!!recusa}
+            bind:value={texto}
+            rows="2"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="A chave que o bot mandou"
+            aria-invalid={recusa ? true : undefined}
+            aria-describedby="chave-nota"
+          ></textarea>
+          <span id="chave-nota" class="nota">
+            {#if recusa}
+              <span class="recusa" role="alert">{recusa} Confira se copiou a chave inteira (do começo ao fim) e se ela é desta máquina; se o problema seguir, mande o código do passo 1 no Discord.</span>
+            {:else if leitura === "codigo-da-maquina"}
+              <span class="dica">Esse é o código da máquina, o do passo 1. Aqui vai a chave que o bot devolveu.</span>
+            {:else if leitura === "incompleta"}
+              <span class="dica">A chave parece cortada: ela tem duas partes longas separadas por um ponto. Copie de novo no Discord.</span>
+            {/if}
+          </span>
+          <Botao type="submit" variante="principal" disabled={leitura !== "pronta"} trabalhando={ativando} textoTrabalhando="Conferindo…">Ativar</Botao>
+        </form>
+      </li>
+    </ol>
+  </div>
 {:else}
   <Esqueleto linhas={2} rotulo="Lendo a licença" />
 {/if}
@@ -135,7 +145,7 @@
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 14px 20px;
+    gap: var(--e-4) var(--e-5);
   }
   /* Com espaço, copiar e mandar ficam lado a lado: o campo da chave cabe sem rolar. */
   @container (min-width: 620px) {
@@ -149,7 +159,7 @@
   .passos li {
     display: grid;
     grid-template-columns: 28px 1fr;
-    gap: 12px;
+    gap: var(--e-3);
     align-items: start;
   }
   .n {
@@ -158,118 +168,89 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: #1d1d1f;
-    color: #fff;
-    font-size: 13px;
+    border: 1px solid var(--linha-forte);
+    color: var(--tinta);
+    font-size: var(--t-apoio);
     font-weight: 600;
   }
   .corpo {
     display: grid;
-    gap: 6px;
+    gap: var(--e-2);
     justify-items: start;
     min-width: 0;
   }
   .corpo strong {
-    font-size: 14px;
+    font-size: var(--t-corpo);
     font-weight: 600;
   }
   .apoio {
-    color: var(--tinta-2, var(--sec, #5d5d63));
-    font-size: 12px;
-    line-height: 1.4;
+    line-height: 1.45;
   }
   .codigo {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 8px 8px 8px 14px;
-    border-radius: 12px;
-    background: rgb(255 255 255 / 0.6);
-    border: 1px solid rgb(0 0 0 / 0.08);
+    gap: var(--e-3);
+    padding: 6px 6px 6px var(--e-3);
+    border-radius: var(--raio-2);
+    border: 1px solid var(--linha);
+    background: var(--superficie-2);
   }
   .codigo .numero {
     white-space: nowrap;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: var(--t-subtitulo);
     letter-spacing: 0.06em;
     user-select: all;
   }
-  .campo {
+  .chave {
     width: 100%;
-    box-sizing: border-box;
+    min-height: 64px;
     resize: vertical;
-    padding: 10px 12px;
-    border-radius: 12px;
-    border: 1px solid var(--linha-forte, rgb(0 0 0 / 0.14));
-    background: rgb(255 255 255 / 0.75);
-    color: inherit;
-    font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    padding: 10px var(--e-3);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: var(--t-apoio);
+    line-height: 1.45;
     word-break: break-all;
   }
-  .campo:focus-visible {
-    outline: 2px solid var(--tinta, var(--texto));
-    outline-offset: 1px;
+  .chave.com-erro {
+    border-color: var(--perigo);
   }
-  :global(:root[data-tema="noite"]) .n {
-    background: #f5f5f7;
-    color: #1d1d1f;
-  }
-  :global(:root[data-tema="noite"]) .campo {
-    background: rgb(255 255 255 / 0.06);
-    border-color: rgb(255 255 255 / 0.16);
-  }
-  :global(:root[data-tema="noite"]) .codigo {
-    background: rgb(255 255 255 / 0.06);
-    border-color: rgb(255 255 255 / 0.12);
+  .nota {
+    font-size: var(--t-apoio);
+    line-height: 1.45;
   }
   .dica {
-    color: var(--atencao, #b25e00);
-    font-size: 12px;
+    color: var(--atencao-texto);
   }
   .recusa {
-    color: var(--perigo, #c0392b);
-    font-size: 12px;
+    color: var(--perigo-texto);
   }
   .ativa {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--e-3);
   }
   .ativa strong {
-    font-size: 15px;
+    font-size: var(--t-subtitulo);
   }
   .ativa p {
     margin: 2px 0 0;
   }
+  /* O sinal de ativa: o traço na cor de "ok" dentro de um aro fino. É estado, por isso tem cor. */
+  .selo-ok {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1.5px solid var(--ok);
+    border-radius: 50%;
+  }
   .selo-ok svg {
-    width: 44px;
-    height: 44px;
+    width: 22px;
+    height: 22px;
     fill: none;
-    stroke: var(--verde, #34c759);
-    stroke-width: 3;
+    stroke: var(--ok);
+    stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-  }
-  .selo-ok circle {
-    stroke-dasharray: 151;
-    stroke-dashoffset: 151;
-    animation: tracar 600ms ease-out forwards;
-  }
-  .selo-ok path {
-    stroke-dasharray: 36;
-    stroke-dashoffset: 36;
-    animation: tracar 360ms 480ms ease-out forwards;
-  }
-  @keyframes tracar {
-    to {
-      stroke-dashoffset: 0;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .selo-ok circle,
-    .selo-ok path {
-      animation: none;
-      stroke-dashoffset: 0;
-    }
   }
 </style>
