@@ -65,6 +65,7 @@
   import PapelDeFundo from "./componentes/PapelDeFundo.svelte";
   import CeuDePoeira from "./componentes/marca/CeuDePoeira.svelte";
   import Logo from "./componentes/marca/Logo.svelte";
+  import CenaDaEpoca from "./componentes/marca/CenaDaEpoca.svelte";
   import { duracao, movimentoParado } from "./lib/movimento";
   import { relogio } from "./lib/relogio";
   import MenuDoFundo from "./componentes/MenuDoFundo.svelte";
@@ -772,9 +773,10 @@
 </script>
 
 <!-- O fundo "Limpo" da marca v2: preto (papel no claro) com poeira de luz para onde o Oti olha. -->
-{#if fundo === "limpo"}<CeuDePoeira />{/if}
-<!-- A luz da época: a cor de cada época, baixa, por trás de tudo (no preto ela vira um respiro, não uma mancha). -->
-<div class="luz-da-epoca" data-epoca={temporada?.id ?? null} aria-hidden="true"></div>
+<!-- Com época e o fundo Limpo, a cena da época (paisagem em camadas, com o Oti enfeitado); sem época, a poeira de luz. -->
+{#if fundo === "limpo" && temporada}<CenaDaEpoca {temporada} />{:else if fundo === "limpo"}<CeuDePoeira />{/if}
+<!-- Nos outros fundos, a luz da época: a cor de cada uma, baixa, por trás de tudo. -->
+<div class="luz-da-epoca" data-epoca={fundo !== "limpo" ? (temporada?.id ?? null) : null} aria-hidden="true"></div>
 <!-- O cômodo desfocado (fundo "Cômodo"). Feito em CSS: parede, janela com luz, chão, sofá e luminária. -->
 <div class="comodo" aria-hidden="true">
   <div class="parede"></div>
