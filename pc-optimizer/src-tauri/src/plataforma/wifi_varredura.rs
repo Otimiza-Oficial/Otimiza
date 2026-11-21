@@ -47,12 +47,8 @@ pub fn ler() -> Estado {
 }
 
 fn gravar(e: &Estado) -> Result<(), String> {
-    let a = arquivo();
-    if let Some(p) = a.parent() {
-        std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
-    }
     let texto = serde_json::to_string_pretty(e).map_err(|e| e.to_string())?;
-    std::fs::write(a, texto)
+    crate::utils::arquivo::escrever_atomico(&arquivo(), texto.as_bytes())
         .map_err(|e| format!("Não foi possível gravar a escolha do Wi-Fi: {}", e))
 }
 

@@ -73,10 +73,25 @@ npm run tauri build
 
 Saem em `pc-optimizer/src-tauri/target/release/bundle/`.
 
+## Testes
+
+Os mesmos que a esteira roda em todo pull request (`.github/workflows/release.yml`, job `testes`):
+
+```bash
+cd pc-optimizer
+npx svelte-check --workspace ui --tsconfig ./tsconfig.json --fail-on-warnings
+npm run testes:ui
+cd src-tauri && cargo test --lib
+```
+
+`npm run fumaca:nova` abre a interface compilada num Chrome sem janela, com a CSP de produção, e clica em todas as
+áreas.
+
 ## Arquitetura
 
 - **Backend:** Rust + Tauri 2 (`pc-optimizer/src-tauri/src`)
-- **Frontend:** TypeScript + Vite, sem framework
+- **Frontend:** Svelte 5 + TypeScript + Vite (`pc-optimizer/ui`), com as regras visuais em
+  [`pc-optimizer/ui/DESIGN.md`](pc-optimizer/ui/DESIGN.md)
 - **Estado das mudanças:** `%APPDATA%\pc-optimizer\changes.json`
 
 A pasta ainda se chama `pc-optimizer`, de antes do produto ganhar nome. Renomear
@@ -103,7 +118,9 @@ existe no código mas nunca foi executada aparece como pendente.
 
 ## Licença
 
-Código aberto à leitura, não ao uso. Veja [`LICENSE`](LICENSE).
+Código aberto à leitura, não ao uso: licença proprietária, veja [`LICENCE`](LICENCE). Quem instala o programa
+aceita o contrato de uso (EULA) que o instalador mostra, em
+[`pc-optimizer/src-tauri/EULA.txt`](pc-optimizer/src-tauri/EULA.txt).
 
 O código está público porque um programa que altera configurações do seu sistema
 deveria poder ser auditado por quem instala. Isso não é o mesmo que licença de

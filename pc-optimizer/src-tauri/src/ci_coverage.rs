@@ -270,4 +270,75 @@ mod tests {
             achados
         );
     }
+
+    /// **Pura.** O EULA em RTF, a partir do texto de `EULA.txt`. RTF e não o texto: o NSIS e o MSI aceitam RTF como
+    /// está, e o MSI converte texto puro para RTF em página de código 1252, o que estragaria cada acento. Só ASCII
+    /// sai daqui: o que não é ASCII vira `\uN?` (UTF-16 com sinal, o que o RTF pede).
+    fn eula_em_rtf(texto: &str) -> String {
+        let mut rtf = String::from(
+            "{\\rtf1\\ansi\\ansicpg1252\\deff0\\uc1{\\fonttbl{\\f0\\fswiss\\fcharset0 Segoe UI;}}\\f0\\fs18\n",
+        );
+        for linha in texto.trim_start_matches('\u{feff}').lines() {
+            for c in linha.chars() {
+                match c {
+                    '\\' | '{' | '}' => {
+                        rtf.push('\\');
+                        rtf.push(c);
+                    }
+                    ' '..='~' => rtf.push(c),
+                    _ => {
+                        let mut unidades = [0u16; 2];
+                        for u in c.encode_utf16(&mut unidades) {
+                            rtf.push_str(&format!("\\u{}?", *u as i16));
+                        }
+                    }
+                }
+            }
+            rtf.push_str("\\par\n");
+        }
+        rtf.push_str("}\n");
+        rtf
+    }
+
+    #[test]
+    fn eula_em_rtf_escapa_acento_e_chave() {
+        assert!(eula_em_rtf("é {a}\\").contains("\\u233? \\{a\\}\\\\\\par"));
+        assert!(eula_em_rtf("\u{feff}Licença").contains("Licen\\u231?a\\par"), "o BOM não entra no texto");
+        assert!(eula_em_rtf("😀").contains("\\u-10179?\\u-8704?"), "fora do BMP vira par de UTF-16");
+    }
+
+    /// 1.0.12 (8.1): o instalador mostra o EULA, e o EULA que ele mostra é o de `EULA.txt`. Mudou o texto, regenere:
+    /// `OTIMIZA_GERAR_EULA=1 cargo test --lib ci_coverage::tests::o_instalador_mostra_o_eula_do_texto`.
+    #[test]
+    fn o_instalador_mostra_o_eula_do_texto() {
+        let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let conf: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(raiz.join("tauri.conf.json")).expect("tauri.conf.json"),
+        )
+        .expect("tauri.conf.json é JSON");
+        assert_eq!(
+            conf.pointer("/bundle/licenseFile").and_then(|v| v.as_str()),
+            Some("EULA.rtf"),
+            "o instalador precisa mostrar o EULA (bundle.licenseFile)"
+        );
+        assert!(
+            conf.pointer("/bundle/resources/..~1LICENCAS-DE-TERCEIROS.md").is_some(),
+            "os avisos de terceiros (FSR, PresentMon) precisam ir junto com o programa"
+        );
+
+        let texto = std::fs::read_to_string(raiz.join("EULA.txt")).expect("EULA.txt");
+        let esperado = eula_em_rtf(&texto);
+        if std::env::var_os("OTIMIZA_GERAR_EULA").is_some() {
+            std::fs::write(raiz.join("EULA.rtf"), &esperado).expect("gravar EULA.rtf");
+        }
+        // O checkout no Windows troca LF por CRLF (`* text=auto`); a comparação é do conteúdo.
+        let gravado = std::fs::read_to_string(raiz.join("EULA.rtf"))
+            .expect("EULA.rtf (gere com OTIMIZA_GERAR_EULA=1)")
+            .replace("\r\n", "\n");
+        assert!(gravado.is_ascii(), "EULA.rtf com byte fora do ASCII: o acento sairia estragado");
+        assert!(
+            gravado == esperado,
+            "EULA.rtf não é o texto de EULA.txt: regenere com OTIMIZA_GERAR_EULA=1"
+        );
+    }
 }

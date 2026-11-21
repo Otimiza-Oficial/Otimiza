@@ -75,7 +75,8 @@ pub fn guardar(prova: &Prova) -> Result<(), String> {
     let bruto = serde_json::to_string_pretty(prova)
         .map_err(|e| format!("não consegui serializar a medição: {}", e))?;
 
-    fs::write(&destino, bruto).map_err(|e| format!("não consegui gravar a medição: {}", e))
+    crate::utils::arquivo::escrever_atomico(&destino, bruto.as_bytes())
+        .map_err(|e| format!("não consegui gravar a medição: {}", e))
 }
 
 pub fn guardada() -> Option<Prova> {

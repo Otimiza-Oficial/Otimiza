@@ -434,7 +434,7 @@ static MEDICAO: std::sync::Mutex<Option<Medicao>> = std::sync::Mutex::new(None);
 /// Qual gerador de driver o Otimiza ligou para este jogo (pelo histórico de mudanças).
 #[cfg(target_os = "windows")]
 fn ligado_no_driver(jogo: &JogoAberto) -> Option<Recurso> {
-    let log = crate::modules::changelog::ChangeLog::load();
+    let log = crate::modules::changelog::foto();
     let sm = crate::modules::windows::nvdriver::id_do_smooth_motion(&jogo.executavel);
     if log.is_applied(&sm) {
         Some(Recurso::FrameBoostSmoothMotion)
@@ -595,7 +595,8 @@ fn uso_da_placa_pct() -> Option<u32> {
 }
 
 /// Liga o Frame Boost que o automático escolheu. O do jogo não é do Otimiza ligar (vai no menu de vídeo dele); o
-/// Smooth Motion só com o interruptor experimental; o AFMF e o gerador do Otimiza, sempre.
+/// Smooth Motion só com o interruptor experimental; o AFMF e o gerador do Otimiza, sempre. O Smooth Motion, o AFMF e o
+/// portão da base gravam no histórico: quem chama segura a trava dele e passa o `log` (`changelog::historico`).
 #[cfg(target_os = "windows")]
 pub fn ligar(
     app: &tauri::AppHandle,
@@ -604,6 +605,7 @@ pub fn ligar(
     escala: Option<geracao::escala::Nivel>,
     alvo_fps: Option<u32>,
     leve_pedido: bool,
+    log: &mut crate::modules::changelog::ChangeLog,
 ) -> Result<Painel, String> {
     // Plano de refino 1.2: a licença conferida também aqui, não só no comando (desligar nunca confere).
     crate::modules::licenca::exigir()?;
@@ -639,14 +641,12 @@ pub fn ligar(
                     recomendado.nome
                 ));
             }
-            let mut log = crate::modules::changelog::ChangeLog::load();
-            otimizador.ligar_smooth_motion(&jogo.executavel, &mut log)?;
+            otimizador.ligar_smooth_motion(&jogo.executavel, log)?;
             Ok(painel())
         }
         Recurso::FrameBoostAfmf => {
-            let mut log = crate::modules::changelog::ChangeLog::load();
             if !log.is_applied(ID_DO_AFMF) {
-                otimizador.aplicar_ajuste_amd(ID_DO_AFMF, &mut log)?;
+                otimizador.aplicar_ajuste_amd(ID_DO_AFMF, log)?;
             }
             Ok(painel())
         }
@@ -686,7 +686,7 @@ pub fn ligar(
                 return Err(recusa.to_string());
             }
             if !so_escala && !sem_limite {
-                let base = portao_da_base(&jogo.executavel, jogo.pid, hz.unwrap_or(0))?;
+                let base = portao_da_base(&jogo.executavel, jogo.pid, hz.unwrap_or(0), log)?;
                 m = base.multiplicador;
                 automatico = false;
             }
@@ -785,10 +785,15 @@ pub const VOLTE_PARA_O_JOGO: &str = "Para travar o FPS base, o Otimiza mede o jo
 pub const SO_NVIDIA: &str = "Para ficar liso, o Frame Boost trava o FPS do jogo numa fração do monitor, e o Otimiza só \
     consegue travar pelo driver da NVIDIA. Nesta placa, use o gerador do próprio driver ou do jogo, se houver.";
 
-/// O portão: a base valendo, ou trava agora (medindo o jogo 15 s se não houver medida recente). Grava no histórico do
-/// disco: quem chama segura a trava do histórico e relê no fim (o comando, o "Jogar" e o Turbo já fazem).
+/// O portão: a base valendo, ou trava agora (medindo o jogo 15 s se não houver medida recente). Grava no histórico pelo
+/// `log` de quem segura a trava dele.
 #[cfg(target_os = "windows")]
-fn portao_da_base(executavel: &str, pid: u32, hz: u32) -> Result<super::base_do_jogo::BaseTravada, String> {
+fn portao_da_base(
+    executavel: &str,
+    pid: u32,
+    hz: u32,
+    log: &mut crate::modules::changelog::ChangeLog,
+) -> Result<super::base_do_jogo::BaseTravada, String> {
     use super::base_do_jogo;
     let administrador = crate::modules::windows::registry::is_elevated();
     let nvidia = crate::modules::windows::nvdriver::estado() == crate::modules::windows::nvdriver::Nvapi::Disponivel;
@@ -818,8 +823,7 @@ fn portao_da_base(executavel: &str, pid: u32, hz: u32) -> Result<super::base_do_
             crate::utils::Logger::info(&format!("frame boost: medindo {} por 15 s para travar o FPS base", executavel));
             super::jogo_liso::medir(executavel, 15)?;
         }
-        let mut log = crate::modules::changelog::ChangeLog::load();
-        nota = Some(base_do_jogo::travar(executavel, hz, &mut log)?);
+        nota = Some(base_do_jogo::travar(executavel, hz, log)?);
     }
     let travada = base_do_jogo::travada(pid, executavel, hz);
     let r = decisao_do_portao(true, true, hz, travada.as_ref(), nota.as_deref());
@@ -845,17 +849,17 @@ fn compat_motivo(r: &RecursoAvaliado) -> Option<String> {
 }
 
 /// Desliga tudo o que o Frame Boost ligou: o gerador do Otimiza e, pelo histórico, o AFMF e o Smooth Motion do jogo.
+/// Quem chama segura a trava do histórico e passa o `log`.
 #[cfg(target_os = "windows")]
-pub fn desligar() -> Result<Painel, String> {
+pub fn desligar(log: &mut crate::modules::changelog::ChangeLog) -> Result<Painel, String> {
     geracao::desligar();
     anotar_base(None);
     if let Some(j) = super::sessao::atual() {
-        let mut log = crate::modules::changelog::ChangeLog::load();
         let otimizador = crate::modules::windows::WindowsOptimizer::new();
         let sm = crate::modules::windows::nvdriver::id_do_smooth_motion(&j.executavel);
         for id in [sm.as_str(), ID_DO_AFMF] {
             if log.is_applied(id) {
-                otimizador.revert(id, &mut log)?;
+                otimizador.revert(id, log)?;
             }
         }
     }
@@ -899,7 +903,8 @@ mod bancada_no_jogo {
         let (pid, exe) = jogo();
         let hz = super::hz_do_jogo(pid).unwrap_or(0);
         println!("jogo {} (pid {}), {} Hz", exe, pid, hz);
-        match super::portao_da_base(&exe, pid, hz) {
+        let mut log = crate::modules::changelog::ChangeLog::do_disco_real();
+        match super::portao_da_base(&exe, pid, hz, &mut log) {
             Ok(b) => println!("PORTÃO: base {} fps valendo, {}× fixo", b.fps, b.multiplicador),
             Err(m) => println!("PORTÃO: não liga: {}", m),
         }

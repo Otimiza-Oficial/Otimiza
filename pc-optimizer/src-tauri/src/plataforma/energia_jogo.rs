@@ -150,9 +150,8 @@ fn pc_fraco() -> bool {
 }
 
 fn gravar(e: &Estado) -> Result<(), String> {
-    std::fs::create_dir_all(pasta()).map_err(|e| e.to_string())?;
     let texto = serde_json::to_string_pretty(e).map_err(|e| e.to_string())?;
-    std::fs::write(arquivo(), texto)
+    crate::utils::arquivo::escrever_atomico(&arquivo(), texto.as_bytes())
         .map_err(|e| format!("Não foi possível gravar a energia de jogo: {}", e))
 }
 

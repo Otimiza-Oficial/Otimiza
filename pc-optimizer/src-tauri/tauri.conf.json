@@ -29,7 +29,7 @@
       "csp": {
         "default-src": "'self' ipc: http://ipc.localhost",
         "script-src": "'self'",
-        "style-src": "'self' 'unsafe-inline'",
+        "style-src": "'self'",
         "img-src": "'self' data: blob: https://cdn.cloudflare.steamstatic.com https://images.rbxcdn.com https://cdn2.unrealengine.com",
         "font-src": "'self' data:",
         "connect-src": "'self' ipc: http://ipc.localhost",
@@ -62,6 +62,7 @@
     "shortDescription": "Console de desempenho para Windows",
     "longDescription": "Mede o desempenho do PC, aplica otimizações reversíveis e prova o resultado com números — inclusive quando não houve ganho.",
     "copyright": "© Otimiza",
+    "licenseFile": "EULA.rtf",
     "category": "Utility",
     "icon": [
       "icons/32x32.png",
@@ -90,7 +91,8 @@
       "binaries/PresentMon"
     ],
     "resources": {
-      "binaries/PresentMon-LICENSE.txt": "PresentMon-LICENSE.txt"
+      "binaries/PresentMon-LICENSE.txt": "PresentMon-LICENSE.txt",
+      "../LICENCAS-DE-TERCEIROS.md": "LICENCAS-DE-TERCEIROS.md"
     }
   }
 }

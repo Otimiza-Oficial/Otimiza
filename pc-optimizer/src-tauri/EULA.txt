@@ -1,0 +1,48 @@
+CONTRATO DE LICENÇA DE USO DO OTIMIZA (EULA)
+
+RASCUNHO da versão 1.0.12, de 20 de novembro de 2026. Este texto ainda não foi revisado por advogado. Enquanto for rascunho, valem também os Termos de Uso publicados em https://otimiza-oficial.github.io/Otimiza/termos/, que prevalecem se houver conflito.
+
+Leia antes de instalar. Ao clicar em "Aceito" e instalar o Otimiza, você concorda com este contrato. Se não concordar, cancele a instalação.
+
+1. QUEM LICENCIA
+O Otimiza é desenvolvido e vendido por Eduardo Maciel Wanka ("Otimiza"). Contato: otimizasupport@gmail.com e o Discord oficial indicado no site.
+
+2. O QUE ESTE CONTRATO DÁ A VOCÊ
+2.1. O programa é gratuito para baixar, instalar e medir. A licença paga libera as otimizações que escrevem no Windows.
+2.2. Você recebe uma licença pessoal, não exclusiva e intransferível para instalar e usar o Otimiza. A licença paga vale para um computador, identificado pelo código daquela máquina, sem prazo de validade e sem mensalidade.
+2.3. O Otimiza não é vendido, é licenciado. O programa, o código, a marca, o mascote Oti, os textos e as imagens continuam sendo do Otimiza. Os componentes de terceiros seguem as licenças deles, listadas no arquivo LICENCAS-DE-TERCEIROS.md, instalado junto com o programa.
+
+3. O QUE NÃO É PERMITIDO
+Sem autorização por escrito do Otimiza, você não pode:
+a) copiar, revender, alugar, sublicenciar ou distribuir o programa ou a chave de licença;
+b) publicar, compartilhar ou repassar a sua chave a terceiros;
+c) remover, contornar ou desativar a conferência da licença;
+d) modificar o programa ou fazer engenharia reversa dele, salvo nos casos em que a lei brasileira permite isso mesmo sem autorização;
+e) usar o programa, ou partes dele, para criar um produto concorrente.
+O código-fonte pode ficar visível para que quem instala consiga auditar o que o programa faz no PC. Ver o código não dá nenhum dos direitos acima.
+
+4. O QUE O PROGRAMA FAZ NO SEU COMPUTADOR
+4.1. O Otimiza altera configurações do Windows, do driver de vídeo e dos jogos, por exemplo: plano de energia, serviços, registro, prioridade de processos e limite de FPS. Antes de cada alteração ele guarda o valor anterior. A alteração pode ser desfeita dentro do próprio programa ou na desinstalação.
+4.2. Algumas funções precisam de permissão de administrador. O Windows pede essa permissão, e você decide se concede.
+4.3. O Otimiza não injeta código em jogos e não desliga antivírus, firewall nem a atualização do Windows. Mesmo assim, as regras de cada jogo e de cada sistema anti-trapaça são decididas pelas empresas que os mantêm. Confira as regras do jogo que você usa.
+4.4. Recomendamos manter um ponto de restauração do Windows e uma cópia dos seus arquivos importantes, como em qualquer programa que altera o sistema.
+
+5. RESULTADO E GARANTIA
+5.1. O ganho de desempenho depende do seu hardware, do jogo e do que já estava configurado. O Otimiza mede antes e depois e mostra o número, inclusive quando não houve ganho. Nenhuma porcentagem de ganho é prometida antes da medição.
+5.2. O programa é fornecido como está, sem garantia de que vai funcionar sem falhas em todo computador. Isso não afasta os direitos que o Código de Defesa do Consumidor garante a você.
+5.3. Na medida permitida pela lei, o Otimiza não responde por perda de dados, por lucros cessantes nem por danos indiretos decorrentes do uso do programa. Quando houver responsabilidade, ela fica limitada ao valor pago pela licença, salvo nos casos em que a lei não permite essa limitação.
+
+6. ARREPENDIMENTO E DEVOLUÇÃO
+A compra feita pela internet pode ser desfeita em até 7 (sete) dias contados do pagamento, conforme o artigo 49 do Código de Defesa do Consumidor, com devolução integral do valor. Depois desse prazo, valem as condições de devolução descritas nos Termos de Uso.
+
+7. DADOS PESSOAIS
+O tratamento de dados pessoais segue a Política de Privacidade publicada em https://otimiza-oficial.github.io/Otimiza/privacidade/.
+
+8. ATUALIZAÇÕES
+O Otimiza pode avisar que existe uma versão nova. As atualizações não são cobradas de novo e seguem este contrato, ou a versão dele que vier com a atualização.
+
+9. ENCERRAMENTO
+A licença termina se você descumprir a seção 3. Revender, publicar ou distribuir a chave é o caso em que ela é desativada. Ao fim da licença, as funções pagas deixam de funcionar, e as alterações já feitas no Windows continuam podendo ser desfeitas.
+
+10. LEI E FORO
+Este contrato segue as leis da República Federativa do Brasil. Se você for consumidor, vale o foro do seu domicílio.

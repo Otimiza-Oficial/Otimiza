@@ -1252,7 +1252,7 @@ pub fn confirmar_troca(
     if let Err(detalhe) = gravado {
         let _ = maquina::trocar(&e.dispositivo, &e.anterior, maquina::GRAVAR);
         let _ = e.diario.concluir();
-        return Err(RecusaHz::HistoricoFalhou { detalhe });
+        return Err(RecusaHz::HistoricoFalhou { detalhe: detalhe.to_string() });
     }
 
     let hz = e.novo.hz;

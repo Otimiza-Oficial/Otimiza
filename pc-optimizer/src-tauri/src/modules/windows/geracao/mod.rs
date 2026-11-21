@@ -2732,7 +2732,7 @@ mod teste_do_limite {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        let mut log = ChangeLog::load();
+        let mut log = ChangeLog::do_disco_real();
         let otimizador = crate::modules::windows::WindowsOptimizer::new();
         if fps == 0 {
             let id = crate::modules::windows::nvdriver::id_do_limite(&exe);

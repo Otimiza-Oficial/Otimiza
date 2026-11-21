@@ -20,7 +20,6 @@ mod plataforma;
 mod utils;
 
 use commands::AppState;
-use modules::changelog::ChangeLog;
 use modules::PerformanceMonitor;
 use tauri::Manager;
 use tokio::sync::Mutex;
@@ -108,7 +107,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             monitor: Mutex::new(PerformanceMonitor::new()),
-            changes: Mutex::new(ChangeLog::load()),
+            changes: modules::changelog::historico(),
             #[cfg(target_os = "windows")]
             processes: Mutex::new(modules::windows::processes::ProcessMonitor::new()),
         })
@@ -1420,20 +1419,21 @@ async fn preparar_partida(app: &tauri::AppHandle, jogo: String, executavel: &str
             if !utils::diagnostico::modo_seguro() && modules::licenca::exigir().is_ok() {
                 let h = app.clone();
                 let e = escolha.clone();
-                // A trava do histórico fica presa enquanto liga, como no comando: o Smooth Motion e o AFMF gravam no
-                // histórico do disco, e um vigia que gravasse a memória no meio apagaria esse registro (o desfazer
-                // sumia). A memória é relida no fim.
+                // A trava do histórico fica presa enquanto liga e vai junto para a thread, como no comando: o Smooth
+                // Motion, o AFMF e o portão da base gravam no histórico, e só quem segura a trava grava.
                 let estado = app.state::<AppState>();
-                let mut log = estado.changes.lock().await;
+                let guarda = estado.changes.clone().lock_owned().await;
                 let ligado = tokio::task::spawn_blocking(move || {
-                    plataforma::frameboost::ligar(&h, e.multiplicador, false, e.escala, e.alvo_fps, false).map(|_| ())
+                    let mut log = guarda;
+                    let r = plataforma::frameboost::ligar(&h, e.multiplicador, false, e.escala, e.alvo_fps, false, &mut log)
+                        .map(|_| ());
+                    r.map(|()| log)
                 })
                 .await
                 .map_err(|e| e.to_string())
                 .and_then(|r| r);
-                log.recarregar();
                 match ligado {
-                    Ok(()) => {
+                    Ok(mut log) => {
                         plataforma::frameboost::travar_base(&mut log);
                         drop(log);
                         let passo = format!(

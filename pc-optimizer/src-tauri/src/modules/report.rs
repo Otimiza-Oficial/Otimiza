@@ -1078,7 +1078,7 @@ mod tests {
 
     #[test]
     fn documento_nao_tem_simbolo_decorativo() {
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
         let html = build_html(&log, None, &ReportData::default(), "31/07/2026 as 14:00");
 
         for c in html.chars() {
@@ -1093,7 +1093,7 @@ mod tests {
 
     #[test]
     fn documento_e_autossuficiente() {
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
         let html = build_html(&log, None, &ReportData::default(), "31/07/2026 as 14:00");
 
         assert!(html.starts_with("<!doctype html>"));
@@ -1113,7 +1113,7 @@ mod tests {
 
     #[test]
     fn ausencia_de_dado_nao_e_lida_como_conformidade() {
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
         let html = build_html(&log, None, &ReportData::default(), "31/07/2026 as 14:00");
 
         assert!(html.contains("não que o item esteja em conformidade"));
@@ -1154,7 +1154,7 @@ mod tests {
         let pdf = temp.join("r.pdf");
         let _ = std::fs::remove_file(&pdf);
 
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
         std::fs::write(
             &html,
             build_html(&log, None, &ReportData::default(), "31/07/2026 as 14:00"),
@@ -1208,7 +1208,7 @@ mod inspecao {
         let html = saida.join("relatorio.html");
         let pdf = saida.join("relatorio.pdf");
 
-        let log = ChangeLog::load();
+        let log = ChangeLog::em_memoria();
         std::fs::write(&html, build_html(&log, None, &dados, "31/07/2026 as 20:00")).unwrap();
 
         match imprimir_pdf(&html, &pdf) {
@@ -1228,7 +1228,7 @@ mod csv_desta_maquina {
     #[test]
     #[ignore]
     fn csv_desta_maquina() {
-        let log = crate::modules::changelog::ChangeLog::load();
+        let log = crate::modules::changelog::ChangeLog::em_memoria();
         let csv = super::csv_das_alteracoes(&log, |_, _| None);
         println!("{}", csv.lines().take(8).collect::<Vec<_>>().join("\n"));
     }

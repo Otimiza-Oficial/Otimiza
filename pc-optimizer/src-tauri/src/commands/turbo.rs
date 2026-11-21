@@ -41,67 +41,68 @@ pub async fn turbo_ligar(
     {
         use crate::plataforma::{historico, sessao, turbo};
         let app_da_prova = app.clone();
-        // A trava do histórico presa desde já: a receita pode ligar o Smooth Motion ou o AFMF, que gravam no histórico do
-        // disco, e um vigia gravando a memória no meio apagava o registro (revisão final da 1.0.9). Relida no fim.
-        let mut log = state.changes.lock().await;
-        let (id, aplicada) = tokio::task::spawn_blocking(move || -> Result<(String, turbo::Receita), String> {
-            let jogo = sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
-            let (id, _) = historico::id_do_jogo(&jogo.executavel);
-            if turbo::em_prova() || turbo::prova_sozinha_pendente() {
-                return Err("A prova do Turbo está rodando: espere ela terminar.".to_string());
-            }
-            // Outra prova alternada (a do plano de energia) roda agora: ligar mudaria o lado dela, e a do Turbo não
-            // teria a vez para conferir esta receita.
-            if crate::modules::provaalternada::em_andamento() {
-                return Err("Uma prova está rodando: espere ela terminar para ligar o Turbo.".to_string());
-            }
-            let anterior = turbo::perfil(&id);
-            let reprovada = anterior
-                .as_ref()
-                .filter(|p| p.prova == Some(turbo::Desfecho::Piorou))
-                .map(|p| p.receita.clone());
-            let guardado = lembrado.unwrap_or(false).then_some(anterior).flatten();
-            if guardado.as_ref().is_some_and(|p| p.prova == Some(turbo::Desfecho::Piorou)) {
-                return Err(
-                    "Na prova, esta receita deixou o jogo pior neste PC: o Turbo não a liga de novo. Toque em \
-                     Medir de novo para uma receita nova."
-                        .to_string(),
-                );
-            }
-            // Com a receita lembrada, o perfil fica como está (inclusive o desfecho da prova).
-            let lembrada = guardado.is_some();
-            let (receita, fps_antes) = match guardado {
-                Some(p) => (p.receita, p.fps_antes),
-                None => turbo::medir()?,
-            };
-            // A medida nova deu a mesma receita que a prova reprovou: não liga, e a reprovação fica guardada.
-            if reprovada.as_ref().is_some_and(|r| turbo::mesma_acao(r, &receita)) {
-                return Err(
-                    "A medida de agora deu a mesma receita que a prova reprovou neste PC, então o Turbo não a liga. Ela pode mudar com outro trecho do jogo, outra resolução ou outro driver."
-                        .to_string(),
-                );
-            }
-            turbo::aplicar(&app, &receita, fps_antes);
-            let aplicada = receita.clone();
-            if !lembrada && turbo::vale_guardar(receita.gargalo) {
-                let perfil = turbo::Perfil {
-                    receita,
-                    fps_antes,
-                    medido_em: crate::modules::changelog::now_timestamp(),
-                    prova: None,
-                };
-                if let Err(e) = turbo::lembrar(&id, perfil) {
-                    crate::utils::Logger::warn(&format!("turbo: não guardei a receita de {}: {}", id, e));
+        // A trava do histórico presa desde já e levada para a thread: a receita pode ligar o Smooth Motion ou o AFMF, que
+        // gravam no histórico, e só quem segura a trava grava (1.0.12, um dono só).
+        let guarda = state.changes.clone().lock_owned().await;
+        let (mut log, ligado) = tokio::task::spawn_blocking(move || {
+            let mut log = guarda;
+            let r = (|| -> Result<(String, turbo::Receita), String> {
+                let jogo = sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
+                let (id, _) = historico::id_do_jogo(&jogo.executavel);
+                if turbo::em_prova() || turbo::prova_sozinha_pendente() {
+                    return Err("A prova do Turbo está rodando: espere ela terminar.".to_string());
                 }
-            }
-            Ok((id, aplicada))
+                // Outra prova alternada (a do plano de energia) roda agora: ligar mudaria o lado dela, e a do Turbo não
+                // teria a vez para conferir esta receita.
+                if crate::modules::provaalternada::em_andamento() {
+                    return Err("Uma prova está rodando: espere ela terminar para ligar o Turbo.".to_string());
+                }
+                let anterior = turbo::perfil(&id);
+                let reprovada = anterior
+                    .as_ref()
+                    .filter(|p| p.prova == Some(turbo::Desfecho::Piorou))
+                    .map(|p| p.receita.clone());
+                let guardado = lembrado.unwrap_or(false).then_some(anterior).flatten();
+                if guardado.as_ref().is_some_and(|p| p.prova == Some(turbo::Desfecho::Piorou)) {
+                    return Err(
+                        "Na prova, esta receita deixou o jogo pior neste PC: o Turbo não a liga de novo. Toque em \
+                         Medir de novo para uma receita nova."
+                            .to_string(),
+                    );
+                }
+                // Com a receita lembrada, o perfil fica como está (inclusive o desfecho da prova).
+                let lembrada = guardado.is_some();
+                let (receita, fps_antes) = match guardado {
+                    Some(p) => (p.receita, p.fps_antes),
+                    None => turbo::medir()?,
+                };
+                // A medida nova deu a mesma receita que a prova reprovou: não liga, e a reprovação fica guardada.
+                if reprovada.as_ref().is_some_and(|r| turbo::mesma_acao(r, &receita)) {
+                    return Err(
+                        "A medida de agora deu a mesma receita que a prova reprovou neste PC, então o Turbo não a liga. Ela pode mudar com outro trecho do jogo, outra resolução ou outro driver."
+                            .to_string(),
+                    );
+                }
+                turbo::aplicar(&app, &receita, fps_antes, &mut log);
+                let aplicada = receita.clone();
+                if !lembrada && turbo::vale_guardar(receita.gargalo) {
+                    let perfil = turbo::Perfil {
+                        receita,
+                        fps_antes,
+                        medido_em: crate::modules::changelog::now_timestamp(),
+                        prova: None,
+                    };
+                    if let Err(e) = turbo::lembrar(&id, perfil) {
+                        crate::utils::Logger::warn(&format!("turbo: não guardei a receita de {}: {}", id, e));
+                    }
+                }
+                Ok((id, aplicada))
+            })();
+            (log, r)
         })
         .await
-        .map_err(|e| e.to_string())
-        .and_then(|r| r)
-        .inspect_err(|_| log.recarregar())?;
-        // O Frame Boost (Smooth Motion, AFMF) grava no histórico do disco: relido antes de gravar por cima dele.
-        log.recarregar();
+        .map_err(|e| e.to_string())?;
+        let (id, aplicada) = ligado?;
         let trava = sessao_do_turbo().map(|exe| (crate::modules::windows::nvdriver::id_do_limite(&exe), exe));
         let ja_travada = trava.as_ref().is_some_and(|(id, _)| log.is_applied(id));
         crate::plataforma::frameboost::travar_base(&mut log);
@@ -172,7 +173,6 @@ async fn provar_o_turbo(
     if let Ok(prova) = &r {
         let estado = app.state::<AppState>();
         let mut log = estado.changes.lock().await;
-        log.recarregar();
         if prova.desfecho != crate::modules::provaalternada::Desfecho::Piorou {
             crate::plataforma::frameboost::travar_base(&mut log);
         } else {
@@ -275,11 +275,17 @@ pub async fn turbo_desligar(state: State<'_, AppState>) -> Result<crate::platafo
         if crate::modules::provaalternada::em_andamento() {
             return Err("O Turbo está medindo os núcleos rápidos (cerca de 1 minuto): espere terminar para desligar.".to_string());
         }
-        tokio::task::spawn_blocking(crate::plataforma::turbo::desligar)
-            .await
-            .map_err(|e| e.to_string())??;
-        let mut log = state.changes.lock().await;
-        log.recarregar();
+        // A trava do histórico desde antes de desligar: o desligar desfaz o Smooth Motion e o AFMF no histórico, e só
+        // quem segura a trava grava (1.0.12, um dono só).
+        let guarda = state.changes.clone().lock_owned().await;
+        let (mut log, r) = tokio::task::spawn_blocking(move || {
+            let mut log = guarda;
+            let r = crate::plataforma::turbo::desligar(&mut log);
+            (log, r)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        r?;
         soltar_governador_do_turbo(&mut log);
         soltar_base_do_turbo(&mut log);
         drop(log);

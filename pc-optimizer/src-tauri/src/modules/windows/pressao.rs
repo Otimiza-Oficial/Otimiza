@@ -60,7 +60,8 @@ impl Janela {
         let json = serde_json::to_string(self)
             .map_err(|e| format!("Não foi possível gravar a janela: {}", e))?;
 
-        fs::write(&path, json).map_err(|e| format!("Não foi possível gravar a janela: {}", e))
+        crate::utils::arquivo::escrever_atomico(&path, json.as_bytes())
+            .map_err(|e| format!("Não foi possível gravar a janela: {}", e))
     }
 
     /// Só o teste apaga: o produto nunca descarta observação por conta própria.

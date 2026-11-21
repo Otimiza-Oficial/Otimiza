@@ -81,7 +81,8 @@ impl Preferences {
         let raw = serde_json::to_string_pretty(&preferencias)
             .map_err(|e| format!("Falha ao serializar preferências: {}", e))?;
 
-        fs::write(&path, raw).map_err(|e| format!("Falha ao gravar preferências: {}", e))
+        crate::utils::arquivo::escrever_atomico(&path, raw.as_bytes())
+            .map_err(|e| format!("Falha ao gravar preferências: {}", e))
     }
 }
 

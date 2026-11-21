@@ -59,10 +59,35 @@ pub fn teto_da_pessoa(fps: u32) -> String {
     )
 }
 
+/// **Pura.** A frase de quando o Jogo liso quer gravar por cima do teto que a pessoa pôs (no Otimiza ou no app da
+/// NVIDIA).
+pub fn teto_da_pessoa_no_liso(fps: u32) -> String {
+    format!(
+        "Você travou este jogo em {} FPS: o Jogo liso não troca o seu teto. Para usar o Jogo liso, desfaça o seu teto \
+         pelo Histórico (ou no app da NVIDIA, se foi lá).",
+        fps
+    )
+}
+
+/// **Pura.** O registro que vale para o Jogo liso decidir. Sem registro do Otimiza e com um teto no driver que o
+/// histórico não conhece (`teto_de_fora`, posto no app da NVIDIA), o teto é da pessoa.
+pub fn atual_para_o_liso(atual: Option<Registro>, teto_de_fora: Option<u32>) -> Option<Registro> {
+    atual.or_else(|| {
+        teto_de_fora
+            .filter(|f| *f > 0)
+            .map(|fps| Registro { origem: Origem::Pessoa, fps, antes: None })
+    })
+}
+
 /// **Pura.** O que fazer com o teto deste jogo. `atual`: o registro que vale agora (já conferido contra o histórico).
 /// `frame_boost_no_jogo`: o Frame Boost está ligado neste jogo ou volta sozinho na próxima partida.
+///
+/// O teto da pessoa vence (1.0.12, A5; Plano 2.0, Onda 0, item 4): nem o Frame Boost nem o Jogo liso gravam por cima.
 pub fn decidir(atual: Option<&Registro>, pedido: Pedido, frame_boost_no_jogo: bool) -> Decisao {
     match pedido {
+        Pedido::JogoLiso(_) if atual.is_some_and(|r| r.origem == Origem::Pessoa) => {
+            Decisao::Recusar(teto_da_pessoa_no_liso(atual.map_or(0, |r| r.fps)))
+        }
         Pedido::JogoLiso(_) if frame_boost_no_jogo => Decisao::Recusar(FRAME_BOOST_CUIDANDO.to_string()),
         Pedido::JogoLiso(fps) => Decisao::Gravar(Registro { origem: Origem::JogoLiso, fps, antes: None }),
         Pedido::FrameBoost(_) if atual.is_some_and(|r| r.origem == Origem::Pessoa) => {
@@ -272,8 +297,13 @@ pub fn aplicar(
     if matches!(pedido, Pedido::FimDoFrameBoost) {
         soltar_fila(executavel, log);
     }
-    let fb = matches!(pedido, Pedido::JogoLiso(_)) && frame_boost_no_jogo(executavel);
-    let decisao = decidir(atual(executavel, log).as_ref(), pedido, fb);
+    let liso = matches!(pedido, Pedido::JogoLiso(_));
+    let fb = liso && frame_boost_no_jogo(executavel);
+    let mut vale = atual(executavel, log);
+    if liso {
+        vale = atual_para_o_liso(vale, teto_de_fora(executavel, caminho, log));
+    }
+    let decisao = decidir(vale.as_ref(), pedido, fb);
     match &decisao {
         Decisao::Gravar(r) => {
             let aberto = caminho.is_none().then(|| crate::modules::windows::frames::caminho_do_processo(executavel)).flatten();
@@ -317,6 +347,24 @@ pub fn aplicar(
         Decisao::Recusar(_) | Decisao::Nada => {}
     }
     Ok(decisao)
+}
+
+/// O teto no perfil que o driver usa para este jogo quando o histórico não diz que foi o Otimiza que o pôs: o da pessoa,
+/// pelo app da NVIDIA. `None` sem teto, sem caminho ou sem ler o driver.
+#[cfg(target_os = "windows")]
+fn teto_de_fora(executavel: &str, caminho: Option<&str>, log: &crate::modules::changelog::ChangeLog) -> Option<u32> {
+    if log.is_applied(&crate::modules::windows::nvdriver::id_do_limite(executavel)) {
+        return None;
+    }
+    let caminho = match caminho {
+        Some(c) => c.to_string(),
+        None => crate::modules::windows::frames::caminho_do_processo(executavel)?,
+    };
+    crate::modules::windows::nvdriver::perfil_em_uso(&caminho)
+        .ok()
+        .flatten()
+        .map(|p| p.teto)
+        .filter(|t| *t > 0)
 }
 
 /// Devolve a fila de 1 quadro deste jogo, se o Otimiza a pôs.
@@ -482,8 +530,39 @@ mod tests {
         }
         assert_eq!(decidir(Some(&p), Pedido::FimDoFrameBoost, false), Decisao::Nada);
         assert!(quem_pos(Some(&p), Some(90)).unwrap().contains("por você"));
-        // O Jogo liso é a pessoa pedindo de novo: grava.
-        assert_eq!(decidir(Some(&p), Pedido::JogoLiso(111), false), Decisao::Gravar(r(Origem::JogoLiso, 111, None)));
+        // 1.0.12 (A5): o Jogo liso também não grava por cima do teto da pessoa.
+        match decidir(Some(&p), Pedido::JogoLiso(111), false) {
+            Decisao::Recusar(m) => assert!(m.contains("90") && m.contains("Histórico"), "{}", m),
+            d => panic!("{:?}", d),
+        }
+    }
+
+    /// O caso do Plano 2.0: a pessoa travou em 141, o Jogo liso queria 72. Recusa, com o Frame Boost ligado ou não.
+    #[test]
+    fn o_jogo_liso_nao_grava_sobre_o_teto_da_pessoa() {
+        let p = r(Origem::Pessoa, 141, None);
+        for fb in [false, true] {
+            match decidir(Some(&p), Pedido::JogoLiso(72), fb) {
+                Decisao::Recusar(m) => assert!(m.contains("141"), "{}", m),
+                d => panic!("{:?}", d),
+            }
+        }
+        // O teto do próprio Jogo liso continua trocável por ele.
+        let liso = r(Origem::JogoLiso, 111, None);
+        assert_eq!(decidir(Some(&liso), Pedido::JogoLiso(72), false), Decisao::Gravar(r(Origem::JogoLiso, 72, None)));
+    }
+
+    /// O teto posto no app da NVIDIA (no driver, fora do histórico) também é da pessoa para o Jogo liso.
+    #[test]
+    fn o_teto_posto_no_app_da_nvidia_e_da_pessoa() {
+        let vale = atual_para_o_liso(None, Some(141));
+        assert_eq!(vale, Some(r(Origem::Pessoa, 141, None)));
+        assert!(matches!(decidir(vale.as_ref(), Pedido::JogoLiso(72), false), Decisao::Recusar(_)));
+        assert_eq!(atual_para_o_liso(None, Some(0)), None, "0 no driver é sem teto");
+        assert_eq!(atual_para_o_liso(None, None), None);
+        // Com registro do Otimiza, vale o registro.
+        let liso = r(Origem::JogoLiso, 111, None);
+        assert_eq!(atual_para_o_liso(Some(liso.clone()), Some(111)), Some(liso));
     }
 
     #[test]

@@ -150,7 +150,8 @@ Todas as otimizações passam por validação de segurança:
 
 ## 📄 Licença
 
-Ver arquivo LICENSE para detalhes.
+Licença proprietária: ver [`LICENCE`](../LICENCE) na raiz do repositório e o contrato de uso em
+[`src-tauri/EULA.txt`](src-tauri/EULA.txt), que o instalador mostra.
 
 ## 🤝 Contribuindo
 

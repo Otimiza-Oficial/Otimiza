@@ -91,19 +91,19 @@ pub fn esquecer(id_do_jogo: &str) -> bool {
     if tudo.remove(id_do_jogo).is_none() {
         return false;
     }
-    serde_json::to_string_pretty(&tudo)
-        .ok()
-        .is_some_and(|json| fs::write(caminho(), json).is_ok())
+    match crate::utils::arquivo::escrever_json(&caminho(), &tudo) {
+        Ok(()) => true,
+        Err(e) => {
+            crate::utils::Logger::warn(&format!("frame boost: não esqueci a escolha de {}: {}", id_do_jogo, e));
+            false
+        }
+    }
 }
 
 pub fn lembrar(id_do_jogo: &str, e: Escolha) -> Result<(), String> {
     let mut tudo = ler_tudo();
     tudo.insert(id_do_jogo.to_string(), e);
-    let c = caminho();
-    if let Some(d) = c.parent() {
-        fs::create_dir_all(d).map_err(|e| e.to_string())?;
-    }
-    fs::write(&c, serde_json::to_string_pretty(&tudo).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    crate::utils::arquivo::escrever_json(&caminho(), &tudo)
 }
 
 /// O jogo `executavel` fechou: se o gerador do Otimiza estava nele e a guarda aprovou, guarda a escolha.

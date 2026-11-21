@@ -86,8 +86,10 @@ fn diagnosticar_agora(
                     crate::modules::windows::tetos::procurar(),
                 ));
             }
-            let r = &g.as_ref().expect("acabou de ser preenchido").1;
-            (Some(r.tetos.clone()), r.monitor_hz)
+            match g.as_ref() {
+                Some((_, r)) => (Some(r.tetos.clone()), r.monitor_hz),
+                None => (None, None),
+            }
         };
         #[cfg(not(target_os = "windows"))]
         let (tetos, monitor_hz): (

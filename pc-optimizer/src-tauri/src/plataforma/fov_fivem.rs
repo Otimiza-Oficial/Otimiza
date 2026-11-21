@@ -86,12 +86,7 @@ pub fn estado() -> Estado {
 }
 
 fn gravar_estado(e: &Estado) -> Result<(), String> {
-    let p = arquivo_do_estado();
-    if let Some(d) = p.parent() {
-        fs::create_dir_all(d).map_err(|e| e.to_string())?;
-    }
-    fs::write(&p, serde_json::to_string_pretty(e).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())
+    crate::utils::arquivo::escrever_json(&arquivo_do_estado(), e)
 }
 
 #[cfg(target_os = "windows")]

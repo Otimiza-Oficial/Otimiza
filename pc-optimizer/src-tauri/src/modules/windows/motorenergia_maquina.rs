@@ -319,8 +319,10 @@ fn garantir_backup(nosso: Option<&str>) -> Result<Backup, String> {
 pub fn marcar_teste_em_andamento(em_andamento: bool) {
     let arquivo = pasta().join("teste_em_andamento");
     if em_andamento {
-        let _ = std::fs::create_dir_all(pasta());
-        let _ = std::fs::write(arquivo, b"1");
+        // Atômica e com rastro (1.0.12): sem a marca, a queda no meio deixaria o candidato de teste valendo.
+        if let Err(e) = crate::utils::arquivo::escrever_atomico(&arquivo, b"1") {
+            crate::utils::Logger::warn(&format!("motor de energia: não marquei o teste em andamento: {}", e));
+        }
     } else {
         let _ = std::fs::remove_file(arquivo);
     }
@@ -370,7 +372,7 @@ pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     if !registry::is_elevated() {
         return None;
     }
-    let otimiza = crate::modules::changelog::ChangeLog::load().is_applied("plano_otimiza");
+    let otimiza = crate::modules::changelog::foto().is_applied("plano_otimiza");
     let backup = ler_backup();
     let existe = backup.as_ref().and_then(|b| power::plano_existe(&b.plano_anterior));
     let r = match decidir_recuperacao(otimiza, backup.is_some(), existe) {
@@ -1059,9 +1061,8 @@ fn ler_json<T: for<'a> Deserialize<'a> + Default>(nome: &str) -> T {
 }
 
 fn gravar_json<T: Serialize>(nome: &str, valor: &T) -> Result<(), String> {
-    std::fs::create_dir_all(pasta()).map_err(|e| e.to_string())?;
     let texto = serde_json::to_string_pretty(valor).map_err(|e| e.to_string())?;
-    std::fs::write(pasta().join(nome), texto)
+    crate::utils::arquivo::escrever_atomico(&pasta().join(nome), texto.as_bytes())
         .map_err(|e| format!("Não foi possível gravar {}: {}", nome, e))
 }
 

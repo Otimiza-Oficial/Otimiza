@@ -507,6 +507,9 @@ const IFEO: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Exe
 /// 1.0.9: "acima do normal" (6) no lugar de "alta" (3), decisão do dono (Plano 2.0, pergunta 2). A alta deixava o jogo
 /// na frente do áudio e da entrada do sistema o tempo todo: som picotando e mouse pesando no carregamento.
 const PRIORIDADE_DO_JOGO: u32 = 6;
+/// Fixar prioridade saiu do produto: só desfazer o que versões antigas fixaram.
+pub const PRIORIDADE_RETIRADA: &str =
+    "Fixar prioridade foi retirado: não mostrava ganho medido. Ainda dá para remover o que foi fixado antes.";
 const PRIORIDADE_ALTA_ANTIGA: u32 = 3;
 
 /// Pura: o valor que está no registro foi escrito pela versão antiga (alta) e deve virar o de hoje.
@@ -514,28 +517,62 @@ pub fn precisa_rebaixar(atual: &crate::modules::changelog::PreviousValue) -> boo
     matches!(atual, crate::modules::changelog::PreviousValue::Dword(v) if *v == PRIORIDADE_ALTA_ANTIGA)
 }
 
-/// Na abertura (com administrador): quem fixou a prioridade antes da 1.0.9 fica com a alta até desfazer. O valor que o
+/// A marca de que a passagem da alta antiga já rodou inteira nesta conta (1.0.12).
+fn marca_da_migracao() -> Option<std::path::PathBuf> {
+    std::env::var("APPDATA").ok().map(|a| {
+        std::path::PathBuf::from(a)
+            .join("pc-optimizer")
+            .join("prioridade-migrada")
+    })
+}
+
+/// Pura: a passagem roda só enquanto não terminou uma vez, e só com administrador (sem ele, tenta na próxima).
+fn migracao_pendente(ja_migrada: bool, administrador: bool) -> bool {
+    !ja_migrada && administrador
+}
+
+/// UMA VEZ, na abertura (com administrador): quem fixou a prioridade antes da 1.0.9 ficou com a alta. O valor que o
 /// PRÓPRIO Otimiza escreveu (só os registros `prioridade:` do Histórico) passa para acima do normal. O valor anterior
 /// guardado no Histórico não muda: desfazer continua devolvendo o que havia antes. Devolve quantos mudou.
+///
+/// 1.0.12 (A4): até aqui a passagem rodava em TODA abertura e reescrevia o IFEO sempre que achava a alta, inclusive a
+/// que a pessoa tivesse posto de volta por conta própria. Agora, com tudo lido e escrito sem erro, fica a marca e o
+/// Otimiza não escreve mais no IFEO na abertura. Com erro, tenta de novo na próxima.
 pub fn rebaixar_prioridade_alta_antiga() -> usize {
-    if !super::registry::is_elevated() {
+    let Some(marca) = marca_da_migracao() else {
+        return 0;
+    };
+    if !migracao_pendente(marca.exists(), super::registry::is_elevated()) {
         return 0;
     }
-    let log = ChangeLog::load();
+    let log = crate::modules::changelog::foto();
     let mut mudados = 0;
+    let mut tudo_certo = true;
     for aplicado in log.applied().iter().filter(|a| a.optimization_id.starts_with("prioridade:")) {
         for mudanca in &aplicado.changes {
             if let ChangeRecord::RegistryValue { hive, path, name, .. } = mudanca {
                 if hive != "HKLM" || name != "CpuPriorityClass" || !path.starts_with(IFEO) {
                     continue;
                 }
-                let alta = super::registry::read(hive, path, name)
-                    .map(|v| precisa_rebaixar(&v))
-                    .unwrap_or(false);
-                if alta && super::registry::set_dword(hive, path, name, PRIORIDADE_DO_JOGO).is_ok() {
-                    mudados += 1;
+                let alta = match super::registry::read(hive, path, name) {
+                    Ok(v) => precisa_rebaixar(&v),
+                    Err(_) => {
+                        tudo_certo = false;
+                        false
+                    }
+                };
+                if alta {
+                    match super::registry::set_dword(hive, path, name, PRIORIDADE_DO_JOGO) {
+                        Ok(_) => mudados += 1,
+                        Err(_) => tudo_certo = false,
+                    }
                 }
             }
+        }
+    }
+    if tudo_certo {
+        if let Err(e) = crate::utils::arquivo::escrever_atomico(&marca, b"1") {
+            crate::utils::Logger::warn(&format!("prioridade: não marquei a passagem como feita: {}", e));
         }
     }
     mudados
@@ -591,7 +628,9 @@ pub fn definir_prioridade_persistente(
     let anterior = super::registry::read("HKLM", &caminho, "CpuPriorityClass")?;
 
     if ativar {
-        super::registry::set_dword("HKLM", &caminho, "CpuPriorityClass", PRIORIDADE_DO_JOGO)?;
+        // RETIRADO (2.9 no comando; 1.0.12 aqui também): fixar prioridade não mostrava ganho medido e é a escrita mais
+        // visível a um anticheat. As travas acima seguem valendo para quem pede; só remover o que já foi fixado passa.
+        return Err(PRIORIDADE_RETIRADA.to_string());
     } else {
         super::registry::restore("HKLM", &caminho, "CpuPriorityClass", &anterior)?;
     }
@@ -879,6 +918,28 @@ mod tests {
         assert!(!precisa_rebaixar(&PreviousValue::Dword(6)));
         assert!(!precisa_rebaixar(&PreviousValue::Dword(2)));
         assert!(!precisa_rebaixar(&PreviousValue::Absent));
+    }
+
+    /// 1.0.12 (A4): a passagem da alta antiga roda uma vez, e só com administrador; depois dela o Otimiza não escreve
+    /// no IFEO na abertura.
+    #[test]
+    fn a_passagem_da_alta_antiga_roda_uma_vez_so() {
+        assert!(migracao_pendente(false, true));
+        assert!(!migracao_pendente(false, false), "sem administrador, fica para a próxima");
+        assert!(!migracao_pendente(true, true), "já feita: não escreve de novo em cada abertura");
+    }
+
+    /// Fixar prioridade não escreve mais no IFEO por nenhum caminho: só remover.
+    #[test]
+    fn fixar_prioridade_nao_escreve_mais() {
+        let producao = include_str!("gamemode.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        assert!(
+            !producao.contains("set_dword(\"HKLM\", &caminho, \"CpuPriorityClass\""),
+            "fixar prioridade voltou a escrever no IFEO"
+        );
     }
 
     #[test]
