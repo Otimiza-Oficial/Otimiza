@@ -98,9 +98,9 @@
 
   function lerEpoca() {
     try {
-      return localStorage.getItem("otimiza.epoca") === "ligada";
+      return localStorage.getItem("otimiza.epoca") !== "desligada";
     } catch {
-      return false;
+      return true;
     }
   }
 
@@ -339,8 +339,8 @@
       <div class="info">
         <h2>Temas de época</h2>
         <span class="apoio">
-          Vem desligado. Ligado, no Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween o painel
-          ganha a saudação e um clima da época, em tons de cinza como o resto da marca. Para de animar com jogo aberto.
+          O painel muda sozinho no Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween: o Oti
+          ganha um enfeite e o fundo, um clima. Para de animar com jogo aberto.
           {#if epocaDeHoje}Agora: <b>{epocaDeHoje.nome}</b>.{/if}
         </span>
       </div>

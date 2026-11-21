@@ -1,6 +1,8 @@
 <script lang="ts">
   // Só em desenvolvimento (`?galeria`): o Oti da marca v2 em cada olhar e nos dois tons, para conferir o desenho.
   import Oti, { type Humor } from "./Oti.svelte";
+  import type { Acessorio } from "../lib/temporadas";
+  const acessorios: Acessorio[] = ["gorro", "cartola", "mascara", "orelhas", "chapeu-de-palha", "bone", "chapeu-de-bruxa"];
 
   const humores: Humor[] = ["atento", "pensando", "jogando", "preocupado", "dormindo"];
 </script>
@@ -12,6 +14,9 @@
   <figure class="claro"><Oti tamanho={180} tom="negativo" /><figcaption>fundo claro (negativo)</figcaption></figure>
   <figure><Oti tamanho={32} tom="branco" /><figcaption>32 px</figcaption></figure>
   <figure class="claro"><Oti tamanho={24} tom="negativo" /><figcaption>24 px</figcaption></figure>
+  {#each acessorios as a (a)}
+    <figure><Oti acessorio={a} tamanho={150} tom="branco" /><figcaption>{a}</figcaption></figure>
+  {/each}
 </main>
 
 <style>

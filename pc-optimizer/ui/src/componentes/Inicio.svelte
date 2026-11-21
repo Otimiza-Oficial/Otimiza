@@ -119,7 +119,7 @@
   <!-- Pronto pra jogar: o Oti olhando o brilho, a prontidão lida neste PC e as duas ações da tela -->
   <section class="bloco b-heroi" aria-labelledby="inicio-titulo">
     <div class="cena" aria-hidden="true">
-      <span class="cena-oti"><Oti humor={tudoPronto ? "feliz" : humor} tamanho={72} rotulo="" /></span>
+      <span class="cena-oti"><Oti acessorio={temporada?.acessorio ?? null} humor={tudoPronto ? "feliz" : humor} tamanho={72} rotulo="" /></span>
       <span class="cena-brilho"><Brilho tamanho={120} densidade={tudoPronto ? 1.3 : 0.8} /></span>
     </div>
     <div class="heroi-texto">
