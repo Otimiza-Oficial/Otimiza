@@ -66,6 +66,7 @@
   import CeuDePoeira from "./componentes/marca/CeuDePoeira.svelte";
   import Logo from "./componentes/marca/Logo.svelte";
   import { duracao, movimentoParado } from "./lib/movimento";
+  import { relogio } from "./lib/relogio";
   import MenuDoFundo from "./componentes/MenuDoFundo.svelte";
 
   type Tema = "claro" | "escuro";
@@ -377,11 +378,11 @@
   // ---------------------------------------------------------------------------------------------------------------
   // O Oti falando
 
-  let maquina: ReturnType<typeof setInterval> | undefined;
+  let pararMaquina = () => {};
   let fecharFala: ReturnType<typeof setTimeout> | undefined;
   function dizer(f: Fala, some = 0) {
     fala = f;
-    clearInterval(maquina);
+    pararMaquina();
     clearTimeout(fecharFala);
     if (jogoNaTela || movimentoParado()) {
       digitado = f.texto;
@@ -390,14 +391,14 @@
       digitado = "";
       digitando = true;
       let i = 0;
-      maquina = setInterval(() => {
+      pararMaquina = relogio.cada(22, () => {
         i += 1;
         digitado = f.texto.slice(0, i);
         if (i >= f.texto.length) {
-          clearInterval(maquina);
+          pararMaquina();
           digitando = false;
         }
-      }, 22);
+      });
     }
     if (some) fecharFala = setTimeout(() => (fala = null), some);
   }
@@ -643,7 +644,6 @@
 
   onMount(() => {
     let vivo = true;
-    let espera: ReturnType<typeof setTimeout> | undefined;
 
     void (async () => {
       versao = await ponte.versao().catch(() => null);
@@ -671,22 +671,28 @@
       await ponte.iniciarMonitor().catch(() => {});
     })();
 
-    const laco = async () => {
-      if (!vivo) return;
-      jogo = await ponte.jogoAberto().catch(() => null);
-      if (!jogo && !document.hidden) {
-        const lido = await ponte.metricas().catch(() => null);
-        if (lido) {
-          metricas = lido;
-          if (lido.cpu.overall != null) historicoCpu = [...historicoCpu.slice(-59), lido.cpu.overall];
-        }
+    // 1.0.12 (Frente 3.1): o jogo aberto chega pelo evento `jogo:sessao` do Rust (lido uma vez ao abrir); a tela não
+    // pergunta mais a cada 2 a 5 s. O processador e a memória do bloco Agora vêm do relógio central: a cada 2 s com a
+    // janela visível e sem jogo; escondida ou com jogo, nada é consultado.
+    void ponte.jogoAberto().then((j) => vivo && (jogo = j)).catch(() => {});
+    let deixarJogo: (() => void) | undefined;
+    void ponte.aoMudarJogo((j) => (jogo = j)).then((d) => {
+      if (vivo) deixarJogo = d;
+      else d();
+    });
+    const lerMetricas = async () => {
+      if (jogo) return;
+      const lido = await ponte.metricas().catch(() => null);
+      if (lido && vivo) {
+        metricas = lido;
+        if (lido.cpu.overall != null) historicoCpu = [...historicoCpu.slice(-59), lido.cpu.overall];
       }
-      espera = setTimeout(laco, jogo ? 5000 : document.hidden ? 4000 : 2000);
     };
-    void laco();
+    void lerMetricas();
+    const pararMetricas = relogio.cada(2000, () => void lerMetricas(), { aoVoltar: true });
 
     // A data muda à meia-noite (e a época junto); conferir de hora em hora basta.
-    const relogioDaEpoca = setInterval(() => (hoje = new Date()), 60 * 60 * 1000);
+    const pararEpoca = relogio.cada(60 * 60 * 1000, () => (hoje = new Date()), { aoVoltar: true });
     const aoMudarEpoca = () => (epocaLigada = lerEpoca());
     window.addEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
 
@@ -756,10 +762,11 @@
       deixarPartida.forEach((f) => f());
       window.removeEventListener(JOGAR, pediuJogar);
       window.removeEventListener(ABRIR_BOAS_VINDAS, pediuBoasVindas);
-      clearTimeout(espera);
-      clearInterval(maquina);
+      deixarJogo?.();
+      pararMetricas();
+      pararMaquina();
       window.removeEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
-      clearInterval(relogioDaEpoca);
+      pararEpoca();
     };
   });
 </script>

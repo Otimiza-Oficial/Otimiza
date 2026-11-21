@@ -5,6 +5,7 @@
   // lembra. A prova A-B (uns 5 minutos) é o que diz se ganhou de verdade; o antes × depois de uma sessão NÃO é prova e
   // a tela diz isso. Receita reprovada na prova não volta a ligar neste jogo.
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import DriverDaPlaca from "./DriverDaPlaca.svelte";
   import FrameBoost from "./FrameBoost.svelte";
   import NoJogo from "./NoJogo.svelte";
@@ -42,8 +43,8 @@
   let ocupado = $state<"" | "medindo" | "ligando" | "desligando" | "provando">("");
   let passou = $state(0);
   let copiado = $state(false);
-  let relogio: ReturnType<typeof setInterval> | undefined;
-  let laco: ReturnType<typeof setTimeout> | undefined;
+  let pararContador = () => {};
+  let pararVigia = () => {};
 
   const prova = $derived<ProvaDoTurbo | null>(painel?.prova ?? null);
   const receita = $derived(painel?.perfil?.receita ?? null);
@@ -60,11 +61,15 @@
 
   // Enquanto a prova roda (inclusive a automática, que começa sozinha), relê o painel devagar.
   function vigiar() {
-    clearTimeout(laco);
-    laco = setTimeout(async () => {
-      await ler();
-      if (painel?.provando) vigiar();
-    }, 3000);
+    pararVigia();
+    pararVigia = relogio.cada(
+      3000,
+      async () => {
+        await ler();
+        if (!painel?.provando) pararVigia();
+      },
+      { aoVoltar: true },
+    );
   }
 
   onMount(async () => {
@@ -85,14 +90,14 @@
     }
   });
   onDestroy(() => {
-    clearInterval(relogio);
-    clearTimeout(laco);
+    pararContador();
+    pararVigia();
   });
 
   function contar() {
     passou = 0;
-    clearInterval(relogio);
-    relogio = setInterval(() => (passou += 1), 1000);
+    pararContador();
+    pararContador = relogio.cada(1000, () => (passou += 1), { escondida: true });
   }
 
   async function ligar(lembrado: boolean) {
@@ -105,7 +110,7 @@
     } catch (e) {
       erro = explicarErro(e);
     } finally {
-      clearInterval(relogio);
+      pararContador();
       ocupado = "";
     }
   }
@@ -132,7 +137,7 @@
     } catch (e) {
       erro = explicarErro(e);
     } finally {
-      clearInterval(relogio);
+      pararContador();
       ocupado = "";
       await ler();
     }

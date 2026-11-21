@@ -8,6 +8,7 @@
   // de travadas diz o que coincidiu com cada uma. O que o Windows não entregou aparece como "não medido", nunca zero.
   // Os limites de FPS escondidos moram na área Energia.
   import { onDestroy } from "svelte";
+  import { relogio } from "../lib/relogio";
     import { noTauri } from "../lib/ponte";
 
   type Classe =
@@ -150,9 +151,9 @@
   let pct = $state(0);
   let d = $state<Diagnostico | null>(null);
   let erro = $state<string | null>(null);
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
 
-  onDestroy(() => clearInterval(relogio));
+  onDestroy(() => pararRelogio());
 
   async function medir(espera: number) {
     if (etapa !== "parado") return;
@@ -163,12 +164,12 @@
       etapa = "medindo";
       const inicio = Date.now();
       pct = 0;
-      relogio = setInterval(() => (pct = Math.min(100, ((Date.now() - inicio) / 1000 / SEGUNDOS) * 100)), 400);
+      pararRelogio = relogio.cada(400, () => (pct = Math.min(100, ((Date.now() - inicio) / 1000 / SEGUNDOS) * 100)), { escondida: true });
       d = noTauri ? await como<Diagnostico>(commands.diagnosticoAoVivo(SEGUNDOS)) : await demo();
     } catch (e) {
       erro = explicarErro(e);
     } finally {
-      clearInterval(relogio);
+      pararRelogio();
       etapa = "parado";
     }
   }

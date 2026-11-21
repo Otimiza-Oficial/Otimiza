@@ -124,3 +124,19 @@ test("um compromisso que quebra não derruba os outros", () => {
   }
   assert.equal(ok, 2);
 });
+
+test("nenhuma tela tem setInterval próprio: tudo passa pelo relógio central", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const src = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src");
+  const arquivos = (pasta: string): string[] =>
+    readdirSync(pasta, { withFileTypes: true }).flatMap((e: { name: string; isDirectory(): boolean }) =>
+      e.isDirectory() ? arquivos(path.join(pasta, e.name)) : /\.(svelte|ts)$/.test(e.name) ? [path.join(pasta, e.name)] : []
+    );
+  const achados = arquivos(src)
+    .filter((f) => !f.endsWith("relogio.ts"))
+    .filter((f) => /\bsetInterval\s*\(/.test(readFileSync(f, "utf8")))
+    .map((f) => path.relative(src, f));
+  assert.deepEqual(achados, []);
+});

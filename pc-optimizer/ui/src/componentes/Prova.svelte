@@ -3,6 +3,7 @@
   // DEPOIS; o Lab compara com a margem de cada lado e só diz "melhorou" quando os intervalos não se encostam. Com
   // poucas rodadas, diz quantas faltam. Abaixo, a última prova alternada do "Otimizar" e o texto para o Discord.
   import { onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import Diagnostico from "./Diagnostico.svelte";
   import Partida from "./Partida.svelte";
   import EsperandoODisco from "./EsperandoODisco.svelte";
@@ -51,13 +52,13 @@
     }
     medindo = lado;
     passou = 0;
-    const t = setInterval(() => (passou += 1), 1000);
+    const parar = relogio.cada(1000, () => (passou += 1), { escondida: true });
     try {
       lab = await ponte.labMedir(processo, lado, SEGUNDOS);
     } catch (e) {
       erro = { titulo: "A medição não terminou", fazer: "Deixe o jogo em primeiro plano durante os 30 segundos e tente de novo. Se repetir, abra o Otimiza como administrador.", detalhe: String(e) };
     } finally {
-      clearInterval(t);
+      parar();
       medindo = null;
     }
   }

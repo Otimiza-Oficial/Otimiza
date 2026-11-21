@@ -7,6 +7,7 @@
   // devolve isso como resultado, não como erro.
 
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import TesteDeReflexo from "./TesteDeReflexo.svelte";
     import { noTauri, ponte, type CapturaDpc, type DriverMedido, type TaxaDoMouse } from "../lib/ponte";
 
@@ -20,7 +21,7 @@
   let passou = $state(0);
   let resultado = $state<CapturaDpc | null>(null);
   let erro = $state<string | null>(null);
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
 
   const SEGUNDOS_DO_MOUSE = 4;
   // A precisão do ponteiro (aceleração e barra de velocidade fora do meio), de `caminho_do_mouse`.
@@ -59,7 +60,7 @@
     else ponteiro = [];
   });
 
-  onDestroy(() => clearInterval(relogio));
+  onDestroy(() => pararRelogio());
 
   async function medir() {
     medindo = true;
@@ -67,14 +68,14 @@
     erro = null;
     resultado = null;
     passou = 0;
-    clearInterval(relogio);
-    relogio = setInterval(() => (passou = Math.min(segundos, passou + 1)), 1000);
+    pararRelogio();
+    pararRelogio = relogio.cada(1000, () => (passou = Math.min(segundos, passou + 1)), { escondida: true });
     try {
       resultado = await ponte.capturarDpc(segundos);
     } catch (e) {
       erro = explicarErro(e);
     } finally {
-      clearInterval(relogio);
+      pararRelogio();
       medindo = false;
       parando = false;
     }

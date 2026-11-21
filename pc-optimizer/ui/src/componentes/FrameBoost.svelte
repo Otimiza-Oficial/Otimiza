@@ -5,6 +5,7 @@
   // mostra: estimado antes de ligar (pelo último FPS nativo medido) e MEDIDO na tela depois; a prova de custo (quanto do
   // FPS o jogo manteve) vem da guarda do Rust. Desligar nunca depende de licença.
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import {
     ferramentas,
     motivo,
@@ -56,7 +57,7 @@
   let leve = $state(ler(CHAVE_LEVE, "0") === "1");
   /** Com a escala desligada nos Ajustes, as opções dela nem aparecem: o Otimiza não muda a resolução do jogo. */
   let escalaPermitida = $state(true);
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
 
   function ler(chave: string, padrao: string) {
     try {
@@ -95,18 +96,9 @@
     // Ligado pelo gerador do Otimiza o número muda a cada segundo; desligado, basta olhar de vez em quando.
     // Com a janela escondida (o jogo na frente, o Otimiza na bandeja) não pergunta nada: cada pergunta abria a sessão
     // do driver, varria os processos e lia o histórico, a partida inteira. Ao voltar, relê na hora.
-    relogio = setInterval(() => {
-      if (!ocupado && !document.hidden) void carregar();
-    }, 1500);
-    document.addEventListener("visibilitychange", aoVoltar);
+    pararRelogio = relogio.cada(1500, () => !ocupado && void carregar(), { aoVoltar: true });
   });
-  function aoVoltar() {
-    if (!document.hidden && !ocupado) void carregar();
-  }
-  onDestroy(() => {
-    clearInterval(relogio);
-    document.removeEventListener("visibilitychange", aoVoltar);
-  });
+  onDestroy(() => pararRelogio());
 
   const a = $derived(p?.ativo ?? null);
   const rec = $derived(p?.recomendado ?? null);

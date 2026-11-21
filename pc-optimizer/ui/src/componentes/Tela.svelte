@@ -6,6 +6,7 @@
   // quem decide a volta é o Rust, então o fim da contagem só relê o diagnóstico.
 
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import VrrDosMonitores from "./VrrDosMonitores.svelte";
   import { ponte, type DiagnosticoDaTela, type TrocaAplicada } from "../lib/ponte";
 
@@ -19,7 +20,7 @@
   let troca = $state<TrocaAplicada | null>(null);
   let restam = $state(0);
   let aviso = $state<Aviso | null>(null);
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
 
   async function carregar() {
     try {
@@ -41,21 +42,25 @@
     }
   });
 
-  onDestroy(() => clearInterval(relogio));
+  onDestroy(() => pararRelogio());
 
   function contar(t: TrocaAplicada) {
-    clearInterval(relogio);
+    pararRelogio();
     restam = Math.ceil(t.prazo_ms / 1000);
-    relogio = setInterval(() => {
+    pararRelogio = relogio.cada(
+      1000,
+      () => {
       restam -= 1;
       if (restam <= 0) {
-        clearInterval(relogio);
+        pararRelogio();
         troca = null;
         aviso = { tipo: "atencao", texto: `Sem confirmação: a tela voltou para ${t.hz_anterior} Hz.` };
         // A volta do Rust acontece no mesmo prazo: um respiro antes de reler.
         setTimeout(carregar, 1500);
       }
-    }, 1000);
+      },
+      { escondida: true },
+    );
   }
 
   async function trocar(t: DiagnosticoDaTela, hz: number) {
@@ -74,7 +79,7 @@
   async function manter() {
     if (!troca) return;
     const t = troca;
-    clearInterval(relogio);
+    pararRelogio();
     troca = null;
     try {
       const fim = await ponte.confirmarTroca(t.token);
@@ -92,7 +97,7 @@
   async function voltar() {
     if (!troca) return;
     const t = troca;
-    clearInterval(relogio);
+    pararRelogio();
     troca = null;
     try {
       const fim = await ponte.voltarTroca(t.token);

@@ -7,6 +7,7 @@
   // com o jogo na frente, então o pedido espera o próximo quadro dele (`escala_pedir_comparacao`) e a tela confere a
   // cada segundo se já chegou (`escala_comparacao`), por até 2 minutos.
   import { onDestroy } from "svelte";
+  import { relogio } from "../lib/relogio";
     import { noTauri } from "../lib/ponte";
 
   type Comparacao = { jogo: string; tela: string; jogo_px: [number, number]; tela_px: [number, number] };
@@ -15,12 +16,12 @@
   let comparacao = $state<Comparacao | null>(null);
   let recado = $state<string | null>(null);
   let divisor = $state(50);
-  let vigia: ReturnType<typeof setInterval> | undefined;
+  let pararVigia = () => {};
 
-  onDestroy(() => clearInterval(vigia));
+  onDestroy(() => pararVigia());
 
   async function pedir() {
-    clearInterval(vigia);
+    pararVigia();
     recado = null;
     comparacao = null;
     if (!noTauri) {
@@ -34,25 +35,28 @@
       return;
     }
     etapa = "esperando";
-    let tentativas = 0;
-    vigia = setInterval(async () => {
-      tentativas += 1;
-      const c = await como<Comparacao | null>(commands.escalaComparacao()).catch(() => null);
-      if (c) {
-        clearInterval(vigia);
-        comparacao = c;
-        divisor = 50;
-        etapa = "pronto";
-      } else if (tentativas >= 120) {
-        clearInterval(vigia);
-        etapa = "parado";
-        recado = "O jogo não voltou para a frente em 2 minutos. Peça a comparação de novo.";
-      }
-    }, 1000);
+    const desde = Date.now();
+    pararVigia = relogio.cada(
+      1000,
+      async () => {
+        const c = await como<Comparacao | null>(commands.escalaComparacao()).catch(() => null);
+        if (c) {
+          pararVigia();
+          comparacao = c;
+          divisor = 50;
+          etapa = "pronto";
+        } else if (Date.now() - desde >= 120_000) {
+          pararVigia();
+          etapa = "parado";
+          recado = "O jogo não voltou para a frente em 2 minutos. Peça a comparação de novo.";
+        }
+      },
+      { aoVoltar: true },
+    );
   }
 
   function fechar() {
-    clearInterval(vigia);
+    pararVigia();
     etapa = "parado";
     comparacao = null;
     recado = null;

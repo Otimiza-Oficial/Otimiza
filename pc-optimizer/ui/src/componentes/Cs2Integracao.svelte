@@ -6,6 +6,7 @@
   // do CS2, e o jogo passa a contar ao Otimiza o momento da partida. Com ela, a medição automática só mede rodada
   // valendo com você vivo. Desligar apaga o arquivo.
   import { onDestroy, onMount } from "svelte";
+  import { relogio } from "../lib/relogio";
   import { ponte, type PainelDoCs2 } from "../lib/ponte";
 
   const MOMENTO = {
@@ -20,7 +21,7 @@
   let erro = $state<string | null>(null);
   let recemLigado = $state(false);
   let lido = $state(false);
-  let relogio: ReturnType<typeof setInterval> | undefined;
+  let pararRelogio = () => {};
 
   async function ler() {
     painel = await ponte.cs2Painel().catch(() => painel);
@@ -29,19 +30,10 @@
 
   onMount(() => {
     void ler();
-    // Com a janela escondida (o jogo na frente) não pergunta nada.
-    relogio = setInterval(() => {
-      if (!document.hidden) void ler();
-    }, 3000);
-    document.addEventListener("visibilitychange", aoVoltar);
+    // Com a janela escondida (o jogo na frente) o relógio central não chama; ao voltar, relê na hora.
+    pararRelogio = relogio.cada(3000, () => void ler(), { aoVoltar: true });
   });
-  function aoVoltar() {
-    if (!document.hidden) void ler();
-  }
-  onDestroy(() => {
-    clearInterval(relogio);
-    document.removeEventListener("visibilitychange", aoVoltar);
-  });
+  onDestroy(() => pararRelogio());
 
   async function alternar() {
     if (!painel) return;

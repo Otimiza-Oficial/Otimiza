@@ -775,6 +775,11 @@ export const ponte = {
     };
   },
   /** `partida:preparada`: o jogo que o "Jogar" abriu apareceu e a receita ligou (ou não, e por quê). */
+  /** O jogo abriu ou fechou (`jogo:sessao`, do vigia de sessão do Rust): a tela não precisa perguntar a cada segundo. */
+  aoMudarJogo: async (f: (j: JogoAberto | null) => void): Promise<() => void> => {
+    if (noTauri) return listen<{ nome: string } | null>("jogo:sessao", (e) => f(e.payload ? { nome: e.payload.nome } : null));
+    return () => {};
+  },
   aoPrepararPartida: async (f: (p: Preparada) => void): Promise<() => void> => {
     if (noTauri) return listen<Preparada>("partida:preparada", (e) => f(e.payload));
     partidaDemo.aoPreparar.push(f);
