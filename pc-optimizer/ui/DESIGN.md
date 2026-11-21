@@ -1,44 +1,84 @@
-# Direção visual da interface nova
+# Direção visual da interface (marca v2)
 
-Lido antes de qualquer tela nova. Código é a fonte da verdade: `src/App.svelte`, `src/componentes/Oti.svelte`,
-`src/componentes/Icone.svelte`, `src/tokens.css` e `src/lib/conversa.ts`.
+Lido antes de qualquer tela nova. A fonte da marca é a entrega aprovada pelo dono (`otimiza-marca-v2`: `MARCA.md`,
+`tokens-marca.json`, `svg/`). Código é a fonte da verdade da interface: `src/tokens.css`, `src/componentes/base/`,
+`src/componentes/Oti.svelte`, `src/componentes/marca/`, `src/App.svelte` e `src/componentes/Inicio.svelte`.
 
-## Referências do dono (07/11/2026)
-- **Mascote**: o disco branco liso com dois olhos em cápsula inclinados, cavados com chanfro claro, cabeça meio de
-  lado. Sem boca, sem mãos: os olhos são a expressão inteira.
-- **Interface**: painel de vidro fosco no estilo visionOS sobre um cômodo desfocado, com a mesma estrutura:
-  - barra de cima em pílula: avatar + "Bem-vindo de volta", busca com o assistente (o Oti no lugar do orbe),
-    Claro/Escuro segmentado e o sino de avisos;
-  - trilho vertical de ícones à esquerda (item ativo em círculo branco);
-  - painel grande com a grade de blocos: Seus jogos (busca + 3 capas), Última partida (FPS médio e 1% pior),
-    Otimizar (o botão principal + atalhos), Agora (processador, memória, tela e Wi-Fi com nome e valor), Durante o
-    jogo (downloads de fundo, Wi-Fi sem procurar redes, driver que trava), Avisos e Tela (Hz em uso × o que aguenta).
-    A estrutura veio da referência; os controles de casa inteligente dela (player, setas, anéis) saíram em 09/11/2026
-    porque fingiam funções que não existem;
-  - abas embaixo com a pílula branca que desliza, e o "+" com as outras áreas.
+A v1 (bolha de vidro azul, `#6E9BFF`, poses do Oti) e o painel de vidro estilo visionOS saíram em 21/11/2026 (1.0.12).
+
+## O que a interface é
+Séria, premium, monocromática. Fundo preto (papel no claro), superfícies sólidas em grafite com borda fina e o fio de
+luz no alto, tipografia Geist. Nada fantasioso nem cartunesco, nada com cara de template. A cor existe **só para
+estado** (ok, atenção, perigo), sempre como ponto, ícone pequeno ou texto curto, nunca como fundo, borda lateral,
+degradê ou enfeite.
+
+## O Oti
+- Disco chapado com dois olhos escuros em cápsula, inclinados −32°, no canto de cima à direita; o olho de trás
+  encurtado, cortado pela borda. No escuro, o original (disco branco); no claro, o negativo (disco carvão, olhos
+  brancos). Até 32 px, os olhos da versão pequena (`simbolo-16`).
+- **O único movimento é o olhar**: os olhos giram em volta do centro. Cada "humor" do código (`OLHAR` em `Oti.svelte`)
+  é só uma direção. Sem boca, brilho, reflexo, sombra, cor, pose, gesto ou acessório (os enfeites de época saíram).
+- Aparece como elemento de marca: no Início (a cena com o brilho), na primeira execução, nos estados vazios de
+  primeira vez (`Estado` com `oti`), no balão da conversa e na busca. Nunca em erro.
+- **A cena**: o Oti olha para onde as partículas de luz se juntam (`marca/Brilho.svelte`, semente fixa, estático). O
+  fundo "Limpo" (`marca/CeuDePoeira.svelte`) espalha poeira de luz mais densa no alto à direita, para onde ele olha.
+- O logotipo é o SVG da entrega (`marca/Logo.svelte`): nunca se digita "Otimiza" com a fonte no lugar dele.
+- Os ícones da bandeja saem de `brand/gerar_bandeja.py`, com a mesma geometria e os mesmos olhares.
+
+## Tokens (`src/tokens.css`)
+- **Cor**: primitivas da marca (preto, carvão, grafite, cinzas, papel, branco) e semânticas que os componentes usam:
+  `--fundo`, `--superficie(-2/-3/-menu)`, `--tinta(-2/-3)`, `--linha(-forte)`, `--acao`, `--contra`, `--foco`,
+  `--ok/--atencao/--perigo` e as versões `-texto`. Componente nunca usa `#hex` nem as primitivas.
+- **Contraste medido** (`testes/contraste.test.ts`): todo texto ≥ 4,5:1 sobre fundo e superfícies nos dois temas;
+  foco e ponto de estado ≥ 3:1.
+- **Tipografia**: Geist só. Títulos 700 com `--rastreio-titulo` (−0,04em); rótulos (`.rotulo`) 500 em caixa alta com
+  `--rastreio-rotulo`; texto 400; números com `tabular-nums`. Escala `--t-apoio` (12) … `--t-heroi` (56). **Nada
+  abaixo de 12 px** (`testes/tamanho-minimo.test.ts`).
+- **Espaço** `--e-1`…`--e-8` (4, 8, 12, 16, 24, 32, 48, 64); **raio** `--raio-1`…`--raio-4` e `--raio-pilula`;
+  **sombra** `--sombra-1/2/3` curtas + `--fio` (a profundidade vem da borda e do contraste, não de nuvem cinza).
+- **Movimento** `--mov-rapido/medio/entrar/lento` e `--curva-padrao/saida/entrada`. Sem mola, sem quique
+  (`testes/movimento.test.ts`).
+
+## Componentes-base (`src/componentes/base/`)
+Toda tela usa estes antes de inventar o seu:
+- `Botao`: principal (cheio na cor do texto, um por bloco), contorno, link e perigo; `trabalhando` diz o que está
+  acontecendo e trava o clique. O verbo diz o que acontece ("Usar 180 Hz", "Medir antes"), nunca "OK".
+- `Interruptor`: liga uma coisa que existe; quando não dá, o motivo e o que fazer aparecem no texto (não só no `title`).
+- `Campo`: rótulo sempre visível, ajuda embaixo, erro no lugar da ajuda com `aria-invalid`.
+- `Estado`: lendo (esqueleto no formato do que vem), vazio, erro e sem administrador, **sempre com o que fazer**.
+  "Não consegui ler" é erro, não vazio. O detalhe técnico fica recolhido ("Detalhe para o suporte").
+- `Esqueleto`, `SeloDeEstado` (ponto + texto), `Dica` (tooltip com mouse e teclado), `Abas` (tablist acessível,
+  "segmento" ou "barra"), `Cartao` e `Confirmar` (o `<dialog>` nativo; ação que apaga ou muda o PC pede confirmação
+  dentro do app, nunca `confirm()`).
+- Classes globais para o que é só estilo: `.btn`, `.segmento`, `.selo` (`.medido` cheio, `.estimado` tracejado),
+  `.ponto[data-tom]`, `.rotulo`, `.apoio`, `.secao`, `.recado`, `.lista`, `.interruptor`, `.campo`.
 
 ## Comportamento
-- Cada bloco mostra um dado lido deste PC ou liga algo que existe de verdade. O que ainda não migrou abre a área
-  dizendo a onda em que chega. Nada finge funcionar.
-- A luz do vidro segue o cursor em cada bloco; bloco sobe um pouco no hover; interruptores com mola; trocar de área
-  entra com desfoque e escala; a pílula das abas desliza.
-- O Oti fala num balão que desce da busca, letra a letra. A pergunta é entendida por palavra-chave (não é IA) e ele
-  admite quando não entende. Navegar fecha o balão.
-- **Jogo aberto**: o Oti avisa ("bom jogo") e só então a interface congela (classe `jogo-aberto`: sem animação, sem
-  desfoque, vidro opaco).
+- Cada bloco mostra um dado lido deste PC ou liga algo que existe de verdade. Nada finge funcionar.
+- Número com origem: selo `medido` ou `estimado`. Sem promessa de ganho antes de medir. No Frame Boost ligado, o
+  multiplicador mostrado é o **real** (tela ÷ jogo), com o porquê e o próximo passo (`lib/frameboost.ts`).
+- **Microtexto** (pt-BR, frases curtas): todo estado e todo erro diz o que aconteceu e o que fazer. Erros passam por
+  `explicarErro` (`lib/erros.ts`); o caminho do suporte é "Ajustes › Versão e suporte". Termo técnico ganha meia
+  frase de explicação.
+- **Primeira execução** (`BoasVindas.svelte`): um fluxo só com progresso: Licença → Medir antes → Primeiro ajuste →
+  Provar, usando as peças de verdade (ativação, laboratório, Otimizar agora). Dá para pular e voltar.
 
-## Regras
-- Texto `#1d1d1f` no claro, `#f5f5f7` no escuro; secundário cinza. Ativo = branco sólido. Ligado = verde `#34c759`.
-- Estado em ponto colorido ao lado do texto. Nunca borda colorida na lateral, texto em degradê ou número decorativo.
-- **Ícones** (`src/lib/icones.ts`): desenhados para o Otimiza, traço 1,75 num quadro 24×24, pontas redondas, sem
-  preenchimento. Só no trilho, no cabeçalho da área e em controle sem palavra (busca, fechar, seta). Linha de lista e
-  botão com texto não levam ícone; nada de ícone em bolinha colorida.
-- **Blocos da tela inicial**: cada número tem nome ("Processador 16%", nunca um anel só com ícone). Controle faz o que
-  parece: interruptor liga algo de verdade, botão diz o que acontece ("Usar 180 Hz", "Medir"); o que só leva a outra
-  área é link de texto com seta. Nada de player, setas ou interruptor que apenas navegam.
-- **Botões**: um principal por bloco (cor do texto, letra do avesso), um pequeno de contorno, e o link de texto. Hover
-  muda cor, não pula nem cresce.
-- Jogo sem capa mostra as iniciais num quadro neutro (`iniciais` em `lib/capas.ts`), não degradê inventado.
-- Estados (lendo, vazio, erro, sem administrador) sempre desenhados, com o que fazer.
-- Para conferir o mascote: `npm run nova:web` e `/?galeria`; o ícone do app sai de `/?icone` →
-  `brand/nova-geracao/oti-icone.png` → `npx tauri icon`.
+## Acessibilidade
+- Abas de verdade: `tablist`/`tab`/`aria-selected`, setas (o trilho com as de cima e de baixo), Home, End e só a
+  escolhida no Tab (`lib/abas.ts`). Grupos de rádio (tema, nível, filtro) andam pelas setas.
+- Foco: o anel global de `:focus-visible` na cor do texto; um componente só muda o recuo, nunca tira o anel.
+- Alto Contraste do Windows (`forced-colors`): toda superfície ganha borda, a escolha vira a cor de destaque do
+  sistema; "mais contraste" engrossa linhas e o texto de apoio.
+
+## Movimento e jogo aberto
+- Movimento sóbrio: a troca de área sobe 6 px e aparece; o marcador das abas desliza; o olhar do Oti gira devagar.
+  Nada pula, cresce ou quica no hover.
+- "Reduzir movimento" e **jogo aberto** (classe `jogo-aberto` na raiz) param tudo: CSS pela regra global, transições
+  do Svelte por `lib/movimento.ts`. Com o jogo aberto também some o desfoque.
+- **A UI escondida não consulta nada**: todo intervalo passa pelo relógio central (`lib/relogio.ts`), que com a
+  janela escondida não chama quem pergunta ao Windows; o jogo aberto chega pelo evento `jogo:sessao` do Rust.
+
+## Conferir
+`npm run testes:ui`, `npx svelte-check --workspace ui --tsconfig ./tsconfig.json`, `npm run fumaca:nova`, e os prints:
+`node scripts/prints-nova.mjs` (todas as áreas) e `node scripts/prints-telas.mjs` (as telas redesenhadas e cada passo
+da primeira execução, nos dois temas). O Oti em cada olhar: `npm run nova:web` e `/?galeria`.
