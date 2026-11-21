@@ -7,6 +7,7 @@
   import { onMount, type Snippet } from "svelte";
   import Cartao from "./base/Cartao.svelte";
   import Esqueleto from "./base/Esqueleto.svelte";
+  import Estado from "./base/Estado.svelte";
   import type { JogoDoCatalogo } from "../lib/catalogo";
   import { como } from "../lib/contrato";
   import { confirmar } from "../lib/confirmar";
@@ -67,7 +68,7 @@
       recado = await acao();
       await carregar();
     } catch (e) {
-      recado = String(e);
+      recado = `Não deu certo: ${String(e)}. Feche o jogo, confira se o Otimiza está como administrador e tente de novo.`;
     } finally {
       ocupado = null;
     }
@@ -106,7 +107,7 @@
   {:else if lendo}
     <Esqueleto linhas={2} rotulo="Lendo a configuração" />
   {:else if configFalhou || !config}
-    <p class="aviso">Não consegui ler a configuração do {jogo.nome} agora. Tente de novo com o jogo fechado.</p>
+    <Estado tipo="erro" compacto titulo={`Não consegui ler a configuração do ${jogo.nome}`} fazer="Feche o jogo e abra esta página de novo: com ele aberto o arquivo fica travado." />
   {:else if config.ilegivel}
     <p class="aviso">{config.ilegivel}</p>
   {:else if !config.arquivo}
@@ -142,7 +143,7 @@
   {#if lendo}
     <Esqueleto linhas={2} rotulo="Medindo os caches" />
   {:else if cacheFalhou}
-    <p class="aviso">Não consegui medir os caches de shader agora.</p>
+    <Estado tipo="erro" compacto titulo="Não consegui medir os caches de shader" fazer="Abra esta página de novo em alguns segundos. Se repetir, abra o Otimiza como administrador." />
   {:else if caches.length === 0}
     <p class="apoio">Nenhum cache de shader do driver ocupando espaço para este jogo.</p>
   {:else}

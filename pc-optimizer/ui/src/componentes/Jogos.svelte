@@ -1,6 +1,8 @@
 <script lang="ts">
   import Esqueleto from "./base/Esqueleto.svelte";
   import Abas from "./base/Abas.svelte";
+  import Estado from "./base/Estado.svelte";
+  import Botao from "./base/Botao.svelte";
   // A área Jogos: os jogos instalados (Steam, Epic e instaladores) com a capa da Steam deste PC, e, para os que o
   // Otimiza já mediu, a última partida e o ganho. O ganho só aparece como número quando é MEDIDO (os intervalos de
   // antes e depois não se encostam); senão a tela diz que não houve diferença ou quantas partidas faltam.
@@ -132,14 +134,21 @@
 
 <div class="jogos">
   {#if erro}
-    <div class="recado" role="alert">
-      <span class="ponto" data-tom="perigo"></span>
-      <div><strong>Não consegui ler seus jogos.</strong><span class="apoio">{erro}</span></div>
-    </div>
+    <Estado
+      tipo="erro"
+      titulo="Não consegui ler seus jogos"
+      fazer="Feche e abra o Otimiza. Se continuar, abra como administrador: algumas lojas guardam a lista numa pasta protegida."
+      detalhe={erro}
+    />
   {:else if itens === null}
     <Esqueleto linhas={4} rotulo="Lendo seus jogos" />
   {:else if itens.length === 0}
-    <p class="vazio">Não achei jogos instalados pela Steam, pela Epic ou por instalador. Jogo instalado em outro lugar também serve: abra ele com o Otimiza aberto, e a partida é reconhecida e medida.</p>
+    <Estado
+      tipo="vazio"
+      oti
+      titulo="Não achei jogos instalados"
+      fazer="Procurei na Steam, na Epic e nos instaladores. Jogo de outro lugar também serve: abra ele com o Otimiza aberto e a partida é reconhecida e medida."
+    />
   {:else}
     {#if atual}
       <section class="secao destaque">
@@ -152,7 +161,7 @@
           <div class="titulo-jogo">
             <h3>{atual.jogo.nome}</h3>
             {#if atual.jogo.loja !== SO_MEDIDO}
-              <button class="btn primario" onclick={() => window.dispatchEvent(new CustomEvent(JOGAR, { detail: atual.jogo.nome }))}>Jogar</button>
+              <Botao variante="principal" onclick={() => atual && window.dispatchEvent(new CustomEvent(JOGAR, { detail: atual.jogo.nome }))}>Jogar</Botao>
             {/if}
           </div>
           <p class="apoio">
@@ -177,7 +186,7 @@
             </div>
             <span class="selo medido origem">medido neste PC</span>
           {:else}
-            <p class="sem-medida">Ainda não medi este jogo. Jogue uma partida com o Otimiza aberto e os números aparecem aqui.</p>
+            <Estado tipo="vazio" compacto titulo="Ainda não medi este jogo" fazer="Jogue uma partida de uns três minutos com o Otimiza aberto: os números aparecem aqui sozinhos." />
           {/if}
         </div>
       </section>
@@ -248,16 +257,29 @@
         <Icone nome="busca" tamanho={14} />
         <input bind:value={filtro} placeholder="Buscar jogo" aria-label="Buscar jogo" />
       </label>
-      <div class="segmento" role="radiogroup" aria-label="Quais jogos">
-        <button role="radio" aria-checked={!soMedidos} onclick={() => (soMedidos = false)}>Todos ({itens.length})</button>
-        <button role="radio" aria-checked={soMedidos} onclick={() => (soMedidos = true)}>
+      <!-- svelte-ignore a11y_interactive_supports_focus -->
+      <div
+        class="segmento"
+        role="radiogroup"
+        aria-label="Quais jogos"
+        onkeydown={(e) => {
+          if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+          e.preventDefault();
+          soMedidos = !soMedidos;
+          (e.currentTarget as HTMLElement).querySelector<HTMLElement>('[aria-checked="false"]')?.focus();
+        }}
+      >
+        <button role="radio" aria-checked={!soMedidos} tabindex={soMedidos ? -1 : 0} onclick={() => (soMedidos = false)}>Todos ({itens.length})</button>
+        <button role="radio" aria-checked={soMedidos} tabindex={soMedidos ? 0 : -1} onclick={() => (soMedidos = true)}>
           Medidos ({itens.filter((i) => i.medido).length})
         </button>
       </div>
     </div>
 
     {#if visiveis.length === 0}
-      <p class="vazio">Nenhum jogo com esse filtro.</p>
+      <Estado tipo="vazio" titulo="Nenhum jogo com esse filtro">
+        {#snippet acao()}<Botao pequeno onclick={() => ((filtro = ""), (soMedidos = false))}>Mostrar todos</Botao>{/snippet}
+      </Estado>
     {:else}
       <div class="grade">
         {#each visiveis as i (i.jogo.nome)}
@@ -289,10 +311,6 @@
     gap: 18px;
     padding-top: 14px;
   }
-  .vazio {
-    padding: 24px 0;
-    color: var(--tinta-2);
-  }
 
   .destaque {
     display: flex;
@@ -306,14 +324,14 @@
     z-index: -1;
     background-size: cover;
     background-position: center;
-    filter: blur(60px) saturate(1.3);
-    opacity: 0.28;
+    filter: blur(60px) grayscale(1);
+    opacity: 0.22;
     pointer-events: none;
   }
   /* No claro, capa escura desfocada vira um cinza sujo: só um toque, clareado. */
   :global(:root[data-tema="dia"]) .luz-da-capa {
-    opacity: 0.1;
-    filter: blur(60px) saturate(1.6) brightness(1.5);
+    opacity: 0.08;
+    filter: blur(60px) grayscale(1) brightness(1.5);
   }
   .capa-grande {
     flex: none;
@@ -356,7 +374,8 @@
     font-family: var(--fonte-titulo);
     font-size: var(--t-destaque);
     font-weight: 700;
-    letter-spacing: -0.025em;
+    letter-spacing: var(--rastreio-titulo);
+    line-height: 1.05;
   }
   .numeros {
     display: flex;
@@ -364,22 +383,22 @@
     gap: 10px;
     margin: 6px 0 2px;
   }
-  /* Cada número num ladrilho de vidro: o número grande, o nome embaixo. */
+  /* Cada número num ladrilho: o número grande, o nome embaixo. */
   .numeros > div {
     min-width: 104px;
-    padding: 12px 16px 10px;
+    padding: var(--e-3) var(--e-4) 10px;
     border-radius: var(--raio-2);
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
     border: 1px solid var(--linha);
   }
   .numeros div {
     display: grid;
   }
   .valor {
-    font-size: var(--t-destaque);
-    font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
+    font-size: var(--t-numero);
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: var(--rastreio-titulo);
   }
   .origem {
     justify-self: start;
@@ -412,10 +431,6 @@
   .largura-toda {
     display: grid;
   }
-  .sem-medida {
-    max-width: 52ch;
-    color: var(--tinta-2);
-  }
 
   .barra {
     display: flex;
@@ -431,9 +446,13 @@
     gap: 8px;
     height: 36px;
     padding: 0 12px;
-    border-radius: var(--raio-3);
-    background: var(--superficie-2);
-    color: var(--tinta-2);
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-pilula);
+    background: transparent;
+    color: var(--tinta-3);
+  }
+  .campo-busca:focus-within {
+    border-color: var(--foco);
   }
   .campo-busca input {
     flex: 1;
@@ -460,9 +479,7 @@
     color: var(--tinta);
     text-align: left;
     cursor: pointer;
-    transition:
-      background var(--mov-rapido) ease,
-      transform var(--mov-medio) var(--curva-mola);
+    transition: background var(--mov-rapido) ease;
   }
   .cartao:hover {
     background: var(--superficie-2);
@@ -476,7 +493,7 @@
     aspect-ratio: 2 / 3;
     border-radius: var(--raio-1);
     overflow: hidden;
-    box-shadow: 0 6px 16px rgb(0 0 0 / 0.14);
+    box-shadow: inset 0 0 0 1px var(--linha);
   }
   .marca-medido {
     position: absolute;
