@@ -18,6 +18,8 @@ export interface LigadoAgora {
   degrau?: string | null;
   /** Ligado só com a escala, sem gerar quadros. */
   so_escala: boolean;
+  /** O gerador saiu da frente: o jogo está perto dos Hz, onde gerar dá tranco (1.0.15). */
+  perto_dos_hz?: boolean;
 }
 
 export type Tom = "ok" | "atencao" | "neutro";
@@ -32,6 +34,17 @@ export interface Leitura {
   tom: Tom;
   /** Para onde o próximo passo leva, quando leva a outra área. */
   area?: "tela" | "prova";
+  /** O botão que resolve aqui mesmo: travar o FPS base na metade dos Hz (o número da base). */
+  metade?: number;
+}
+
+/** O FPS base mínimo do Frame Boost (o `BASE_MINIMA` do Rust). */
+const BASE_MINIMA = 55;
+
+/** A base de metade dos Hz que o botão "Travar em…" grava (72 em 144), se ela fica no mínimo do Frame Boost. */
+export function metadeDosHz(hz: number): number | null {
+  const m = Math.floor(hz / 2);
+  return m >= BASE_MINIMA ? m : null;
 }
 
 /** Abaixo disto do FPS mantido, o Frame Boost está custando FPS de verdade ao jogo. */
@@ -80,6 +93,23 @@ export function lerFrameBoost(a: LigadoAgora): Leitura {
       proximo: real == null ? "Toque em “Medir agora” com o jogo rodando para ver o número de verdade." : "Para conferir o ganho no seu jogo, meça na Prova.",
       tom: real == null ? "neutro" : "ok",
       area: real == null ? undefined : "prova",
+    };
+
+  // FORA DA FRENTE (1.0.15, teste 2): no log do sócio o FiveM ficou a 84-124 fps em 144 Hz e o Frame Boost passou a
+  // partida inteira fora da frente sem a tela dizer o que fazer. Agora diz por quê e dá o botão que resolve.
+  const metade = metadeDosHz(a.hz);
+  if (a.perto_dos_hz && !a.degrau)
+    return {
+      multiplicador: "fora da frente",
+      motivo: `O jogo dá ${a.fps_do_jogo != null ? n(a.fps_do_jogo) : "quase"} fps, perto dos ${a.hz} Hz do monitor. Entre ${metade ?? "a metade"} e ${a.hz} não cabe um quadro gerado no mesmo ritmo (eram as microtravadas): o Frame Boost sai da frente e o jogo aparece direto.`,
+      proximo:
+        metade == null
+          ? "Nada a gerar neste monitor."
+          : a.automatico
+            ? `O Auto trava o FPS base em ${metade} (metade dos ${a.hz} Hz) sozinho em alguns segundos. Depois feche e abra o jogo: ele enche os ${a.hz} Hz liso. Para fazer já, toque em Travar em ${metade}.`
+            : `Toque em Travar em ${metade}: com o FPS base em ${metade} (metade dos ${a.hz} Hz), o 2× fecha os ${a.hz} Hz liso. Vale quando você reabrir o jogo.`,
+      tom: "atencao",
+      metade: metade ?? undefined,
     };
 
   let motivo: string;

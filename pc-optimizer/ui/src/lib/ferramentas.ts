@@ -78,6 +78,8 @@ export interface PainelFrameBoost {
     escala?: NivelDeEscala | null;
     jogo_px?: [number, number] | null;
     tela_px?: [number, number] | null;
+    /** O gerador saiu da frente: o jogo está perto dos Hz (1.0.15). */
+    perto_dos_hz?: boolean;
   } | null;
   aviso: string | null;
   base: { fps: number; multiplicador: number; valendo: boolean } | null;
@@ -286,6 +288,8 @@ export const ferramentas = {
     noTauri ? como<PainelFrameBoost>(commands.frameBoostDestravarBase()) : Promise.resolve(structuredClone(fbDemo)),
   frameBoostTravarBase: (): Promise<PainelFrameBoost> =>
     noTauri ? como<PainelFrameBoost>(commands.frameBoostTravarBase()) : Promise.resolve(structuredClone(fbDemo)),
+  frameBoostTravarNaMetade: (): Promise<PainelFrameBoost> =>
+    noTauri ? como<PainelFrameBoost>(commands.frameBoostTravarNaMetade()) : Promise.resolve(structuredClone(fbDemo)),
   frameBoostMedir: (): Promise<PainelFrameBoost> =>
     noTauri ? como<PainelFrameBoost>(commands.frameBoostMedir()) : Promise.resolve(structuredClone(fbDemo)),
 

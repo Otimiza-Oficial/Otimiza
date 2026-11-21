@@ -446,6 +446,7 @@ mod tests {
         "turbo_provar",
         "config_motor_aplicar",
         "frame_boost_travar_base",
+        "frame_boost_travar_na_metade",
         "jogo_liso_aplicar",
         "jogo_liso_depois_da_partida",
         "memoria_fechar",

@@ -67,6 +67,9 @@ pub struct Ativo {
     pub jogo_px: Option<[i32; 2]>,
     #[serde(default)]
     pub tela_px: Option<[i32; 2]>,
+    /// O gerador saiu da frente: o jogo está perto dos Hz, onde gerar dá tranco. A tela oferece travar em Hz/2.
+    #[serde(default)]
+    pub perto_dos_hz: bool,
 }
 
 /// O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando).
@@ -207,6 +210,7 @@ pub fn ativo_de(e: &geracao::Estado) -> Option<Ativo> {
         escala: e.escala,
         jogo_px: e.escala.and(e.area).map(|a| [a.largura, a.altura]),
         tela_px: e.ampliada.map(|a| [a.largura, a.altura]),
+        perto_dos_hz: e.perto_dos_hz && e.situacao == Situacao::Gerando,
     })
 }
 
@@ -277,6 +281,7 @@ pub fn ativo_do_driver(recurso: Recurso, medicao: Option<&Medicao>) -> Ativo {
         escala: None,
         jogo_px: None,
         tela_px: None,
+        perto_dos_hz: false,
         geracao_vista: vista,
         nota: Some(match vista {
             None => "Ligado no driver. Toque em \u{201c}Medir agora\u{201d} com o jogo em movimento para ver o FPS na tela.".to_string(),
@@ -779,6 +784,41 @@ pub fn decisao_do_portao(
     }
 }
 
+/// **Pura.** A base de exatamente metade dos Hz (72 em 144), se ela fica no mínimo do Frame Boost e divide os Hz.
+pub fn metade_dos_hz(hz: u32) -> Option<u32> {
+    let m = hz / 2;
+    (m >= BASE_MINIMA && fracao_dos_hz(m, hz) == Some(2)).then_some(m)
+}
+
+/// **Pura.** O vigia do Auto trava a base na metade dos Hz sozinho? Só com o gerador ligado no Auto, sem escala, e o
+/// jogo perto dos Hz por `PERTO_FIRME_S` seguidos, acima da metade (abaixo dela a base de Hz/2 não seguraria).
+pub fn auto_trava_na_metade(automatico: bool, escala: bool, perto_ha_s: f64, fps_reais: f64, hz: u32) -> bool {
+    automatico
+        && !escala
+        && perto_ha_s >= PERTO_FIRME_S
+        && metade_dos_hz(hz).is_some_and(|m| fps_reais >= m as f64)
+}
+
+/// Quanto tempo o Auto espera o jogo ficar perto dos Hz antes de travar a base sozinho (uma tela de carga não conta).
+pub const PERTO_FIRME_S: f64 = 10.0;
+
+/// Trava a base do jogo aberto na metade dos Hz (o botão "Travar em 72" e o vigia do Auto). Devolve a frase da tela,
+/// que também fica na nota da base.
+#[cfg(target_os = "windows")]
+pub fn travar_na_metade(log: &mut crate::modules::changelog::ChangeLog) -> Result<String, String> {
+    let jogo = super::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+    if !crate::modules::windows::registry::is_elevated() {
+        return Err(PRECISA_DE_ADMINISTRADOR.to_string());
+    }
+    if crate::modules::windows::nvdriver::estado() != crate::modules::windows::nvdriver::Nvapi::Disponivel {
+        return Err(SO_NVIDIA.to_string());
+    }
+    let hz = hz_do_jogo(jogo.pid).ok_or("Não consegui ler os Hz do monitor do jogo para travar o FPS base.")?;
+    let nota = super::base_do_jogo::travar_na_metade(&jogo.executavel, hz, log)?;
+    anotar_base(Some(nota.clone()));
+    Ok(nota)
+}
+
 /// O FPS base mínimo para gerar (AFMF pede 55 em 1080p, o FSR 3 recomenda 60).
 pub const BASE_MINIMA: u32 = 55;
 
@@ -1007,6 +1047,25 @@ mod tests {
         assert_eq!(fracao_dos_hz(100, 144), None);
         assert_eq!(fracao_dos_hz(144, 144), None, "1×: nada a gerar");
         assert_eq!(fracao_dos_hz(30, 144), None, "além de 4×");
+    }
+
+    #[test]
+    fn a_metade_dos_hz_e_a_base_do_toque() {
+        assert_eq!(metade_dos_hz(144), Some(72));
+        assert_eq!(metade_dos_hz(165), Some(82));
+        assert_eq!(metade_dos_hz(240), Some(120));
+        assert_eq!(metade_dos_hz(60), None, "30 fica abaixo do mínimo do Frame Boost");
+        assert_eq!(metade_dos_hz(0), None);
+    }
+
+    #[test]
+    fn o_auto_trava_sozinho_no_caso_do_socio() {
+        // O log do 4.0.15-teste.1: FiveM a 84-124 FPS em 144 Hz, o Auto fora da frente o tempo todo.
+        assert!(auto_trava_na_metade(true, false, 10.0, 105.0, 144));
+        assert!(!auto_trava_na_metade(true, false, 8.0, 105.0, 144), "ainda não firme (tela de carga)");
+        assert!(!auto_trava_na_metade(false, false, 60.0, 105.0, 144), "no 2× fixo é o botão, não sozinho");
+        assert!(!auto_trava_na_metade(true, true, 60.0, 105.0, 144), "com escala a sobreposição é a tela");
+        assert!(!auto_trava_na_metade(true, false, 60.0, 62.0, 144), "abaixo de 72 a base não seguraria");
     }
 
     use super::*;

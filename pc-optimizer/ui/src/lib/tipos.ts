@@ -434,6 +434,11 @@ export const commands = {
 	 */
 	frameBoostTravarBase: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_travar_base"),
 	/**
+	 *  `EXIGEM_LICENCA`: trava o FPS base do jogo aberto em exatamente metade dos Hz (72 em 144), o "Travar em 72" da tela
+	 *  quando o Frame Boost sai da frente com o jogo perto dos Hz. Vale ao reabrir o jogo.
+	 */
+	frameBoostTravarNaMetade: () => __TAURI_INVOKE<PainelFrameboost_Serialize>("frame_boost_travar_na_metade"),
+	/**
 	 *  O Frame Boost do jogo aberto: o gerador que o automático escolhe, os multiplicadores que cabem no monitor dele, a
 	 *  estimativa (ESTIMADA) antes de ligar e o FPS na tela (MEDIDO) depois. `LIVRES`: só lê.
 	 */
@@ -1009,6 +1014,8 @@ export type Ativo_Deserialize = {
 	escala?: NivelDeEscala | null,
 	jogo_px?: [number, number] | null,
 	tela_px?: [number, number] | null,
+	/**  O gerador saiu da frente: o jogo está perto dos Hz, onde gerar dá tranco. A tela oferece travar em Hz/2. */
+	perto_dos_hz?: boolean,
 };
 
 export type Ativo_Serialize = {
@@ -1051,6 +1058,8 @@ export type Ativo_Serialize = {
 	escala: NivelDeEscala | null,
 	jogo_px: [number, number] | null,
 	tela_px: [number, number] | null,
+	/**  O gerador saiu da frente: o jogo está perto dos Hz, onde gerar dá tranco. A tela oferece travar em Hz/2. */
+	perto_dos_hz: boolean,
 };
 
 /**  Como o endereço virou driver. */

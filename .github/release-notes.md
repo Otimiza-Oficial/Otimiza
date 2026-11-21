@@ -31,11 +31,17 @@ Atualização da 1.0 (número interno 4.0.15). Correção de bugs.
   120 a 140 FPS num monitor de 144 Hz), o Frame Boost colocava quadros gerados aqui e ali, e a imagem dava pequenos
   trancos ao virar. Agora, nessa faixa, ele sai da frente e o jogo aparece direto; ele só gera quando o jogo está
   bem abaixo dos Hz e o ritmo fica regular. A tela avisa quando isso acontece.
+- **Travar em 72 com um toque:** com o jogo entre a metade e os Hz do monitor (por exemplo, 90 a 130 FPS em 144 Hz),
+  a tela do Frame Boost mostra por que ele saiu da frente e o botão "Travar em 72": o FPS base fica em exatamente
+  metade dos Hz, e o 2× entrega os 144 no mesmo ritmo. No Auto, o Otimiza faz isso sozinho depois de alguns segundos e
+  explica na tela. Vale quando você reabrir o jogo, e o teto do Jogo liso que havia volta quando o Frame Boost sair.
+- **"Travar de novo" com teto do Jogo liso:** se o Jogo liso tinha travado o jogo num número que não divide os Hz
+  (como 141 ou 144 num monitor de 144 Hz), o "Travar de novo" respondia "já estava" e nada mudava. Agora ele troca.
 - **2× e Auto com a mesma cara:** a nitidez que só a escala aplicava vale agora em qualquer modo. Quem preferir a
   imagem sem nitidez escolhe "Desligada" em Nitidez, na tela do Frame Boost.
 
 Se você foi afetado, não precisa fazer nada: é só atualizar. Para o Frame Boost dobrar liso de verdade, deixe o FPS
-base travado (toque em "Travar de novo" com o Otimiza aberto como administrador).
+base travado na metade dos Hz (toque em "Travar em 72" com o Otimiza aberto como administrador e reabra o jogo).
 
 ---
 
