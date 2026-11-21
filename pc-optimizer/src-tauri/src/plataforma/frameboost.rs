@@ -685,10 +685,18 @@ pub fn ligar(
             {
                 return Err(recusa.to_string());
             }
-            if !so_escala && !sem_limite {
-                let base = portao_da_base(&jogo.executavel, jogo.pid, hz.unwrap_or(0), log)?;
+            let solta = super::base_do_jogo::solta(&jogo.executavel);
+            if passa_pelo_portao(so_escala, sem_limite, solta) {
+                let base = portao_da_base(&jogo.executavel, jogo.pid, hz.unwrap_or(0), log).inspect_err(|m| {
+                    crate::utils::Logger::warn(&format!("frame boost: não ligou em {}: {}", jogo.executavel, m))
+                })?;
                 m = base.multiplicador;
                 automatico = false;
+            } else if solta && !so_escala && !sem_limite {
+                crate::utils::Logger::info(&format!(
+                    "frame boost: base de {} solta pela pessoa, liga sem travar o FPS base",
+                    jogo.executavel
+                ));
             }
 
             geracao::ligar(geracao::Configuracao {
@@ -714,6 +722,14 @@ pub fn ligar(
         }
         _ => Err("Este gerador não liga pelo Otimiza.".to_string()),
     }
+}
+
+/// Pura: o ligar passa pelo portão da base (travar o FPS do jogo numa fração dos Hz)? Não com só escala, nem sem
+/// limite, nem com a base SOLTA: quem tocou em Destravar escolheu gerar sem travar. Antes (até a 1.0.13) o portão rodava
+/// mesmo solto: esperava o jogo na frente e media 15 s para o `travar` responder "FPS base solto", e o ligar falhava
+/// sempre ("O Frame Boost não respondeu"), com o "Travar de novo" só aparecendo com ele já ligado: beco sem saída.
+pub fn passa_pelo_portao(so_escala: bool, sem_limite: bool, base_solta: bool) -> bool {
+    !so_escala && !sem_limite && !base_solta
 }
 
 /// Pura: o que o portão da base responde. `travada`: a base gravada e se está valendo nesta partida (o jogo abriu
@@ -831,12 +847,13 @@ fn portao_da_base(
     if travada.as_ref().is_some_and(|b| !b.valendo) {
         super::teto_do_jogo::marcar_esperando_reabrir(executavel);
     }
-    match &r {
-        Ok(b) => crate::utils::Logger::info(&format!(
+    // O "não ligou" vai para o log em quem chama: os retornos antecipados daqui (administrador, NVIDIA, "volte para o
+    // jogo") também precisam de rastro.
+    if let Ok(b) = &r {
+        crate::utils::Logger::info(&format!(
             "frame boost: base de {} em {} fps valendo, {}× fixo ({} Hz)",
             executavel, b.fps, b.multiplicador, hz
-        )),
-        Err(m) => crate::utils::Logger::warn(&format!("frame boost: não ligou em {}: {}", executavel, m)),
+        ));
     }
     r
 }
@@ -941,6 +958,17 @@ mod bancada_no_jogo {
 
 #[cfg(test)]
 mod tests {
+    /// 1.0.14: com a base solta (a pessoa tocou em Destravar) o ligar não passa pelo portão. Antes passava, e o portão
+    /// sem base travada só sabia recusar: o Frame Boost nunca mais ligava naquele jogo, e o "Travar de novo" só aparecia
+    /// com ele ligado.
+    #[test]
+    fn com_a_base_solta_o_frame_boost_liga_sem_o_portao() {
+        assert!(super::passa_pelo_portao(false, false, false), "o caminho de todo dia trava a base");
+        assert!(!super::passa_pelo_portao(false, false, true), "solta: liga sem travar");
+        assert!(!super::passa_pelo_portao(true, false, false), "só escala não trava");
+        assert!(!super::passa_pelo_portao(false, true, false), "sem limite não trava");
+    }
+
     #[test]
     fn o_frame_boost_so_liga_com_a_base_travada_valendo() {
         use super::super::base_do_jogo::BaseTravada;

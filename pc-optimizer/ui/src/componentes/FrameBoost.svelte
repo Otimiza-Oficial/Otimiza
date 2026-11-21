@@ -18,7 +18,7 @@
   import Botao from "./base/Botao.svelte";
   import Estado from "./base/Estado.svelte";
   import SeloDeEstado from "./base/SeloDeEstado.svelte";
-  import { lerFrameBoost } from "../lib/frameboost";
+  import { erroDaAcao, lerFrameBoost, type AcaoDoFrameBoost } from "../lib/frameboost";
   import { abrirArea } from "../lib/areas";
 
   const CHAVE_MULT = "otimiza-fb-mult";
@@ -48,6 +48,9 @@
 
   let p = $state<PainelFrameBoost | null>(null);
   let erro = $state<string | null>(null);
+  /** O erro da última ação (ligar, desligar…), à parte do `erro` da leitura: a releitura a cada 1,5 s apagava o erro da
+   *  ação antes de a pessoa ler. Some na próxima ação. */
+  let falha = $state<{ titulo: string; fazer: string; detalhe: string } | null>(null);
   let ocupado = $state(false);
   let pedido = $state(ler(CHAVE_MULT, "0"));
   let escalaPedida = $state<NivelDeEscala | null>(lerEscala());
@@ -199,13 +202,13 @@
     return l;
   });
 
-  async function agir(f: () => Promise<PainelFrameBoost>) {
+  async function agir(acao: AcaoDoFrameBoost, f: () => Promise<PainelFrameBoost>) {
     ocupado = true;
-    erro = null;
+    falha = null;
     try {
       p = await f();
     } catch (e) {
-      erro = String(e);
+      falha = { ...erroDaAcao(acao, String(e)), detalhe: String(e) };
     } finally {
       ocupado = false;
     }
@@ -431,12 +434,12 @@
 
           <div class="acoes">
             {#if a}
-              <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostDesligar)}>Desligar Frame Boost</button>
+              <button class="btn" disabled={ocupado} onclick={() => agir("desligar", ferramentas.frameBoostDesligar)}>Desligar Frame Boost</button>
               {#if a.pelo_driver}
-                <button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostMedir)}>{ocupado ? "Medindo 6 s…" : "Medir agora"}</button>
+                <button class="btn" disabled={ocupado} onclick={() => agir("medir", ferramentas.frameBoostMedir)}>{ocupado ? "Medindo 6 s…" : "Medir agora"}</button>
               {/if}
             {:else}
-              <button class="btn primario grande" disabled={ocupado || !liga} onclick={() => agir(() => ferramentas.frameBoostLigar(mult, escala, mult === 0 ? alvo : null, leve))}>
+              <button class="btn primario grande" disabled={ocupado || !liga} onclick={() => agir("ligar", () => ferramentas.frameBoostLigar(mult, escala, mult === 0 ? alvo : null, leve))}>
                 {experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Liga pelo painel do driver"}
               </button>
             {/if}
@@ -456,7 +459,7 @@
           <button
             class="btn"
             disabled={ocupado || !liga}
-            onclick={() => agir(() => ferramentas.frameBoostLigar(l.multiplicador, escalaPermitida ? l.escala : null, l.multiplicador === 0 ? l.alvo_fps : null))}
+            onclick={() => agir("ligar", () => ferramentas.frameBoostLigar(l.multiplicador, escalaPermitida ? l.escala : null, l.multiplicador === 0 ? l.alvo_fps : null))}
           >Usar de novo</button>
         </div>
       {/if}
@@ -492,16 +495,17 @@
               <span class="selo" class:medido={p.base.valendo}>{p.base.valendo ? "valendo" : "vale ao reabrir o jogo"}</span>{/if}</span>
           <p class="apoio">{p.nota_da_base ?? "Base travada numa fração do monitor: cada quadro real ganha sempre o mesmo número de gerados."}</p>
         </div>
-        {#if p.base}<button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostDestravarBase)}>Destravar</button>{/if}
+        {#if p.base}<button class="btn" disabled={ocupado} onclick={() => agir("base", ferramentas.frameBoostDestravarBase)}>Destravar</button>{/if}
       </div>
     {/if}
     {#if doOtimiza && p.base_solta && !p.base}
       <div class="linha">
         <div>
           <span>FPS base solto</span>
-          <p class="apoio">Você destravou: o Frame Boost não trava a base deste jogo sozinho.</p>
+          <p class="apoio">Você destravou: o Frame Boost liga sem travar a base deste jogo. Travar de novo deixa cada quadro real com o mesmo número de gerados.</p>
         </div>
-        {#if a && !a.pelo_driver}<button class="btn" disabled={ocupado} onclick={() => agir(ferramentas.frameBoostTravarBase)}>Travar de novo</button>{/if}
+        <!-- Também desligado (1.0.14): só ligado era um beco sem saída, porque o ligar recusava com a base solta. -->
+        {#if !a?.pelo_driver}<button class="btn" disabled={ocupado} onclick={() => agir("base", ferramentas.frameBoostTravarBase)}>Travar de novo</button>{/if}
       </div>
     {/if}
 
@@ -521,8 +525,10 @@
     {/if}
 
     {#each avisos as t, i (i)}<p class="aviso"><span class="ponto" data-tom="atencao" aria-hidden="true"></span>{t}</p>{/each}
-    {#if erro}
-      <Estado tipo="erro" titulo="O Frame Boost não respondeu" fazer="Tente de novo. Se o jogo travou, Ctrl+Alt+G desliga de dentro dele." detalhe={erro} />
+    {#if falha}
+      <Estado tipo="erro" titulo={falha.titulo} fazer={falha.fazer} detalhe={falha.detalhe} />
+    {:else if erro}
+      <Estado tipo="erro" titulo="Não consegui reler o Frame Boost" fazer="Ele tenta de novo sozinho. Se continuar, feche e abra o Otimiza." detalhe={erro} />
     {/if}
 
     {#if p.opcoes.length}

@@ -116,3 +116,24 @@ export function lerFrameBoost(a: LigadoAgora): Leitura {
     area: "prova",
   };
 }
+
+/** O que a pessoa pediu ao Frame Boost quando deu erro. */
+export type AcaoDoFrameBoost = "ligar" | "desligar" | "medir" | "base";
+
+const TITULO_DA_ACAO: Record<AcaoDoFrameBoost, string> = {
+  ligar: "O Frame Boost não ligou",
+  desligar: "O Frame Boost não desligou",
+  medir: "Não consegui medir agora",
+  base: "Não consegui mudar o FPS base",
+};
+
+const SAIDA = "Se o jogo travou, Ctrl+Alt+G desliga de dentro dele.";
+
+/** O erro de uma ação, em título e próximo passo (1.0.14). Antes todo erro virava "O Frame Boost não respondeu" e o
+ *  motivo do Rust (que já é uma frase com o que fazer: "volte para o jogo", "abra como administrador") ficava recolhido
+ *  no "Detalhe para o suporte": a pessoa via só "não respondeu". Agora o motivo é o próximo passo. */
+export function erroDaAcao(acao: AcaoDoFrameBoost, erro: string): { titulo: string; fazer: string } {
+  const motivo = erro.replace(/^Error:\s*/, "").trim();
+  const fazer = motivo ? motivo : "Tente de novo.";
+  return { titulo: TITULO_DA_ACAO[acao], fazer: acao === "desligar" ? `${fazer} ${SAIDA}` : fazer };
+}
