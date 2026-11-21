@@ -469,7 +469,7 @@
   .progresso div {
     height: 100%;
     background: var(--acao);
-    transition: width 600ms ease;
+    transition: width var(--mov-lento) var(--curva-padrao);
   }
   .veredito-calibracao {
     display: flex;

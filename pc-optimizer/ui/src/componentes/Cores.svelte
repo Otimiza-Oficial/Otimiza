@@ -297,8 +297,8 @@
     font-weight: 600;
     cursor: pointer;
     transition:
-      border-color 160ms,
-      transform 160ms cubic-bezier(0.3, 1.5, 0.5, 1);
+      border-color var(--mov-rapido),
+      transform var(--mov-rapido) var(--curva-padrao);
   }
   .predef:hover {
     transform: translateY(-2px);

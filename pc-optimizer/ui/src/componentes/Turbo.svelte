@@ -467,7 +467,7 @@
     padding: 16px 18px;
     border: 1px solid var(--linha);
     border-radius: var(--raio-3);
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
   }
   .veredito {
     display: flex;

@@ -285,7 +285,7 @@
     height: 100%;
     border-radius: 2px;
     background: var(--tinta-2);
-    transition: width 400ms ease;
+    transition: width var(--mov-lento) var(--curva-padrao);
   }
   .veredito {
     display: grid;

@@ -951,7 +951,7 @@
     width: 100%;
     border-radius: 4px;
     background: var(--tinta-3);
-    transition: height 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: height var(--mov-lento) var(--curva-padrao);
   }
   .periodo[data-tom="atencao"] .barra span {
     background: var(--atencao);

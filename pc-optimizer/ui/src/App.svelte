@@ -64,6 +64,7 @@
   import PapelDeFundo from "./componentes/PapelDeFundo.svelte";
   import CeuDePoeira from "./componentes/marca/CeuDePoeira.svelte";
   import Logo from "./componentes/marca/Logo.svelte";
+  import { duracao, movimentoParado } from "./lib/movimento";
   import MenuDoFundo from "./componentes/MenuDoFundo.svelte";
 
   type Tema = "claro" | "escuro";
@@ -381,7 +382,7 @@
     fala = f;
     clearInterval(maquina);
     clearTimeout(fecharFala);
-    if (jogoNaTela || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (jogoNaTela || movimentoParado()) {
       digitado = f.texto;
       digitando = false;
     } else {
@@ -577,9 +578,8 @@
   /** A troca de área: sobe 6 px e aparece, sem desfoque nem escala (movimento sóbrio, 1.0.12 Frente 1.6). Parada com
    *  jogo aberto e com "reduzir movimento". */
   function entrar(_no: HTMLElement) {
-    const parado = jogoNaTela || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     return {
-      duration: parado ? 0 : 280,
+      duration: jogoNaTela ? 0 : duracao(280),
       easing: cubicOut,
       css: (t: number, u: number) => `opacity: ${t}; transform: translateY(${u * 6}px)`,
     };

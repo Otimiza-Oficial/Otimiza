@@ -10,6 +10,7 @@
   import { fade } from "svelte/transition";
   import { noTauri, ponte, type EstadoDaLicenca } from "../lib/ponte";
   import { lerCampo, limparChave } from "../lib/chave";
+  import { duracao } from "../lib/movimento";
 
   let {
     licenca,
@@ -27,7 +28,6 @@
 
   const leitura = $derived(lerCampo(texto));
   const atual = $derived(ativada ?? licenca);
-  const parado = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   async function copiar() {
     if (!atual) return;
@@ -69,7 +69,7 @@
 </script>
 
 {#if atual?.ativa}
-  <div class="ativa" role="status" in:fade={{ duration: parado ? 0 : 240 }}>
+  <div class="ativa" role="status" in:fade={{ duration: duracao(240) }}>
     <span class="selo-ok" aria-hidden="true">
       <svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9" /></svg>
     </span>

@@ -552,7 +552,7 @@
     background: var(--cor);
     box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
     cursor: pointer;
-    transition: transform 140ms cubic-bezier(0.3, 1.5, 0.5, 1);
+    transition: transform var(--mov-rapido) var(--curva-padrao);
   }
   .cores button:hover,
   .livre:hover {

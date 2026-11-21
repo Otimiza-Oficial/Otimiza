@@ -621,7 +621,7 @@
   .gerador {
     padding: 4px 10px;
     border-radius: 999px;
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
     border: 1px solid var(--linha);
     color: var(--tinta-2);
     font-size: var(--t-apoio);
@@ -662,7 +662,7 @@
     gap: 16px;
     padding: 16px 18px;
     border-radius: 16px;
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
     border: 1px solid var(--linha);
   }
   .escolha {
@@ -722,7 +722,7 @@
     padding: 12px 14px;
     border-radius: 14px;
     border: 1px solid var(--linha);
-    background: var(--bloco, var(--superficie-2));
+    background: var(--superficie-2);
   }
   .lembrada p {
     margin-top: 4px;

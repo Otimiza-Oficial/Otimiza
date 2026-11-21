@@ -48,6 +48,7 @@
   // No tema claro sai o negativo (disco carvão, olhos brancos): o Oti branco nunca vai em fundo claro. `tom` força um
   // dos dois quando o fundo dele não é o da página (o avatar escuro da barra, por exemplo).
   import { onMount, untrack } from "svelte";
+  import { movimentoParado } from "../lib/movimento";
 
   let {
     humor = "atento",
@@ -92,13 +93,12 @@
 
   onMount(() => {
     if (!segueCursor) return;
-    const reduzir = window.matchMedia("(prefers-reduced-motion: reduce)");
     let quadro = 0;
     let ultimo: PointerEvent | null = null;
     const mover = (e: PointerEvent) => {
       ultimo = e;
       // Com jogo aberto a casca congela: nem o olhar acompanha.
-      if (quadro || reduzir.matches || document.documentElement.classList.contains("jogo-aberto") || !raiz) return;
+      if (quadro || movimentoParado() || !raiz) return;
       quadro = requestAnimationFrame(() => {
         quadro = 0;
         if (!ultimo || !raiz) return;

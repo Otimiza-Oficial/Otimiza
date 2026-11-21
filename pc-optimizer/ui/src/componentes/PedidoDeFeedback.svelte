@@ -381,13 +381,13 @@
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
-    transition: transform var(--mov-rapido) var(--curva-mola), filter var(--mov-rapido) ease;
+    transition: transform var(--mov-rapido) var(--curva-padrao), filter var(--mov-rapido) ease;
   }
+  /* Marca v2: sem o azul do Discord nem brilho; o botão principal na cor do texto. */
   .botao-discord {
     border: 0;
-    background: #5865f2;
-    color: #fff;
-    box-shadow: 0 10px 24px -8px rgb(88 101 242 / 0.7);
+    background: var(--acao);
+    color: var(--contra);
   }
   .botao-discord svg {
     width: 20px;

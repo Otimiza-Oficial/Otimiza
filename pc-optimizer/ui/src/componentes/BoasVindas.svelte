@@ -21,6 +21,7 @@
   import MedicaoGuiada from "./MedicaoGuiada.svelte";
   import OtimizarAgora from "./OtimizarAgora.svelte";
   import type { EstadoDaLicenca, Hardware, ResultadoDoLab } from "../lib/ponte";
+  import { duracao } from "../lib/movimento";
 
   type Tema = "claro" | "escuro";
 
@@ -56,10 +57,7 @@
   const passo = $derived<Passo>(PASSOS[indice]);
   const ultimo = $derived(indice === PASSOS.length - 1);
   const etapa = $derived(ETAPAS.findIndex((e) => e.id === passo));
-  const parado =
-    typeof window !== "undefined" &&
-    (window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("jogo-aberto"));
-  const dur = (ms: number) => (parado ? 0 : ms);
+  const dur = duracao;
 
   /** O que já foi feito em cada passo (para o progresso e para o "Pronto" dizer a verdade). */
   let lab = $state<ResultadoDoLab | null>(null);

@@ -240,11 +240,11 @@
   .cheio-hz {
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--atencao), color-mix(in srgb, var(--atencao) 70%, #fff));
+    background: var(--atencao);
     transition: width var(--mov-entrar) var(--curva-saida);
   }
   .medidor.cheio .cheio-hz {
-    background: linear-gradient(90deg, var(--ok), color-mix(in srgb, var(--ok) 70%, #fff));
+    background: var(--ok);
   }
   .marcas {
     display: flex;
