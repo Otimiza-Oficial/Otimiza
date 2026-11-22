@@ -755,11 +755,7 @@ pub fn decisao_do_portao(
     match travada {
         // Um teto que não é fração exata dos Hz (o 100 do Jogo liso num 144 Hz) daria o ritmo irregular que o portão
         // existe para evitar.
-        Some(b) if fracao_dos_hz(b.fps, hz).is_none() => Err(format!(
-            "O FPS do jogo está travado em {} (pelo Jogo liso ou por você), que não divide os {} Hz do monitor: o Frame \
-             Boost ficaria irregular. Desfaça esse teto no Histórico para o Frame Boost travar numa fração do monitor.",
-            b.fps, hz
-        )),
+        Some(b) if fracao_dos_hz(b.fps, hz).is_none() => Err(teto_que_nao_divide(b.fps, hz)),
         // Abaixo do que os geradores pedem (AFMF 55, FSR 3 60): o atraso de cada quadro real pesa na mão.
         Some(b) if b.fps < BASE_MINIMA => Err(format!(
             "O jogo só segura {} FPS reais aqui: com o Frame Boost por cima ele ficaria pesado na mão (cada quadro real \
@@ -817,6 +813,26 @@ pub fn travar_na_metade(log: &mut crate::modules::changelog::ChangeLog) -> Resul
     let nota = super::base_do_jogo::travar_na_metade(&jogo.executavel, hz, log)?;
     anotar_base(Some(nota.clone()));
     Ok(nota)
+}
+
+/// **Pura.** A recusa do portão com um teto que não divide os Hz (o 141/144 do Jogo liso no FiveM do sócio). Sem beco
+/// sem saída (1.0.15, teste 3): a frase termina no botão que a tela mostra junto ("Travar em 72 para o 2×", reconhecido
+/// por `ui/src/lib/frameboost.ts`), que troca o teto pela porta única e guarda o de antes. Sem metade possível (monitor
+/// de 60 Hz), fica o caminho pelo Histórico.
+pub fn teto_que_nao_divide(fps: u32, hz: u32) -> String {
+    match metade_dos_hz(hz) {
+        Some(m) => format!(
+            "O FPS do jogo está travado em {} (pelo Jogo liso ou por você), que não divide os {} Hz do monitor: o 2× ficaria \
+             irregular. Toque em Travar em {} para o 2×: o Otimiza troca esse teto por {} (metade dos {} Hz) e guarda o de \
+             antes para desfazer. Depois feche e abra o jogo e ligue o 2× de novo.",
+            fps, hz, m, m, hz
+        ),
+        None => format!(
+            "O FPS do jogo está travado em {} (pelo Jogo liso ou por você), que não divide os {} Hz do monitor: o Frame \
+             Boost ficaria irregular. Desfaça esse teto no Histórico para o Frame Boost travar numa fração do monitor.",
+            fps, hz
+        ),
+    }
 }
 
 /// O FPS base mínimo para gerar (AFMF pede 55 em 1080p, o FSR 3 recomenda 60).
@@ -1047,6 +1063,18 @@ mod tests {
         assert_eq!(fracao_dos_hz(100, 144), None);
         assert_eq!(fracao_dos_hz(144, 144), None, "1×: nada a gerar");
         assert_eq!(fracao_dos_hz(30, 144), None, "além de 4×");
+    }
+
+    #[test]
+    fn o_teto_do_jogo_liso_que_nao_divide_vem_com_o_botao() {
+        // O 2× do sócio no teste.2: o teto 144 do Jogo liso num monitor de 144 Hz.
+        let m = teto_que_nao_divide(144, 144);
+        assert!(m.contains("Toque em Travar em 72 para o 2×"), "{}", m);
+        assert!(m.contains("feche e abra o jogo"), "{}", m);
+        assert!(!m.contains("Histórico"), "sem mandar ao Histórico: {}", m);
+        let liso = crate::plataforma::base_do_jogo::BaseTravada { fps: 141, multiplicador: 1, valendo: true };
+        assert_eq!(decisao_do_portao(true, true, 144, Some(&liso), None), Err(teto_que_nao_divide(141, 144)));
+        assert!(teto_que_nao_divide(50, 60).contains("Histórico"), "60 Hz não tem metade possível");
     }
 
     #[test]

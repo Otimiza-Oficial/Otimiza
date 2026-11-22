@@ -324,6 +324,10 @@ pub fn travar_na_metade(
         format!("Num monitor de {} Hz a metade fica abaixo do FPS base mínimo do Frame Boost.", hz)
     })?;
     soltar(executavel, false);
+    // O teto só vale com o jogo reaberto: o fechamento para reabrir não pode levar o teto embora. No teste.2 levava:
+    // `ao_fechar_o_jogo` via o Frame Boost sair do jogo, desfazia o 72 e devolvia o 141/144 do Jogo liso, e o 2× do
+    // sócio recusava ao ligar ("travado no Jogo liso").
+    super::teto_do_jogo::marcar_esperando_reabrir(executavel);
     let no_driver = super::jogo_liso::teto_no_driver(executavel);
     if gravado(log, executavel).is_some_and(|(fps, _)| fps == metade) && no_driver == Some(metade) {
         return Ok(format!("FPS base travado em {} (já estava): {}× fecham os {} Hz.", metade, 2, hz));

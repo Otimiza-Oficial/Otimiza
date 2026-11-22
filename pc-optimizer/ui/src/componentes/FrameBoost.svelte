@@ -51,7 +51,7 @@
   let erro = $state<string | null>(null);
   /** O erro da última ação (ligar, desligar…), à parte do `erro` da leitura: a releitura a cada 1,5 s apagava o erro da
    *  ação antes de a pessoa ler. Some na próxima ação. */
-  let falha = $state<{ titulo: string; fazer: string; detalhe: string } | null>(null);
+  let falha = $state<{ titulo: string; fazer: string; detalhe: string; metade?: number } | null>(null);
   let ocupado = $state(false);
   let pedido = $state(ler(CHAVE_MULT, "0"));
   let escalaPedida = $state<NivelDeEscala | null>(lerEscala());
@@ -556,6 +556,9 @@
     {#each avisos as t, i (i)}<p class="aviso"><span class="ponto" data-tom="atencao" aria-hidden="true"></span>{t}</p>{/each}
     {#if falha}
       <Estado tipo="erro" titulo={falha.titulo} fazer={falha.fazer} detalhe={falha.detalhe} />
+      {#if falha.metade}
+        <button class="btn primario" disabled={ocupado} onclick={() => agir("base", ferramentas.frameBoostTravarNaMetade)}>Travar em {falha.metade} para o 2×</button>
+      {/if}
     {:else if erro}
       <Estado tipo="erro" titulo="Não consegui reler o Frame Boost" fazer="Ele tenta de novo sozinho. Se continuar, feche e abra o Otimiza." detalhe={erro} />
     {/if}

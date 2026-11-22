@@ -98,3 +98,13 @@ test("a metade dos Hz só vale acima do FPS base mínimo", () => {
   assert.equal(metadeDosHz(165), 82);
   assert.equal(metadeDosHz(60), null);
 });
+
+test("o 2× recusado pelo teto do Jogo liso traz o botão de travar em 72 (o sócio no teste.2)", () => {
+  const e = erroDaAcao(
+    "ligar",
+    "Error: O FPS do jogo está travado em 144 (pelo Jogo liso ou por você), que não divide os 144 Hz do monitor: o 2× ficaria irregular. Toque em Travar em 72 para o 2×: o Otimiza troca esse teto por 72 (metade dos 144 Hz) e guarda o de antes para desfazer. Depois feche e abra o jogo e ligue o 2× de novo.",
+  );
+  assert.equal(e.metade, 72);
+  assert.match(e.fazer, /feche e abra o jogo/);
+  assert.equal(erroDaAcao("ligar", "Error: Abra o jogo primeiro.").metade, undefined);
+});

@@ -37,6 +37,10 @@ Atualização da 1.0 (número interno 4.0.15). Correção de bugs.
   explica na tela. Vale quando você reabrir o jogo, e o teto do Jogo liso que havia volta quando o Frame Boost sair.
 - **"Travar de novo" com teto do Jogo liso:** se o Jogo liso tinha travado o jogo num número que não divide os Hz
   (como 141 ou 144 num monitor de 144 Hz), o "Travar de novo" respondia "já estava" e nada mudava. Agora ele troca.
+- **O 2× não esbarra mais no teto do Jogo liso:** se o jogo estava travado pelo Jogo liso num número que não divide os
+  Hz, o 2× recusava e mandava ao Histórico. Agora a própria mensagem traz o botão "Travar em 72 para o 2×": um toque
+  troca o teto (o de antes fica guardado para desfazer), e é só reabrir o jogo. O teto de 72 também não some mais ao
+  fechar o jogo para reabrir.
 - **2× e Auto com a mesma cara:** a nitidez que só a escala aplicava vale agora em qualquer modo. Quem preferir a
   imagem sem nitidez escolhe "Desligada" em Nitidez, na tela do Frame Boost.
 

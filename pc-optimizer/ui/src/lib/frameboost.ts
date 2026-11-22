@@ -163,8 +163,15 @@ const SAIDA = "Se o jogo travou, Ctrl+Alt+G desliga de dentro dele.";
 /** O erro de uma ação, em título e próximo passo (1.0.14). Antes todo erro virava "O Frame Boost não respondeu" e o
  *  motivo do Rust (que já é uma frase com o que fazer: "volte para o jogo", "abra como administrador") ficava recolhido
  *  no "Detalhe para o suporte": a pessoa via só "não respondeu". Agora o motivo é o próximo passo. */
-export function erroDaAcao(acao: AcaoDoFrameBoost, erro: string): { titulo: string; fazer: string } {
+export function erroDaAcao(acao: AcaoDoFrameBoost, erro: string): { titulo: string; fazer: string; metade?: number } {
   const motivo = erro.replace(/^Error:\s*/, "").trim();
   const fazer = motivo ? motivo : "Tente de novo.";
-  return { titulo: TITULO_DA_ACAO[acao], fazer: acao === "desligar" ? `${fazer} ${SAIDA}` : fazer };
+  // 1.0.15, teste 3: o teto do Jogo liso que não divide os Hz (141/144) recusava o 2× e mandava ao Histórico. A frase do
+  // Rust (`teto_que_nao_divide`) agora termina no botão, que a tela põe junto da mensagem.
+  const botao = /Travar em (\d+) para o 2×/.exec(motivo);
+  return {
+    titulo: TITULO_DA_ACAO[acao],
+    fazer: acao === "desligar" ? `${fazer} ${SAIDA}` : fazer,
+    ...(botao ? { metade: Number(botao[1]) } : {}),
+  };
 }
