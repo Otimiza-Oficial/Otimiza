@@ -187,6 +187,10 @@ pub async fn frame_boost_ligar(
         ligado?;
         crate::plataforma::frameboost::travar_base(&mut log);
         drop(log);
+        // O Auto sem escala vigia o jogo: perto dos Hz, trava a base na metade sozinho (1.0.15, teste 2).
+        if multiplicador == 0 && escala.is_none() && !sem_limite.unwrap_or(false) {
+            vigiar_o_auto(state.changes.clone());
+        }
         return Ok(crate::plataforma::frameboost::painel());
     }
     #[cfg(not(target_os = "windows"))]
@@ -319,6 +323,79 @@ pub async fn frame_boost_travar_base(
         let mut log = state.changes.lock().await;
         crate::plataforma::frameboost::travar_base(&mut log);
         drop(log);
+        return Ok(crate::plataforma::frameboost::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err("O Frame Boost só existe no Windows.".to_string())
+    }
+}
+
+/// O VIGIA DO AUTO (1.0.15, teste 2). No log do sócio, o Auto com a base solta ficou 96 de 99 janelas de 10 s fora da
+/// frente (FiveM a 84-124 FPS em 144 Hz): ligado e sem fazer nada. Com o jogo perto dos Hz por `PERTO_FIRME_S` seguidos,
+/// o Auto trava a base na metade dos Hz sozinho, uma vez por ligada, e a tela explica (nota da base). Para quando o
+/// gerador para ou sai do Auto; desiste depois de 10 minutos.
+#[cfg(target_os = "windows")]
+fn vigiar_o_auto(changes: std::sync::Arc<tokio::sync::Mutex<crate::modules::changelog::ChangeLog>>) {
+    use crate::modules::windows::geracao::{self, Situacao};
+    tauri::async_runtime::spawn(async move {
+        let mut perto_desde: Option<std::time::Instant> = None;
+        for _ in 0..300 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let e = geracao::estado();
+            if e.situacao == Situacao::Parado || !e.automatico {
+                return;
+            }
+            let perto = e.perto_dos_hz && e.situacao == Situacao::Gerando;
+            let ha_s = if perto {
+                perto_desde.get_or_insert_with(std::time::Instant::now).elapsed().as_secs_f64()
+            } else {
+                perto_desde = None;
+                0.0
+            };
+            if !crate::plataforma::frameboost::auto_trava_na_metade(true, e.escala.is_some(), ha_s, e.fps_reais, e.hz) {
+                continue;
+            }
+            let guarda = changes.clone().lock_owned().await;
+            let r = tokio::task::spawn_blocking(move || {
+                let mut log = guarda;
+                crate::plataforma::frameboost::travar_na_metade(&mut log)
+            })
+            .await;
+            match r {
+                Ok(Ok(nota)) => crate::utils::Logger::info(&format!("frame boost: o Auto travou a base sozinho: {}", nota)),
+                Ok(Err(motivo)) => {
+                    crate::utils::Logger::warn(&format!("frame boost: o Auto não travou a base: {}", motivo));
+                    crate::plataforma::frameboost::anotar_base(Some(format!(
+                        "O jogo está perto dos Hz e o Auto não tem onde gerar sem tranco. Para ele encher o monitor liso, o Otimiza travaria o FPS base na metade dos Hz, mas: {}",
+                        motivo
+                    )));
+                }
+                Err(e) => crate::utils::Logger::warn(&format!("frame boost: o vigia do Auto: {}", e)),
+            }
+            return;
+        }
+    });
+}
+
+/// `EXIGEM_LICENCA`: trava o FPS base do jogo aberto em exatamente metade dos Hz (72 em 144), o "Travar em 72" da tela
+/// quando o Frame Boost sai da frente com o jogo perto dos Hz. Vale ao reabrir o jogo.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn frame_boost_travar_na_metade(
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::frameboost::Painel, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        let guarda = state.changes.clone().lock_owned().await;
+        tokio::task::spawn_blocking(move || {
+            let mut log = guarda;
+            crate::plataforma::frameboost::travar_na_metade(&mut log)
+        })
+        .await
+        .map_err(|e| e.to_string())??;
         return Ok(crate::plataforma::frameboost::painel());
     }
     #[cfg(not(target_os = "windows"))]

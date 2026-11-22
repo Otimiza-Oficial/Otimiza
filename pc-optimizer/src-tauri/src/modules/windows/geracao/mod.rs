@@ -113,6 +113,10 @@ pub struct Estado {
     /// O último degrau da guarda (1.0.7), para a tela dizer por que o Frame Boost aliviou em vez de sumir.
     #[serde(default)]
     pub degrau: Option<String>,
+    /// No ritmo do monitor, o jogo fora da faixa em que gerar é regular (`ritmo::FaixaDeGerar`): a sobreposição saiu
+    /// da frente. A tela diz por quê e oferece travar a base na metade dos Hz (1.0.15, teste 2).
+    #[serde(default)]
+    pub perto_dos_hz: bool,
 }
 
 impl Default for Estado {
@@ -145,6 +149,7 @@ impl Default for Estado {
             ampliada: None,
             aviso_da_escala: None,
             degrau: None,
+            perto_dos_hz: false,
         }
     }
 }
@@ -552,6 +557,7 @@ pub fn desligar() {
         e.situacao = Situacao::Parado;
         e.fps_apresentados = 0.0;
         e.fps_reais = 0.0;
+        e.perto_dos_hz = false;
     });
 }
 
@@ -1755,6 +1761,8 @@ fn sessao(
     let mut escondida_por = [Duration::ZERO; 4];
     // No ritmo do monitor: se o jogo está numa faixa em que gerar deixa o ritmo regular (`ritmo::FaixaDeGerar`).
     let mut faixa = ritmo::FaixaDeGerar::default();
+    let mut perto_publicado = false;
+    publicar(|e| e.perto_dos_hz = false);
     // No ritmo do monitor: atualizações da tela e as que repetiram o quadro (o real seguinte do jogo atrasou).
     let mut exibicao = ritmo::Exibicao::default();
     let mut ultimo_laco = Instant::now();
@@ -1875,6 +1883,12 @@ fn sessao(
         // O jogo perto dos Hz (fora da faixa em que gerar é regular): sem gerar, a sobreposição só mostraria os reais
         // presos à atualização dela, com mais atraso. Sai da frente e o jogo aparece direto. Com escala, ela É a tela.
         let perto_dos_hz = pelo_monitor && ampliada.is_none() && !faixa.gerando;
+        // Só o "perto dos Hz" de verdade (o jogo andando, na frente): a tela oferece travar a base com ele.
+        let perto_na_tela = perto_dos_hz && !sem_quadro && !fora_da_frente && intervalo.pode_gerar();
+        if perto_na_tela != perto_publicado {
+            perto_publicado = perto_na_tela;
+            publicar(|e| e.perto_dos_hz = perto_na_tela);
+        }
         let parado = sem_quadro || pausa_completa || fora_da_frente || perto_dos_hz;
         // Por que ficou escondida (para o log de 10 s): o primeiro motivo que vale, nesta ordem.
         let dt_do_laco = ultimo_laco.elapsed();

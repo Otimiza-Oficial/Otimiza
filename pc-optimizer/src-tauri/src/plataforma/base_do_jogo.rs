@@ -251,9 +251,11 @@ pub fn travar(
             ));
             nota_de_antes = format!("O teto de {} fps de antes foi desfeito (baixo demais para o Frame Boost). ", fps);
             desfeito_em = Some(quando);
-        } else if no_driver == Some(fps) {
+        } else if no_driver == Some(fps) && super::frameboost::fracao_dos_hz(fps, hz).is_some() {
             return Ok(format!("FPS base travado em {} (já estava).", fps));
         }
+        // Um teto que não divide os Hz (o 144 do Jogo liso no FiveM do sócio, 1.0.15) segue para a conta: antes ele
+        // respondia "já estava", e o portão recusava logo depois por não dividir: o Travar de novo não destravava nada.
     }
     let marca = desfeitos().remove(&executavel.to_lowercase());
     let Some(base) = ler(executavel)
@@ -304,6 +306,44 @@ pub fn travar(
         teto,
         super::ritmo_estavel::multiplicador_para_o_monitor(teto, hz),
         hz
+    ))
+}
+
+/// TRAVAR NA METADE DOS HZ, COM UM TOQUE (1.0.15, teste 2). O jogo entre Hz/2 e Hz (o FiveM do sócio: 84 a 124 FPS num
+/// monitor de 144 Hz) fica fora da faixa em que gerar é regular, e o gerador sai da frente: na prática, o Frame Boost
+/// não fazia nada. Com a base em exatamente Hz/2 (72), o 2× fecha os 144 com um gerado entre cada par de reais, sempre
+/// no mesmo lugar. Sem medir antes: quem chega aqui é o gerador que viu o jogo acima de Hz/2. Pela porta única do teto
+/// (`teto_do_jogo`): o teto do Jogo liso que existia fica guardado e volta quando o Frame Boost sair do jogo.
+#[cfg(target_os = "windows")]
+pub fn travar_na_metade(
+    executavel: &str,
+    hz: u32,
+    log: &mut crate::modules::changelog::ChangeLog,
+) -> Result<String, String> {
+    let metade = super::frameboost::metade_dos_hz(hz).ok_or_else(|| {
+        format!("Num monitor de {} Hz a metade fica abaixo do FPS base mínimo do Frame Boost.", hz)
+    })?;
+    soltar(executavel, false);
+    // O teto só vale com o jogo reaberto: o fechamento para reabrir não pode levar o teto embora. No teste.2 levava:
+    // `ao_fechar_o_jogo` via o Frame Boost sair do jogo, desfazia o 72 e devolvia o 141/144 do Jogo liso, e o 2× do
+    // sócio recusava ao ligar ("travado no Jogo liso").
+    super::teto_do_jogo::marcar_esperando_reabrir(executavel);
+    let no_driver = super::jogo_liso::teto_no_driver(executavel);
+    if gravado(log, executavel).is_some_and(|(fps, _)| fps == metade) && no_driver == Some(metade) {
+        return Ok(format!("FPS base travado em {} (já estava): {}× fecham os {} Hz.", metade, 2, hz));
+    }
+    if let super::teto_do_jogo::Decisao::Recusar(motivo) =
+        super::teto_do_jogo::aplicar(executavel, None, super::teto_do_jogo::Pedido::FrameBoost(metade), log)?
+    {
+        return Err(motivo);
+    }
+    crate::utils::Logger::info(&format!(
+        "frame boost: FPS base de {} travado em {} (metade dos {} Hz, com um toque)",
+        executavel, metade, hz
+    ));
+    Ok(format!(
+        "FPS base travado em {} (metade dos {} Hz). Feche e abra o jogo: aí cada quadro real ganha um gerado, sempre no mesmo lugar, e a tela recebe {} quadros por segundo no mesmo ritmo.",
+        metade, hz, metade * 2
     ))
 }
 

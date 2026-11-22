@@ -1,1 +1,1 @@
-Otimiza 1.0.14 Frame Boost volta a ligar e feedback sem travar (4.0.14)
+Otimiza 1.0.15 Frame Boost sem mouse sumindo e sem microtravadas (4.0.15)

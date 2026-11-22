@@ -18,6 +18,8 @@ export interface LigadoAgora {
   degrau?: string | null;
   /** Ligado só com a escala, sem gerar quadros. */
   so_escala: boolean;
+  /** O gerador saiu da frente: o jogo está perto dos Hz, onde gerar dá tranco (1.0.15). */
+  perto_dos_hz?: boolean;
 }
 
 export type Tom = "ok" | "atencao" | "neutro";
@@ -32,6 +34,17 @@ export interface Leitura {
   tom: Tom;
   /** Para onde o próximo passo leva, quando leva a outra área. */
   area?: "tela" | "prova";
+  /** O botão que resolve aqui mesmo: travar o FPS base na metade dos Hz (o número da base). */
+  metade?: number;
+}
+
+/** O FPS base mínimo do Frame Boost (o `BASE_MINIMA` do Rust). */
+const BASE_MINIMA = 55;
+
+/** A base de metade dos Hz que o botão "Travar em…" grava (72 em 144), se ela fica no mínimo do Frame Boost. */
+export function metadeDosHz(hz: number): number | null {
+  const m = Math.floor(hz / 2);
+  return m >= BASE_MINIMA ? m : null;
 }
 
 /** Abaixo disto do FPS mantido, o Frame Boost está custando FPS de verdade ao jogo. */
@@ -80,6 +93,23 @@ export function lerFrameBoost(a: LigadoAgora): Leitura {
       proximo: real == null ? "Toque em “Medir agora” com o jogo rodando para ver o número de verdade." : "Para conferir o ganho no seu jogo, meça na Prova.",
       tom: real == null ? "neutro" : "ok",
       area: real == null ? undefined : "prova",
+    };
+
+  // FORA DA FRENTE (1.0.15, teste 2): no log do sócio o FiveM ficou a 84-124 fps em 144 Hz e o Frame Boost passou a
+  // partida inteira fora da frente sem a tela dizer o que fazer. Agora diz por quê e dá o botão que resolve.
+  const metade = metadeDosHz(a.hz);
+  if (a.perto_dos_hz && !a.degrau)
+    return {
+      multiplicador: "fora da frente",
+      motivo: `O jogo dá ${a.fps_do_jogo != null ? n(a.fps_do_jogo) : "quase"} fps, perto dos ${a.hz} Hz do monitor. Entre ${metade ?? "a metade"} e ${a.hz} não cabe um quadro gerado no mesmo ritmo (eram as microtravadas): o Frame Boost sai da frente e o jogo aparece direto.`,
+      proximo:
+        metade == null
+          ? "Nada a gerar neste monitor."
+          : a.automatico
+            ? `O Auto trava o FPS base em ${metade} (metade dos ${a.hz} Hz) sozinho em alguns segundos. Depois feche e abra o jogo: ele enche os ${a.hz} Hz liso. Para fazer já, toque em Travar em ${metade}.`
+            : `Toque em Travar em ${metade}: com o FPS base em ${metade} (metade dos ${a.hz} Hz), o 2× fecha os ${a.hz} Hz liso. Vale quando você reabrir o jogo.`,
+      tom: "atencao",
+      metade: metade ?? undefined,
     };
 
   let motivo: string;
@@ -133,8 +163,15 @@ const SAIDA = "Se o jogo travou, Ctrl+Alt+G desliga de dentro dele.";
 /** O erro de uma ação, em título e próximo passo (1.0.14). Antes todo erro virava "O Frame Boost não respondeu" e o
  *  motivo do Rust (que já é uma frase com o que fazer: "volte para o jogo", "abra como administrador") ficava recolhido
  *  no "Detalhe para o suporte": a pessoa via só "não respondeu". Agora o motivo é o próximo passo. */
-export function erroDaAcao(acao: AcaoDoFrameBoost, erro: string): { titulo: string; fazer: string } {
+export function erroDaAcao(acao: AcaoDoFrameBoost, erro: string): { titulo: string; fazer: string; metade?: number } {
   const motivo = erro.replace(/^Error:\s*/, "").trim();
   const fazer = motivo ? motivo : "Tente de novo.";
-  return { titulo: TITULO_DA_ACAO[acao], fazer: acao === "desligar" ? `${fazer} ${SAIDA}` : fazer };
+  // 1.0.15, teste 3: o teto do Jogo liso que não divide os Hz (141/144) recusava o 2× e mandava ao Histórico. A frase do
+  // Rust (`teto_que_nao_divide`) agora termina no botão, que a tela põe junto da mensagem.
+  const botao = /Travar em (\d+) para o 2×/.exec(motivo);
+  return {
+    titulo: TITULO_DA_ACAO[acao],
+    fazer: acao === "desligar" ? `${fazer} ${SAIDA}` : fazer,
+    ...(botao ? { metade: Number(botao[1]) } : {}),
+  };
 }

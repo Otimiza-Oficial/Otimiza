@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { erroDaAcao, lerFrameBoost, multiplicadorReal, type LigadoAgora } from "../src/lib/frameboost.ts";
+import { erroDaAcao, lerFrameBoost, metadeDosHz, multiplicadorReal, type LigadoAgora } from "../src/lib/frameboost.ts";
 
 const base: LigadoAgora = {
   multiplicador: 1,
@@ -80,4 +80,31 @@ test("1.0.14: o erro do ligar mostra o motivo do Rust como próximo passo, não 
 test("perto dos Hz, o 2× fixo também diz que saiu da frente (o caso do sócio: FiveM a 135 fps em 144 Hz)", () => {
   const l = lerFrameBoost({ ...base, automatico: false, multiplicador: 2, fps_do_jogo: 135, fps_na_tela: 136 });
   assert.match(l.motivo, /perto dos 144 Hz.*sai da frente/);
+});
+
+test("fora da frente diz por quê e dá o botão de travar em 72 (o log do 4.0.15-teste.1: FiveM a 84-124 fps em 144 Hz)", () => {
+  const fixo = lerFrameBoost({ ...base, automatico: false, multiplicador: 2, fps_do_jogo: 105, fps_na_tela: 105, perto_dos_hz: true });
+  assert.equal(fixo.multiplicador, "fora da frente");
+  assert.match(fixo.motivo, /105 fps.*144 Hz.*sai da frente/);
+  assert.match(fixo.proximo, /Travar em 72/);
+  assert.equal(fixo.metade, 72);
+  assert.equal(fixo.tom, "atencao");
+  const auto = lerFrameBoost({ ...base, fps_do_jogo: 105, fps_na_tela: 105, perto_dos_hz: true });
+  assert.match(auto.proximo, /O Auto trava o FPS base em 72.*sozinho/);
+});
+
+test("a metade dos Hz só vale acima do FPS base mínimo", () => {
+  assert.equal(metadeDosHz(144), 72);
+  assert.equal(metadeDosHz(165), 82);
+  assert.equal(metadeDosHz(60), null);
+});
+
+test("o 2× recusado pelo teto do Jogo liso traz o botão de travar em 72 (o sócio no teste.2)", () => {
+  const e = erroDaAcao(
+    "ligar",
+    "Error: O FPS do jogo está travado em 144 (pelo Jogo liso ou por você), que não divide os 144 Hz do monitor: o 2× ficaria irregular. Toque em Travar em 72 para o 2×: o Otimiza troca esse teto por 72 (metade dos 144 Hz) e guarda o de antes para desfazer. Depois feche e abra o jogo e ligue o 2× de novo.",
+  );
+  assert.equal(e.metade, 72);
+  assert.match(e.fazer, /feche e abra o jogo/);
+  assert.equal(erroDaAcao("ligar", "Error: Abra o jogo primeiro.").metade, undefined);
 });

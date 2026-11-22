@@ -67,6 +67,9 @@ pub struct Ativo {
     pub jogo_px: Option<[i32; 2]>,
     #[serde(default)]
     pub tela_px: Option<[i32; 2]>,
+    /// O gerador saiu da frente: o jogo está perto dos Hz, onde gerar dá tranco. A tela oferece travar em Hz/2.
+    #[serde(default)]
+    pub perto_dos_hz: bool,
 }
 
 /// O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando).
@@ -207,6 +210,7 @@ pub fn ativo_de(e: &geracao::Estado) -> Option<Ativo> {
         escala: e.escala,
         jogo_px: e.escala.and(e.area).map(|a| [a.largura, a.altura]),
         tela_px: e.ampliada.map(|a| [a.largura, a.altura]),
+        perto_dos_hz: e.perto_dos_hz && e.situacao == Situacao::Gerando,
     })
 }
 
@@ -277,6 +281,7 @@ pub fn ativo_do_driver(recurso: Recurso, medicao: Option<&Medicao>) -> Ativo {
         escala: None,
         jogo_px: None,
         tela_px: None,
+        perto_dos_hz: false,
         geracao_vista: vista,
         nota: Some(match vista {
             None => "Ligado no driver. Toque em \u{201c}Medir agora\u{201d} com o jogo em movimento para ver o FPS na tela.".to_string(),
@@ -750,11 +755,7 @@ pub fn decisao_do_portao(
     match travada {
         // Um teto que não é fração exata dos Hz (o 100 do Jogo liso num 144 Hz) daria o ritmo irregular que o portão
         // existe para evitar.
-        Some(b) if fracao_dos_hz(b.fps, hz).is_none() => Err(format!(
-            "O FPS do jogo está travado em {} (pelo Jogo liso ou por você), que não divide os {} Hz do monitor: o Frame \
-             Boost ficaria irregular. Desfaça esse teto no Histórico para o Frame Boost travar numa fração do monitor.",
-            b.fps, hz
-        )),
+        Some(b) if fracao_dos_hz(b.fps, hz).is_none() => Err(teto_que_nao_divide(b.fps, hz)),
         // Abaixo do que os geradores pedem (AFMF 55, FSR 3 60): o atraso de cada quadro real pesa na mão.
         Some(b) if b.fps < BASE_MINIMA => Err(format!(
             "O jogo só segura {} FPS reais aqui: com o Frame Boost por cima ele ficaria pesado na mão (cada quadro real \
@@ -776,6 +777,61 @@ pub fn decisao_do_portao(
             .filter(|n| !n.is_empty())
             .unwrap_or("Não consegui travar o FPS base deste jogo.")
             .to_string()),
+    }
+}
+
+/// **Pura.** A base de exatamente metade dos Hz (72 em 144), se ela fica no mínimo do Frame Boost e divide os Hz.
+pub fn metade_dos_hz(hz: u32) -> Option<u32> {
+    let m = hz / 2;
+    (m >= BASE_MINIMA && fracao_dos_hz(m, hz) == Some(2)).then_some(m)
+}
+
+/// **Pura.** O vigia do Auto trava a base na metade dos Hz sozinho? Só com o gerador ligado no Auto, sem escala, e o
+/// jogo perto dos Hz por `PERTO_FIRME_S` seguidos, acima da metade (abaixo dela a base de Hz/2 não seguraria).
+pub fn auto_trava_na_metade(automatico: bool, escala: bool, perto_ha_s: f64, fps_reais: f64, hz: u32) -> bool {
+    automatico
+        && !escala
+        && perto_ha_s >= PERTO_FIRME_S
+        && metade_dos_hz(hz).is_some_and(|m| fps_reais >= m as f64)
+}
+
+/// Quanto tempo o Auto espera o jogo ficar perto dos Hz antes de travar a base sozinho (uma tela de carga não conta).
+pub const PERTO_FIRME_S: f64 = 10.0;
+
+/// Trava a base do jogo aberto na metade dos Hz (o botão "Travar em 72" e o vigia do Auto). Devolve a frase da tela,
+/// que também fica na nota da base.
+#[cfg(target_os = "windows")]
+pub fn travar_na_metade(log: &mut crate::modules::changelog::ChangeLog) -> Result<String, String> {
+    let jogo = super::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+    if !crate::modules::windows::registry::is_elevated() {
+        return Err(PRECISA_DE_ADMINISTRADOR.to_string());
+    }
+    if crate::modules::windows::nvdriver::estado() != crate::modules::windows::nvdriver::Nvapi::Disponivel {
+        return Err(SO_NVIDIA.to_string());
+    }
+    let hz = hz_do_jogo(jogo.pid).ok_or("Não consegui ler os Hz do monitor do jogo para travar o FPS base.")?;
+    let nota = super::base_do_jogo::travar_na_metade(&jogo.executavel, hz, log)?;
+    anotar_base(Some(nota.clone()));
+    Ok(nota)
+}
+
+/// **Pura.** A recusa do portão com um teto que não divide os Hz (o 141/144 do Jogo liso no FiveM do sócio). Sem beco
+/// sem saída (1.0.15, teste 3): a frase termina no botão que a tela mostra junto ("Travar em 72 para o 2×", reconhecido
+/// por `ui/src/lib/frameboost.ts`), que troca o teto pela porta única e guarda o de antes. Sem metade possível (monitor
+/// de 60 Hz), fica o caminho pelo Histórico.
+pub fn teto_que_nao_divide(fps: u32, hz: u32) -> String {
+    match metade_dos_hz(hz) {
+        Some(m) => format!(
+            "O FPS do jogo está travado em {} (pelo Jogo liso ou por você), que não divide os {} Hz do monitor: o 2× ficaria \
+             irregular. Toque em Travar em {} para o 2×: o Otimiza troca esse teto por {} (metade dos {} Hz) e guarda o de \
+             antes para desfazer. Depois feche e abra o jogo e ligue o 2× de novo.",
+            fps, hz, m, m, hz
+        ),
+        None => format!(
+            "O FPS do jogo está travado em {} (pelo Jogo liso ou por você), que não divide os {} Hz do monitor: o Frame \
+             Boost ficaria irregular. Desfaça esse teto no Histórico para o Frame Boost travar numa fração do monitor.",
+            fps, hz
+        ),
     }
 }
 
@@ -1007,6 +1063,37 @@ mod tests {
         assert_eq!(fracao_dos_hz(100, 144), None);
         assert_eq!(fracao_dos_hz(144, 144), None, "1×: nada a gerar");
         assert_eq!(fracao_dos_hz(30, 144), None, "além de 4×");
+    }
+
+    #[test]
+    fn o_teto_do_jogo_liso_que_nao_divide_vem_com_o_botao() {
+        // O 2× do sócio no teste.2: o teto 144 do Jogo liso num monitor de 144 Hz.
+        let m = teto_que_nao_divide(144, 144);
+        assert!(m.contains("Toque em Travar em 72 para o 2×"), "{}", m);
+        assert!(m.contains("feche e abra o jogo"), "{}", m);
+        assert!(!m.contains("Histórico"), "sem mandar ao Histórico: {}", m);
+        let liso = crate::plataforma::base_do_jogo::BaseTravada { fps: 141, multiplicador: 1, valendo: true };
+        assert_eq!(decisao_do_portao(true, true, 144, Some(&liso), None), Err(teto_que_nao_divide(141, 144)));
+        assert!(teto_que_nao_divide(50, 60).contains("Histórico"), "60 Hz não tem metade possível");
+    }
+
+    #[test]
+    fn a_metade_dos_hz_e_a_base_do_toque() {
+        assert_eq!(metade_dos_hz(144), Some(72));
+        assert_eq!(metade_dos_hz(165), Some(82));
+        assert_eq!(metade_dos_hz(240), Some(120));
+        assert_eq!(metade_dos_hz(60), None, "30 fica abaixo do mínimo do Frame Boost");
+        assert_eq!(metade_dos_hz(0), None);
+    }
+
+    #[test]
+    fn o_auto_trava_sozinho_no_caso_do_socio() {
+        // O log do 4.0.15-teste.1: FiveM a 84-124 FPS em 144 Hz, o Auto fora da frente o tempo todo.
+        assert!(auto_trava_na_metade(true, false, 10.0, 105.0, 144));
+        assert!(!auto_trava_na_metade(true, false, 8.0, 105.0, 144), "ainda não firme (tela de carga)");
+        assert!(!auto_trava_na_metade(false, false, 60.0, 105.0, 144), "no 2× fixo é o botão, não sozinho");
+        assert!(!auto_trava_na_metade(true, true, 60.0, 105.0, 144), "com escala a sobreposição é a tela");
+        assert!(!auto_trava_na_metade(true, false, 60.0, 62.0, 144), "abaixo de 72 a base não seguraria");
     }
 
     use super::*;

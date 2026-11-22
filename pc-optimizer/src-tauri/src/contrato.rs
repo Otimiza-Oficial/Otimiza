@@ -192,6 +192,7 @@ mod tests {
                 crate::commands::historico_de_desempenho,
                 crate::commands::game_mode_status,
                 crate::commands::frame_boost_travar_base,
+                crate::commands::frame_boost_travar_na_metade,
                 crate::commands::frame_boost_painel,
                 crate::commands::frame_boost_medir,
                 crate::commands::frame_boost_ligar,
